@@ -8,6 +8,7 @@ Search the tool crib by brand, type, diameter, LOC, coolant-thru, or EDP#.
 |---|---|---|
 | `index.html` | The app: layout, search, buttons. **No tool data.** | Only when you change how the app looks or works |
 | `tools.json` | The catalog. One tool per line. | Every time you add or fix tools |
+| `ports.json` | AS5202 / MS33649 port dimensions | Rarely |
 | `sct-reference.png` | SCT thread mill reference image | Rarely |
 
 The tool data used to live inside `index.html`. It doesn't anymore. That is the whole point: replacing
@@ -27,6 +28,32 @@ The tool data used to live inside `index.html`. It doesn't anymore. That is the 
 
 Edit `index.html` freely. Do not paste tool data into it. `tools.json` is untouched by that edit,
 so nothing can go missing.
+
+## Threads / Ports tab
+
+Pick a standard and a dash size; the section view and the dimension table fill in.
+Data comes from `ports.json`, which is independent of `tools.json` — updating one
+never touches the other.
+
+Source: AS5202 Rev. A Table 1B, with E/G/J/N cross-checked against Parker ORD-5700
+Design Table 4-3. MS33649 was cancelled and superseded by AS5202; same design.
+
+Minor diameters are calculated, not transcribed: minor min from AS8879 UNJ geometry
+(D − 1.125H), minor max from the ASME B1.1 class 3B tolerance. Both were verified
+against Yamawa's published AS8879D table — ten of the twelve sizes match exactly,
+and the other two (−09 and −12) are off-series sizes with no published table to
+check against.
+
+## SCT port tools
+
+`tools.json` includes 94 Scientific Cutting Tools AS5202 port tool records — solid pilot,
+reamer pilot, and reamer pilot coolant-through, uncoated and ALTiN+, with EDP numbers.
+Search "AS5202-06" to find everything for a dash size, or just pick the dash in the
+Threads / Ports tab and the matching tools are listed under the dimensions.
+
+Solid pilot records carry full cutting dimensions (spot face dia, pilot dia and length,
+counterbore dia and depth, countersink dia, shank, OAL). Reamer pilot records carry the
+part number and EDP only — the crossover sheet doesn't publish their cutting dimensions.
 
 ## Record format
 

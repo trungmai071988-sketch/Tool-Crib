@@ -135,6 +135,32 @@
   .csv-row{display:flex;gap:8px;margin-top:6px;}
   .csv-row button{flex:1;}
   .hint{font-size:11.5px;color:var(--muted);margin-top:6px;line-height:1.5;}
+
+  .port-fig{width:100%;height:auto;display:block;margin:4px 0 14px;}
+  .port-fig .dim{stroke:#7fd4ff;stroke-width:.8;fill:none;}
+  .port-fig .dep{stroke:#3ecf8e;stroke-width:.8;fill:none;}
+  .port-fig .rad{stroke:var(--accent);stroke-width:.8;fill:none;}
+  .port-fig .mat{fill:#31373d;opacity:.55;}
+  .port-fig .out{stroke:#e7e9ea;stroke-width:1.6;fill:none;}
+  .port-fig .thd{stroke:#8b959c;stroke-width:1;fill:none;}
+  .port-fig text{font:11px var(--mono);fill:#e7e9ea;}
+  .port-fig text.v{fill:#7fd4ff;}
+  .port-fig text.w{fill:#3ecf8e;}
+  .port-tbl{width:100%;border-collapse:collapse;font-size:13.5px;}
+  .port-tbl td{padding:6px 0;border-bottom:1px solid var(--line);vertical-align:top;}
+  .port-tbl td.k{color:var(--muted);width:38%;}
+  .port-tbl td.v{text-align:right;font-family:var(--mono);}
+  .port-tbl tr:last-child td{border-bottom:none;}
+  .port-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;}
+  .port-head .t{font-size:19px;font-weight:600;color:var(--accent);font-family:var(--mono);}
+  .port-head .d{font-size:12.5px;color:var(--muted);}
+  .port-note{font-size:11.5px;color:var(--muted);margin-top:10px;line-height:1.5;}
+  .port-tools{margin-top:14px;border-top:1px solid var(--line);padding-top:12px;}
+  .pt-head{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;}
+  .pt-type{font-size:12px;color:var(--accent);margin:8px 0 3px;}
+  .pt-row{display:flex;justify-content:space-between;font-size:13px;padding:3px 0;font-family:var(--mono);}
+  .pt-c{color:var(--muted);font-size:11.5px;}
+  .pt-cut{font-size:12px;color:var(--muted);margin-top:9px;font-family:var(--mono);}
   #csvFileInput{display:none;}
   .status{font-size:12.5px;padding:8px 10px;border-radius:7px;margin-top:8px;}
   .status.ok{background:#123322;color:var(--good);}
@@ -267,6 +293,7 @@
 <div class="tabs">
   <div class="tab active" data-tab="search">Search</div>
   <div class="tab" data-tab="add">Add Tool</div>
+  <div class="tab" data-tab="ports">Threads / Ports</div>
   <div class="tab" data-tab="import">Import / Export</div>
 </div>
 
@@ -465,6 +492,24 @@
   </section>
 
   <!-- IMPORT/EXPORT TAB -->
+
+  <section id="tab-ports" style="display:none;">
+    <div class="panel">
+      <div class="row">
+        <div>
+          <label for="p_std">Standard</label>
+          <select id="p_std"></select>
+        </div>
+        <div>
+          <label for="p_dash">Dash size</label>
+          <select id="p_dash"></select>
+        </div>
+      </div>
+      <div id="portStatus"></div>
+    </div>
+    <div id="portCard"></div>
+  </section>
+
   <section id="tab-import" style="display:none;">
     <div class="panel">
       <label style="margin-bottom:8px;display:block;">Paste multiple tools at once</label>
@@ -564,6 +609,7 @@ function rebuild(){
   renderResults();
   updateSctReference();
   updateLocalCount();
+  if(portData) renderPort();
 }
 
 function updateLocalCount(){
@@ -652,7 +698,7 @@ document.querySelectorAll('.tab').forEach(tab=>{
   tab.addEventListener('click', ()=>{
     document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
     tab.classList.add('active');
-    ['search','add','import'].forEach(name=>{
+    ['search','add','ports','import'].forEach(name=>{
       document.getElementById('tab-'+name).style.display = (name===tab.dataset.tab) ? 'block' : 'none';
     });
   });
@@ -947,6 +993,123 @@ document.getElementById('resetLocalBtn').addEventListener('click', ()=>{
   rebuild();
   showStatus('importStatus', 'Back to the shared catalog.', 'ok');
 });
+
+// ---- Threads / Ports ----
+let portData = null;
+
+async function loadPorts(){
+  try{
+    const res = await fetch('ports.json', {cache:'no-cache'});
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    portData = await res.json();
+  }catch(err){
+    document.getElementById('portCard').innerHTML =
+      '<div class="empty">Couldn\'t load <b>ports.json</b> (' + escapeHtml(err.message) + ').</div>';
+    return;
+  }
+  const stds = [...new Set(portData.ports.map(p=>p.std))];
+  const stdSel = document.getElementById('p_std');
+  stdSel.innerHTML = stds.map(x=>`<option value="${escapeHtml(x)}">${escapeHtml(x)}</option>`).join('');
+  fillDashes();
+}
+
+function fillDashes(){
+  const std = document.getElementById('p_std').value;
+  const list = portData.ports.filter(p=>p.std===std);
+  const sel = document.getElementById('p_dash');
+  const prev = sel.value;
+  sel.innerHTML = list.map(p=>`<option value="${escapeHtml(p.id)}">${escapeHtml(p.dash)} &nbsp; ${escapeHtml(p.thread)}</option>`).join('');
+  if(list.some(p=>p.id===prev)) sel.value = prev;
+  renderPort();
+}
+
+function portFig(p){
+  return `<svg class="port-fig" viewBox="0 0 340 268" role="img" aria-label="Port cross-section for ${escapeHtml(p.dash)}">
+<rect class="mat" x="45" y="55" width="250" height="170" rx="3"/>
+<line x1="170" y1="42" x2="170" y2="256" stroke="#8b959c" stroke-width=".8" stroke-dasharray="7 3 2 3"/>
+<path class="out" d="M100,55 L112,66 L112,73 L118,73 L118,150 L148,166 L148,225"/>
+<path class="out" d="M240,55 L228,66 L228,73 L222,73 L222,150 L192,166 L192,225"/>
+<line class="out" x1="45" y1="55" x2="100" y2="55"/><line class="out" x1="240" y1="55" x2="295" y2="55"/>
+<path class="thd" d="M118,76 L125,80 L118,85 L125,89 L118,94 L125,98 L118,103 L125,107 L118,112 L125,116 L118,121 L125,125 L118,130 L125,134 L118,139 L125,143 L118,148"/>
+<path class="thd" d="M222,76 L215,80 L222,85 L215,89 L222,94 L215,98 L222,103 L215,107 L222,112 L215,116 L222,121 L215,125 L222,130 L215,134 L222,139 L215,143 L222,148"/>
+<path class="dim" d="M45,24 L45,53 M295,24 L295,53 M45,18 L295,18"/>
+<text class="v" x="170" y="14" text-anchor="middle">G ${p.G}</text>
+<path class="dim" d="M100,36 L100,53 M240,36 L240,53 M100,32 L240,32"/>
+<text class="v" x="170" y="29" text-anchor="middle">A ${p.A}</text>
+<path class="dim" d="M112,50 L112,66 M228,50 L228,66 M112,46 L228,46"/>
+<text class="v" x="170" y="43" text-anchor="middle">D ${p.D}</text>
+<path class="dep" d="M297,55 L312,55 M230,73 L312,73 M304,55 L304,73"/>
+<text class="w" x="252" y="88">E ${p.E}</text>
+<path class="dep" d="M297,150 L330,150 M324,55 L324,150"/>
+<text class="w" x="240" y="140">B ${p.B}</text>
+<path class="dim" d="M148,227 L148,246 M192,227 L192,246 M148,242 L192,242"/>
+<text class="v" x="170" y="260" text-anchor="middle">C ${p.C}</text>
+<path class="rad" d="M112,73 L74,98"/><text x="6" y="102">.020R max</text>
+<path class="rad" d="M103,60 L74,44"/><text x="30" y="41">120&#176;</text>
+</svg>`;
+}
+
+
+function portTools(p){
+  const code = p.dash.replace('-','');
+  const hits = tools.filter(t => t.brand==='SCT' && (t.specs||'').includes('AS5202-'+code+' '));
+  if(hits.length === 0) return '';
+  const byType = {};
+  hits.forEach(t=>{ (byType[t.type] = byType[t.type] || []).push(t); });
+  let html = '<div class="port-tools"><div class="pt-head">Tools that cut this port</div>';
+  Object.keys(byType).sort().forEach(ty=>{
+    html += '<div class="pt-type">' + escapeHtml(ty.replace('AS5202 Port Tool - ','')) + '</div>';
+    byType[ty].forEach(t=>{
+      const pn = (t.specs||'').split('|')[0].trim();
+      const coat = (t.notes||'').includes('ALTiN+') ? 'ALTiN+' : 'uncoated';
+      html += '<div class="pt-row"><span>' + escapeHtml(pn) + ' <span class="pt-c">' + coat +
+              '</span></span><span class="edp">' + escapeHtml(t.edp) + '</span></div>';
+    });
+  });
+  const s = hits.find(t=>t.type.indexOf('solid')>=0);
+  if(s) html += '<div class="pt-cut">Solid pilot cuts: pilot &#8960;' + escapeHtml(s.neckdia) +
+                ' &times; ' + escapeHtml(s.loc) + ' long &nbsp;|&nbsp; spot face &#8960;' +
+                escapeHtml(s.diameter) + '</div>';
+  return html + '</div>';
+}
+
+function renderPort(){
+  const p = portData.ports.find(x=>x.id === document.getElementById('p_dash').value);
+  if(!p){ document.getElementById('portCard').innerHTML=''; return; }
+  const L = portData.meta.letters, X = portData.meta.extra;
+  document.getElementById('portCard').innerHTML = `
+  <div class="panel">
+    <div class="port-head">
+      <span class="t">${escapeHtml(p.thread)}</span>
+      <span class="d">${escapeHtml(p.std)} ${escapeHtml(p.dash)}</span>
+    </div>
+    ${portFig(p)}
+    <table class="port-tbl">
+      <tr><td class="k">Minor dia min</td><td class="v">${p.minor_min}</td></tr>
+      <tr><td class="k">Minor dia max</td><td class="v">${p.minor_max}</td></tr>
+      <tr><td class="k">A &mdash; c'sink dia</td><td class="v">${p.A} &nbsp;+.015/&minus;.000</td></tr>
+      <tr><td class="k">B &mdash; full thd depth</td><td class="v">${p.B} min</td></tr>
+      <tr><td class="k">C &mdash; thru hole</td><td class="v">${p.C} min</td></tr>
+      <tr><td class="k">D &mdash; c'bore dia</td><td class="v">${p.D} &nbsp;+.005/&minus;.000</td></tr>
+      <tr><td class="k">E &mdash; depth of D</td><td class="v">${p.E} &nbsp;+.015/&minus;.000</td></tr>
+      <tr><td class="k">G &mdash; boss face dia</td><td class="v">${p.G} min</td></tr>
+      <tr><td class="k">J &mdash; fitting clearance</td><td class="v">${p.J} min</td></tr>
+      <tr><td class="k">N &mdash; squareness</td><td class="v">${p.N} T.I.R.</td></tr>
+      <tr><td class="k">Tube OD</td><td class="v">${p.tube === '-' ? '&mdash;' : p.tube}</td></tr>
+      <tr><td class="k">Corner radius</td><td class="v">${escapeHtml(X.corner_radius)}</td></tr>
+    </table>
+    ${portTools(p)}
+    <div class="port-note">
+      B is measured from the port face, not from the start of the thread.<br>
+      ${escapeHtml(X.concentricity)}<br>
+      ${escapeHtml(portData.meta.note)}
+    </div>
+  </div>`;
+}
+
+document.getElementById('p_std').addEventListener('change', fillDashes);
+document.getElementById('p_dash').addEventListener('change', renderPort);
+loadPorts();
 
 loadTools();
 </script>
