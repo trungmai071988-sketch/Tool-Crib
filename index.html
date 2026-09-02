@@ -293,7 +293,8 @@
 <div class="tabs">
   <div class="tab active" data-tab="search">Search</div>
   <div class="tab" data-tab="add">Add Tool</div>
-  <div class="tab" data-tab="ports">Threads / Ports</div>
+  <div class="tab" data-tab="ports">Ports</div>
+  <div class="tab" data-tab="threads">Threads</div>
   <div class="tab" data-tab="import">Import / Export</div>
 </div>
 
@@ -510,6 +511,23 @@
     <div id="portCard"></div>
   </section>
 
+  <section id="tab-threads" style="display:none;">
+    <div class="panel">
+      <div class="row">
+        <div>
+          <label for="t_std">Standard</label>
+          <select id="t_std"></select>
+        </div>
+        <div>
+          <label for="t_dash">Thread size</label>
+          <select id="t_dash"></select>
+        </div>
+      </div>
+      <div id="threadStatus"></div>
+    </div>
+    <div id="threadCard"></div>
+  </section>
+
   <section id="tab-import" style="display:none;">
     <div class="panel">
       <label style="margin-bottom:8px;display:block;">Paste multiple tools at once</label>
@@ -698,7 +716,7 @@ document.querySelectorAll('.tab').forEach(tab=>{
   tab.addEventListener('click', ()=>{
     document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
     tab.classList.add('active');
-    ['search','add','ports','import'].forEach(name=>{
+    ['search','add','ports','threads','import'].forEach(name=>{
       document.getElementById('tab-'+name).style.display = (name===tab.dataset.tab) ? 'block' : 'none';
     });
   });
@@ -1003,27 +1021,40 @@ async function loadPorts(){
     if(!res.ok) throw new Error('HTTP ' + res.status);
     portData = await res.json();
   }catch(err){
-    document.getElementById('portCard').innerHTML =
-      '<div class="empty">Couldn\'t load <b>ports.json</b> (' + escapeHtml(err.message) + ').</div>';
+    PICKERS.forEach(pk=>{ document.getElementById(pk.card).innerHTML =
+      '<div class="empty">Couldn\'t load <b>ports.json</b> (' + escapeHtml(err.message) + ').</div>'; });
     return;
   }
-  const sel = document.getElementById('p_std');
-  sel.innerHTML = portData.standards.map(s=>
-    `<option value="${escapeHtml(s.id)}">${escapeHtml(s.name)}</option>`).join('');
-  fillDashes();
+  PICKERS.forEach(pk=>{
+    const sel = document.getElementById(pk.std);
+    sel.innerHTML = stdsFor(pk.group).map(s=>
+      `<option value="${escapeHtml(s.id)}">${escapeHtml(s.name)}</option>`).join('');
+    fillDashes(pk);
+  });
 }
 
-function curStd(){
-  const id = document.getElementById('p_std').value;
-  return portData.standards.find(s=>s.id===id) || portData.standards[0];
+const PICKERS = [
+  {std:'p_std', dash:'p_dash', card:'portCard',   group:'port'},
+  {std:'t_std', dash:'t_dash', card:'threadCard', group:'thread'}
+];
+function stdsFor(group){
+  return portData.standards.filter(s=>(s.group||'port')===group);
+}
+function pickerOf(el){
+  return PICKERS.find(p=>p.std===el || p.dash===el || p.group===el);
+}
+function curStd(pk){
+  const id = document.getElementById(pk.std).value;
+  const list = stdsFor(pk.group);
+  return list.find(s=>s.id===id) || list[0];
 }
 
-function fillDashes(){
-  const st = curStd(), sel = document.getElementById('p_dash'), prev = sel.value;
+function fillDashes(pk){
+  const st = curStd(pk), sel = document.getElementById(pk.dash), prev = sel.value;
   sel.innerHTML = st.rows.map(r=>
     `<option value="${escapeHtml(r.id)}">${escapeHtml(r.dash)} &nbsp; ${escapeHtml(r.thread)}</option>`).join('');
   if(st.rows.some(r=>r.id===prev)) sel.value = prev;
-  renderPort();
+  renderPort(pk);
 }
 
 function dimLine(x1,y1,x2,y2,cls){ return `<path class="${cls}" d="M${x1},${y1} L${x2},${y2}"/>`; }
@@ -1052,6 +1083,24 @@ function figAS5202(r){
 <text class="v" x="170" y="260" text-anchor="middle">C ${d.C}</text>
 <path class="rad" d="M112,73 L74,98"/><text x="6" y="102">.020R max</text>
 <path class="rad" d="M103,60 L74,44"/><text x="30" y="41">120&#176;</text>
+</svg>`;
+}
+
+
+function figTap(r){
+  const d = r.dims;
+  return `<svg class="port-fig" viewBox="0 0 340 250" role="img" aria-label="Tapped hole section ${escapeHtml(r.dash)}">
+<rect class="mat" x="45" y="55" width="250" height="150" rx="3"/>
+<line x1="170" y1="40" x2="170" y2="238" stroke="#8b959c" stroke-width=".8" stroke-dasharray="7 3 2 3"/>
+<line class="out" x1="45" y1="55" x2="112" y2="55"/><line class="out" x1="228" y1="55" x2="295" y2="55"/>
+<path class="out" d="M112,55 L112,205"/><path class="out" d="M228,55 L228,205"/>
+<path class="thd" d="M122,58 L112,63 L122,68 L112,73 L122,78 L112,83 L122,88 L112,93 L122,98 L112,103 L122,108 L112,113 L122,118 L112,123 L122,128 L112,133 L122,138 L112,143 L122,148 L112,153 L122,158 L112,163 L122,168 L112,173 L122,178 L112,183 L122,188 L112,193 L122,198"/>
+<path class="thd" d="M218,58 L228,63 L218,68 L228,73 L218,78 L228,83 L218,88 L228,93 L218,98 L228,103 L218,108 L228,113 L218,118 L228,123 L218,128 L228,133 L218,138 L228,143 L218,148 L228,153 L218,158 L228,163 L218,168 L228,173 L218,178 L228,183 L218,188 L228,193 L218,198"/>
+<path class="dim" d="M112,26 L112,53 M228,26 L228,53 M112,20 L228,20"/>
+<text class="v" x="170" y="16" text-anchor="middle">major ${d.major}</text>
+<path class="dim" d="M122,207 L122,232 M218,207 L218,232 M122,228 L218,228"/>
+<text class="v" x="170" y="246" text-anchor="middle">minor ${d.minor_min} / ${d.minor_max}</text>
+<text class="w" x="240" y="130">${d.tpi} tpi</text>
 </svg>`;
 }
 
@@ -1129,19 +1178,41 @@ function as1300Tooling(r){
     stock + '</div>';
 }
 
-function renderPort(){
+
+function tapDrills(r){
+  const lo = parseFloat(r.dims.minor_min), hi = parseFloat(r.dims.minor_max);
+  const hits = tools.filter(t=>{
+    const d = parseFloat(t.diameter);
+    if(isNaN(d) || d < lo || d > hi) return false;
+    return /DRILL|REAMER/i.test(t.type);
+  }).sort((a,b)=>parseFloat(a.diameter)-parseFloat(b.diameter)).slice(0,8);
+  let html = '<div class="port-tools"><div class="pt-head">Drills in your crib that fit this hole</div>';
+  if(hits.length === 0){
+    html += '<div class="pt-c" style="font-size:13px;">Nothing in the catalog lands between ' +
+            escapeHtml(r.dims.minor_min) + ' and ' + escapeHtml(r.dims.minor_max) + '.</div>';
+  }else{
+    hits.forEach(t=>{
+      html += '<div class="pt-row"><span>&#8960;' + escapeHtml(t.diameter) + ' &nbsp;<span class="pt-c">' +
+              escapeHtml(t.brand) + '</span></span><span class="edp">' + escapeHtml(t.edp) + '</span></div>';
+    });
+  }
+  return html + '</div>';
+}
+
+function renderPort(pk){
   if(!portData) return;
-  const st = curStd();
-  const r = st.rows.find(x=>x.id === document.getElementById('p_dash').value);
-  if(!r){ document.getElementById('portCard').innerHTML=''; return; }
-  const fig = st.figure === 'as1300' ? figAS1300(r) : figAS5202(r);
+  if(!pk){ PICKERS.forEach(renderPort); return; }
+  const st = curStd(pk);
+  const r = st.rows.find(x=>x.id === document.getElementById(pk.dash).value);
+  if(!r){ document.getElementById(pk.card).innerHTML=''; return; }
+  const fig = st.figure === 'as1300' ? figAS1300(r) : (st.figure === 'tap' ? figTap(r) : figAS5202(r));
   const tbl = st.display.map(([k,label,tol])=>{
     const v = r.dims[k];
     if(v === undefined || v === '') return '';
     return '<tr><td class="k">'+label+'</td><td class="v">'+v+(tol?' &nbsp;'+tol:'')+'</td></tr>';
   }).join('');
-  const extra = st.id==='as1300' ? as1300Tooling(r) : portTools(r, st);
-  document.getElementById('portCard').innerHTML = `
+  const extra = st.figure==='tap' ? tapDrills(r) : (st.id==='as1300' ? as1300Tooling(r) : portTools(r, st));
+  document.getElementById(pk.card).innerHTML = `
   <div class="panel">
     <div class="port-head">
       <span class="t">${escapeHtml(r.thread)}</span>
@@ -1154,8 +1225,10 @@ function renderPort(){
   </div>`;
 }
 
-document.getElementById('p_std').addEventListener('change', fillDashes);
-document.getElementById('p_dash').addEventListener('change', renderPort);
+PICKERS.forEach(pk=>{
+  document.getElementById(pk.std).addEventListener('change', ()=>fillDashes(pk));
+  document.getElementById(pk.dash).addEventListener('change', ()=>renderPort(pk));
+});
 loadPorts();
 
 loadTools();
