@@ -1,0 +1,1118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trung Mai's Territory — EDP & Price Finder</title>
+<style>
+  :root{
+    --bg:#14171a;
+    --panel:#1c2024;
+    --panel2:#22272c;
+    --line:#31373d;
+    --text:#e7e9ea;
+    --muted:#8b959c;
+    --accent:#ff9f1c; /* safety orange, shop-floor */
+    --accent-dim:#8a5713;
+    --good:#3ecf8e;
+    --mono: 'Courier New', ui-monospace, monospace;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;
+  }
+  header{
+    padding:18px 16px 14px;
+    border-bottom:2px solid var(--accent);
+    background:var(--panel);
+  }
+  header h1{
+    margin:0;
+    font-size:19px;
+    letter-spacing:0.5px;
+    text-transform:uppercase;
+  }
+  header h1 span{color:var(--accent);}
+  .logo-badge{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    width:28px;height:28px;
+    background:var(--accent);
+    border-radius:7px;
+    margin-right:8px;
+    vertical-align:middle;
+    box-shadow:0 1px 3px rgba(0,0,0,0.4);
+  }
+  header p{margin:4px 0 0;color:var(--muted);font-size:12.5px;}
+
+  .tabs{display:flex;border-bottom:1px solid var(--line);background:var(--panel);}
+  .tab{
+    flex:1;padding:11px 8px;text-align:center;font-size:13px;font-weight:600;
+    color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;
+  }
+  .tab.active{color:var(--accent);border-bottom-color:var(--accent);}
+
+  main{padding:14px;max-width:820px;margin:0 auto;padding-bottom:60px;}
+  .side-quote{
+    position:fixed;
+    top:50%;
+    transform:translateY(-50%);
+    width:320px;
+    color:var(--muted);
+    font-size:22px;
+    font-style:italic;
+    line-height:1.5;
+    text-align:center;
+    opacity:0.6;
+    display:none;
+  }
+  .side-quote.left{left:24px;}
+  .side-quote.right{right:24px;}
+  @media (min-width:1500px){
+    .side-quote{display:block;}
+  }
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:14px;}
+  .row{display:flex;gap:8px;flex-wrap:wrap;}
+  .field{flex:1;min-width:120px;display:flex;flex-direction:column;gap:4px;margin-bottom:10px;}
+  label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.4px;}
+  input,select{
+    background:var(--panel2);
+    border:1px solid var(--line);
+    color:var(--text);
+    padding:9px 10px;
+    border-radius:7px;
+    font-size:14px;
+  }
+  input:focus,select:focus{outline:none;border-color:var(--accent);}
+  button{
+    background:var(--accent);
+    color:#1a1400;
+    border:none;
+    padding:11px 16px;
+    border-radius:7px;
+    font-weight:700;
+    font-size:14px;
+    cursor:pointer;
+  }
+  button.secondary{
+    background:transparent;
+    border:1px solid var(--line);
+    color:var(--text);
+    font-weight:600;
+  }
+  button.danger{background:transparent;border:1px solid #7a2f2f;color:#e07a7a;font-weight:600;}
+  button:active{transform:scale(0.98);}
+
+  .result{
+    background:var(--panel2);
+    border:1px solid var(--line);
+    border-radius:9px;
+    padding:12px;
+    margin-bottom:9px;
+    position:relative;
+  }
+  .result.best{border-color:var(--good);}
+  .result .badge{
+    position:absolute;top:-9px;right:10px;
+    background:var(--good);color:#08251a;
+    font-size:10.5px;font-weight:800;padding:2px 8px;border-radius:10px;
+    letter-spacing:0.3px;
+  }
+  .result-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px;}
+  .result-top .brand{font-weight:800;font-size:14.5px;letter-spacing:0.3px;}
+  .result-top .price{font-family:var(--mono);font-size:17px;font-weight:700;color:var(--accent);}
+  .result .meta{margin-top:5px;color:var(--muted);font-size:12.5px;line-height:1.5;}
+  .result .edp{font-family:var(--mono);color:var(--text);}
+  .result .actions{margin-top:8px;display:flex;gap:8px;}
+  .result .actions button{padding:6px 10px;font-size:12px;}
+
+  .empty{color:var(--muted);text-align:center;padding:30px 10px;font-size:13.5px;}
+  .count{color:var(--muted);font-size:12px;margin-bottom:8px;}
+  .csv-row{display:flex;gap:8px;margin-top:6px;}
+  .csv-row button{flex:1;}
+  .hint{font-size:11.5px;color:var(--muted);margin-top:6px;line-height:1.5;}
+
+  .port-fig{width:100%;max-width:265px;height:auto;display:block;margin:2px auto 18px;}
+  .port-fig .dim{stroke:#7fd4ff;stroke-width:.8;fill:none;}
+  .port-fig .dep{stroke:#3ecf8e;stroke-width:.8;fill:none;}
+  .port-fig .rad{stroke:var(--accent);stroke-width:.8;fill:none;}
+  .port-fig .mat{fill:#31373d;opacity:.55;}
+  .port-fig .out{stroke:#e7e9ea;stroke-width:1.6;fill:none;}
+  .port-fig .thd{stroke:#8b959c;stroke-width:1;fill:none;}
+  .port-fig text{font:11px var(--mono);fill:#e7e9ea;}
+  .port-fig text.v{fill:#7fd4ff;}
+  .port-fig text.w{fill:#3ecf8e;}
+  .port-tbl{width:100%;border-collapse:collapse;font-size:17.5px;}
+  .port-tbl td{padding:11px 0;border-bottom:1px solid var(--line);vertical-align:top;}
+  .port-tbl td.k{color:#c9d1d6;width:46%;}
+  .port-tbl td.v{text-align:right;font-family:var(--mono);font-size:18.5px;color:#fff;}
+  .port-tbl tr:last-child td{border-bottom:none;}
+  .port-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;}
+  .port-head .t{font-size:24px;font-weight:600;color:var(--accent);font-family:var(--mono);}
+  .port-head .d{font-size:12.5px;color:var(--muted);}
+  .port-note{font-size:13.5px;color:var(--muted);margin-top:14px;line-height:1.6;}
+  .port-tools{margin-top:14px;border-top:1px solid var(--line);padding-top:12px;}
+  .pt-head{font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;}
+  .pt-type{font-size:14.5px;color:var(--accent);margin:12px 0 5px;}
+  .pt-row{display:flex;justify-content:space-between;font-size:16px;padding:6px 0;font-family:var(--mono);}
+  .pt-c{color:var(--muted);font-size:11.5px;}
+  .pt-cut{font-size:14px;color:var(--muted);margin-top:12px;font-family:var(--mono);}
+  #csvFileInput{display:none;}
+  .status{font-size:12.5px;padding:8px 10px;border-radius:7px;margin-top:8px;}
+  .status.ok{background:#123322;color:var(--good);}
+  .status.err{background:#3a1414;color:#e07a7a;}
+
+  /* SCT product reference: keep the Search page the same size,
+     and place the SCT reference just to its right without covering it. */
+  /* SCT view: keep the original search design, but place a large reference
+     image beside it so the right side of the screen is actually used. */
+  main.sct-layout{
+    position:relative;
+    width:590px;
+    max-width:590px;
+    margin-left:auto;
+    margin-right:auto;
+    left:-190px;
+  }
+  main.sct-layout #tab-search{
+    width:100%;
+  }
+  .sct-reference{
+    position:absolute;
+    top:0;
+    left:calc(100% + 12px);
+    width:775px;
+    max-height:calc(100vh - 32px);
+    opacity:0;
+    visibility:hidden;
+    z-index:10;
+    background:#fff;
+    border:1px solid #d7d7d7;
+    border-radius:9px;
+    box-shadow:0 12px 35px rgba(0,0,0,.38);
+    overflow:hidden;
+    transition:opacity .2s ease, visibility .2s ease;
+  }
+  .sct-reference.open{
+    opacity:1;
+    visibility:visible;
+  }
+  .sct-reference-head{
+    position:absolute;
+    top:8px;
+    right:8px;
+    z-index:2;
+    padding:0;
+    border:0;
+    background:transparent;
+  }
+  .sct-reference-head strong{
+    display:none;
+  }
+  .sct-reference-close{
+    width:34px;
+    height:34px;
+    padding:0;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    background:rgba(0,0,0,.58);
+    border:1px solid rgba(255,255,255,.65);
+    color:#fff;
+    border-radius:50%;
+    font-size:22px;
+    line-height:1;
+  }
+  .sct-reference-body{
+    padding:0;
+    max-height:calc(100vh - 32px);
+    overflow:auto;
+  }
+  .sct-reference-body img{
+    display:block;
+    width:100%;
+    height:auto;
+    border-radius:8px;
+    background:#fff;
+  }
+  .sct-reference-backdrop{
+    display:none;
+  }
+  @media (max-width:1250px){
+    main.sct-layout{
+      left:0;
+      width:calc(100vw - 40px);
+      max-width:calc(100vw - 40px);
+    }
+    .sct-reference{
+      width:min(62vw, 700px);
+    }
+  }
+  @media (max-width:1050px){
+    main.sct-layout{
+      width:620px;
+      max-width:620px;
+      left:-70px;
+    }
+    .sct-reference{
+      left:calc(100% + 10px);
+      width:430px;
+    }
+  }
+  @media (max-width:760px){
+    main.sct-layout{
+      display:block;
+      left:0;
+    }
+    .sct-reference{
+      position:relative;
+      top:auto;
+      left:auto;
+      width:100%;
+      max-height:none;
+      margin-top:14px;
+    }
+    .sct-reference-body{
+      max-height:none;
+    }
+  }
+
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Trung Mai's <span>Territory</span></h1>
+  <p>Search across your brand catalogs by size & type — find the lowest price and EDP# instantly.</p>
+</header>
+
+<div class="tabs">
+  <div class="tab active" data-tab="search">Search</div>
+  <div class="tab" data-tab="add">Add Tool</div>
+  <div class="tab" data-tab="ports">Threads / Ports</div>
+  <div class="tab" data-tab="import">Import / Export</div>
+</div>
+
+<div class="side-quote left">
+  <svg width="190" height="130" viewBox="0 0 300 200" style="margin-bottom:16px;filter:drop-shadow(0 4px 8px rgba(0,0,0,0.5));">
+    <defs>
+      <clipPath id="waveClip">
+        <path d="M0,0
+          C 20,6 40,-6 60,0 S 100,6 120,0 S 160,-6 180,0 S 220,6 240,0 S 280,-6 300,0
+          L 300,20 C 280,26 260,14 240,20 S 200,26 180,20 S 140,14 120,20 S 80,26 60,20 S 20,14 0,20 Z
+          M0,20
+          C 20,26 40,14 60,20 S 100,26 120,20 S 160,14 180,20 S 220,26 240,20 S 280,14 300,20
+          L 300,40 C 280,46 260,34 240,40 S 200,46 180,40 S 140,34 120,40 S 80,46 60,40 S 20,34 0,40 Z
+          M0,40
+          C 20,46 40,34 60,40 S 100,46 120,40 S 160,34 180,40 S 220,46 240,40 S 280,34 300,40
+          L 300,60 C 280,66 260,54 240,60 S 200,66 180,60 S 140,54 120,60 S 80,66 60,60 S 20,54 0,60 Z
+          M0,60
+          C 20,66 40,54 60,60 S 100,66 120,60 S 160,54 180,60 S 220,66 240,60 S 280,54 300,60
+          L 300,80 C 280,86 260,74 240,80 S 200,86 180,80 S 140,74 120,80 S 80,86 60,80 S 20,74 0,80 Z
+          M0,80
+          C 20,86 40,74 60,80 S 100,86 120,80 S 160,74 180,80 S 220,86 240,80 S 280,74 300,80
+          L 300,100 C 280,106 260,94 240,100 S 200,106 180,100 S 140,94 120,100 S 80,106 60,100 S 20,94 0,100 Z
+          M0,100
+          C 20,106 40,94 60,100 S 100,106 120,100 S 160,94 180,100 S 220,106 240,100 S 280,94 300,100
+          L 300,120 C 280,126 260,114 240,120 S 200,126 180,120 S 140,114 120,120 S 80,126 60,120 S 20,114 0,120 Z
+          M0,120
+          C 20,126 40,114 60,120 S 100,126 120,120 S 160,114 180,120 S 220,126 240,120 S 280,114 300,120
+          L 300,140 C 280,146 260,134 240,140 S 200,146 180,140 S 140,134 120,140 S 80,146 60,140 S 20,134 0,140 Z
+          M0,140
+          C 20,146 40,134 60,140 S 100,146 120,140 S 160,134 180,140 S 220,146 240,140 S 280,134 300,140
+          L 300,160 C 280,166 260,154 240,160 S 200,166 180,160 S 140,154 120,160 S 80,166 60,160 S 20,154 0,160 Z
+          M0,160
+          C 20,166 40,154 60,160 S 100,166 120,160 S 160,154 180,160 S 220,166 240,160 S 280,154 300,160
+          L 300,180 C 280,186 260,174 240,180 S 200,186 180,180 S 140,174 120,180 S 80,186 60,180 S 20,174 0,180 Z
+          M0,180
+          C 20,186 40,174 60,180 S 100,186 120,180 S 160,174 180,180 S 220,186 240,180 S 280,174 300,180
+          L 300,200 C 280,206 260,194 240,200 S 200,206 180,200 S 140,194 120,200 S 80,206 60,200 S 20,194 0,200 Z"/>
+      </clipPath>
+    </defs>
+    <g clip-path="url(#waveClip)">
+      <rect width="300" height="200" fill="#f2f2f2"/>
+      <rect y="0" width="300" height="15.4" fill="#c8302f"/>
+      <rect y="30.8" width="300" height="15.4" fill="#c8302f"/>
+      <rect y="61.6" width="300" height="15.4" fill="#c8302f"/>
+      <rect y="92.4" width="300" height="15.4" fill="#c8302f"/>
+      <rect y="123.1" width="300" height="15.4" fill="#c8302f"/>
+      <rect y="153.9" width="300" height="15.4" fill="#c8302f"/>
+      <rect y="184.6" width="300" height="15.4" fill="#c8302f"/>
+      <rect width="120" height="107.7" fill="#1c3a5e"/>
+      <g fill="#ffffff">
+        <g id="fstar"><polygon points="0,-5 1.5,-1.5 5,0 1.5,1.5 0,5 -1.5,1.5 -5,0 -1.5,-1.5"/></g>
+        <use href="#fstar" transform="translate(15,12)"/>
+        <use href="#fstar" transform="translate(35,12)"/>
+        <use href="#fstar" transform="translate(55,12)"/>
+        <use href="#fstar" transform="translate(75,12)"/>
+        <use href="#fstar" transform="translate(95,12)"/>
+        <use href="#fstar" transform="translate(25,28)"/>
+        <use href="#fstar" transform="translate(45,28)"/>
+        <use href="#fstar" transform="translate(65,28)"/>
+        <use href="#fstar" transform="translate(85,28)"/>
+        <use href="#fstar" transform="translate(15,44)"/>
+        <use href="#fstar" transform="translate(35,44)"/>
+        <use href="#fstar" transform="translate(55,44)"/>
+        <use href="#fstar" transform="translate(75,44)"/>
+        <use href="#fstar" transform="translate(95,44)"/>
+        <use href="#fstar" transform="translate(25,60)"/>
+        <use href="#fstar" transform="translate(45,60)"/>
+        <use href="#fstar" transform="translate(65,60)"/>
+        <use href="#fstar" transform="translate(85,60)"/>
+        <use href="#fstar" transform="translate(15,76)"/>
+        <use href="#fstar" transform="translate(35,76)"/>
+        <use href="#fstar" transform="translate(55,76)"/>
+        <use href="#fstar" transform="translate(75,76)"/>
+        <use href="#fstar" transform="translate(95,76)"/>
+        <use href="#fstar" transform="translate(25,92)"/>
+        <use href="#fstar" transform="translate(45,92)"/>
+        <use href="#fstar" transform="translate(65,92)"/>
+        <use href="#fstar" transform="translate(85,92)"/>
+      </g>
+    </g>
+    <!-- flagpole -->
+    <rect x="-6" y="0" width="6" height="200" fill="#8b959c"/>
+  </svg>
+  <div>"You complain about work because you have a job."</div>
+</div>
+<div class="side-quote right">"You complain about traffic because you have a car."</div>
+
+<main>
+
+  <!-- SEARCH TAB -->
+  <section id="tab-search">
+    <div class="panel">
+      <div class="row">
+        <div class="field" style="flex:2;">
+          <label>Brand</label>
+          <select id="searchBrand">
+            <option value="">All brands</option>
+          </select>
+        </div>
+        <div class="field" style="flex:2;">
+          <label>Tool Type</label>
+          <select id="searchType">
+            <option value="">All types</option>
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label>Diameter (in)</label>
+          <input id="searchDia" type="number" step="0.001" placeholder='e.g. 0.5'>
+        </div>
+        <div class="field">
+          <label>Min. LOC / Neck Length (in)</label>
+          <input id="searchLoc" type="number" step="0.001" placeholder='e.g. 1.0'>
+        </div>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label>Coolant-Thru</label>
+          <select id="searchCoolant">
+            <option value="">Either</option>
+            <option value="Yes">Coolant-Thru only</option>
+            <option value="No">No Coolant only</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Keyword (brand, notes, EDP#)</label>
+          <input id="searchKeyword" type="text" placeholder="e.g. carbide, Harvey, coolant-through">
+        </div>
+      </div>
+    </div>
+
+    <div class="count" id="resultCount"></div>
+    <div id="results"></div>
+  </section>
+
+  <!-- ADD TAB -->
+  <section id="tab-add" style="display:none;">
+    <div class="panel">
+      <div class="row">
+        <div class="field">
+          <label>Brand *</label>
+          <input id="f_brand" type="text" placeholder="e.g. Harvey Tool">
+        </div>
+        <div class="field">
+          <label>Tool Type *</label>
+          <input id="f_type" type="text" placeholder="e.g. Carbide Drill" list="typeList">
+          <datalist id="typeList"></datalist>
+        </div>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label>Diameter (in) *</label>
+          <input id="f_dia" type="number" step="0.001" placeholder="0.5">
+        </div>
+        <div class="field">
+          <label>EDP # *</label>
+          <input id="f_edp" type="text" placeholder="e.g. 12345">
+        </div>
+        <div class="field">
+          <label>Price ($)</label>
+          <input id="f_price" type="number" step="0.01" placeholder="42.50">
+        </div>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label>Length of Cut / Neck Length (in)</label>
+          <input id="f_loc" type="number" step="0.001" placeholder="e.g. 1.0">
+        </div>
+        <div class="field">
+          <label>Neck Diameter (in)</label>
+          <input id="f_neckdia" type="number" step="0.001" placeholder="e.g. 0.125">
+        </div>
+        <div class="field">
+          <label>Coolant-Thru</label>
+          <select id="f_coolant">
+            <option value="">Unknown</option>
+            <option value="Yes">Yes</option>
+            <option value="No">No</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Flutes / Coating (optional)</label>
+          <input id="f_specs" type="text" placeholder="e.g. 2FL, 3xD, AlTiN">
+        </div>
+      </div>
+      <div class="row">
+        <div class="field" style="flex:100%;">
+          <label>Notes (optional)</label>
+          <input id="f_notes" type="text" placeholder="e.g. coolant-through, for 316SS">
+        </div>
+      </div>
+      <button id="saveBtn" style="width:100%;">Save Tool</button>
+      <div id="addStatus"></div>
+    </div>
+  </section>
+
+  <!-- IMPORT/EXPORT TAB -->
+
+  <section id="tab-ports" style="display:none;">
+    <div class="panel">
+      <div class="row">
+        <div>
+          <label for="p_std">Standard</label>
+          <select id="p_std"></select>
+        </div>
+        <div>
+          <label for="p_dash">Dash size</label>
+          <select id="p_dash"></select>
+        </div>
+      </div>
+      <div id="portStatus"></div>
+    </div>
+    <div id="portCard"></div>
+  </section>
+
+  <section id="tab-import" style="display:none;">
+    <div class="panel">
+      <label style="margin-bottom:8px;display:block;">Paste multiple tools at once</label>
+      <div class="hint">
+        One tool per line, fields separated by commas:<br>
+        <b>brand, type, diameter, edp, price, loc, specs, notes</b><br>
+        (loc = length of cut in inches. loc, specs, and notes are optional — leave blank if unknown)<br><br>
+        Example:<br>
+        Guhring, Carbide Drill, 0.5, GU-4021, 38.50, 1.0, 2FL AlTiN, coolant-through<br>
+        Maford, Carbide Drill, 0.5, MF-1187, 41.20, 1.25, 2FL, 
+      </div>
+      <textarea id="pasteBox" rows="6" style="width:100%;margin-top:8px;background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:7px;padding:9px 10px;font-size:13.5px;font-family:var(--mono);" placeholder="Guhring, Carbide Drill, 0.5, GU-4021, 38.50, 1.0
+Maford, Carbide Drill, 0.5, MF-1187, 41.20, 1.25"></textarea>
+      <button id="pasteBtn" style="width:100%;margin-top:8px;">Add Pasted Tools</button>
+      <div id="pasteStatus"></div>
+    </div>
+    <div class="panel">
+      <label style="margin-bottom:8px;display:block;">Bulk load from a catalog spreadsheet</label>
+      <div class="hint">
+        Fastest way to load a whole brand catalog: export it (or retype it) as a CSV with these columns:<br>
+        <b>brand, type, diameter, edp, price, loc, specs, notes</b><br>
+        (loc = length of cut in inches, optional)<br>
+        Then import below. You can do this once per brand catalog.
+      </div>
+      <div class="csv-row">
+        <button class="secondary" id="importBtn">Import CSV</button>
+        <button class="secondary" id="exportBtn">Export CSV</button>
+      </div>
+      <input type="file" id="csvFileInput" accept=".csv">
+      <div id="importStatus"></div>
+    </div>
+    <div class="panel">
+      <label style="margin-bottom:8px;display:block;">Shared catalog (tools.json)</label>
+      <div class="hint">
+        The catalog lives in <b>tools.json</b>, right next to this page on GitHub.
+        Tools you add or delete here are saved on this device only.<br>
+        To share them with everyone: <b>Download tools.json</b>, then upload that file to GitHub
+        replacing the old one. Never edit index.html to add tools.
+      </div>
+      <div class="csv-row">
+        <button class="secondary" id="downloadJsonBtn">Download tools.json</button>
+        <button class="secondary" id="resetLocalBtn">Clear local changes</button>
+      </div>
+      <div id="localCount" class="hint"></div>
+    </div>
+  </section>
+
+
+  <!-- SCT reference image: shown automatically when SCT is selected -->
+  <div id="sctReferenceBackdrop" class="sct-reference-backdrop" aria-hidden="true"></div>
+  <aside id="sctReference" class="sct-reference" aria-hidden="true" aria-label="SCT thread mill reference">
+    <div class="sct-reference-head">
+      <strong>SCT Thread Mill Reference</strong>
+      <button type="button" id="sctReferenceClose" class="sct-reference-close" aria-label="Close SCT reference">×</button>
+    </div>
+    <div class="sct-reference-body">
+      <img src="sct-reference.png" alt="Thread mills product overview reference for SCT">
+    </div>
+  </aside>
+
+</main>
+
+<script>
+const CATALOG_URL = 'tools.json';   // the shared catalog, lives next to this file on GitHub
+const LS_ADDED   = 'toolfinder_added';    // tools added on THIS device only
+const LS_DELETED = 'toolfinder_deleted';  // catalog tools hidden on THIS device only
+
+let catalog = [];   // loaded from tools.json
+let added   = [];
+let deleted = [];
+let tools   = [];   // what the search screen shows
+
+function uid(){ return 't_' + Date.now() + '_' + Math.random().toString(36).slice(2,8); }
+
+function readLS(key){
+  try{ const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : []; }
+  catch(e){ return []; }
+}
+
+function saveLocal(){
+  try{
+    localStorage.setItem(LS_ADDED, JSON.stringify(added));
+    localStorage.setItem(LS_DELETED, JSON.stringify(deleted));
+  }catch(e){
+    showStatus('addStatus', 'Save failed \u2014 device storage full or unavailable.', 'err');
+  }
+}
+
+function rebuild(){
+  const del = new Set(deleted);
+  const catIds = new Set(catalog.map(t=>t.id));
+  tools = [
+    ...catalog.filter(t=>!del.has(t.id)),
+    ...added.filter(t=>!catIds.has(t.id) && !del.has(t.id))
+  ];
+  refreshTypeList();
+  renderResults();
+  updateSctReference();
+  updateLocalCount();
+  if(portData) renderPort();
+}
+
+function updateLocalCount(){
+  const el = document.getElementById('localCount');
+  if(!el) return;
+  if(added.length === 0 && deleted.length === 0){
+    el.textContent = 'Catalog: ' + catalog.length + ' tools. No unsaved changes on this device.';
+  }else{
+    el.innerHTML = '<b>' + added.length + ' added, ' + deleted.length + ' removed on this device.</b> ' +
+      'These are not in the shared catalog yet \u2014 download tools.json and upload it to GitHub.';
+  }
+}
+
+async function loadTools(){
+  added   = readLS(LS_ADDED);
+  deleted = readLS(LS_DELETED);
+  const resultsEl = document.getElementById('results');
+  resultsEl.innerHTML = '<div class="empty">Loading catalog\u2026</div>';
+  try{
+    const res = await fetch(CATALOG_URL, {cache:'no-cache'});
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    if(!Array.isArray(data)) throw new Error('tools.json is not a list');
+    catalog = data;
+    rebuild();
+  }catch(err){
+    catalog = [];
+    rebuild();
+    resultsEl.innerHTML = '<div class="empty">Couldn\'t load <b>tools.json</b> (' + escapeHtml(err.message) + ').' +
+      '<br><br>Make sure tools.json sits in the same folder as this page on GitHub.' +
+      '<br>If you opened this file by double-clicking it on your PC, the browser blocks reading tools.json \u2014 ' +
+      'open the GitHub Pages address instead.</div>';
+  }
+}
+
+// merge one incoming record; returns 'added' or 'updated'
+function upsert(nt){
+  const i = added.findIndex(t=>t.edp===nt.edp && t.brand===nt.brand);
+  if(i >= 0){ added[i] = {...added[i], ...nt}; return 'updated'; }
+  const del = new Set(deleted);
+  const c = catalog.find(t=>t.edp===nt.edp && t.brand===nt.brand && !del.has(t.id));
+  if(c){ deleted.push(c.id); added.push({...c, ...nt, id: uid()}); return 'updated'; }
+  added.push({id: uid(), ...nt});
+  return 'added';
+}
+
+function refreshTypeList(){
+  const brandF = document.getElementById('searchBrand').value;
+  const relevantTools = brandF ? tools.filter(t=>t.brand===brandF) : tools;
+
+  const types = [...new Set(relevantTools.map(t=>t.type))].sort();
+  const searchSel = document.getElementById('searchType');
+  const prevType = searchSel.value;
+  searchSel.innerHTML = '<option value="">All types</option>' +
+    types.map(t=>`<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+  if(types.includes(prevType)) searchSel.value = prevType;
+  else searchSel.value = '';
+
+  document.getElementById('typeList').innerHTML =
+    [...new Set(tools.map(t=>t.type))].sort().map(t=>`<option value="${escapeHtml(t)}">`).join('');
+
+  const brands = [...new Set(tools.map(t=>t.brand))].sort((a,b)=>{
+    if(a==='MA Ford') return -1;
+    if(b==='MA Ford') return 1;
+    return a.localeCompare(b);
+  });
+  const brandSel = document.getElementById('searchBrand');
+  const prevBrand = brandSel.value;
+  brandSel.innerHTML = '<option value="">All brands</option>' +
+    brands.map(b=>`<option value="${escapeHtml(b)}">${escapeHtml(b)}</option>`).join('');
+  if(brands.includes(prevBrand)) brandSel.value = prevBrand;
+}
+
+function escapeHtml(s){
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function showStatus(id, msg, kind){
+  const el = document.getElementById(id);
+  el.innerHTML = `<div class="status ${kind}">${escapeHtml(msg)}</div>`;
+  setTimeout(()=>{ el.innerHTML=''; }, 3500);
+}
+
+// ---- Tabs ----
+document.querySelectorAll('.tab').forEach(tab=>{
+  tab.addEventListener('click', ()=>{
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    tab.classList.add('active');
+    ['search','add','ports','import'].forEach(name=>{
+      document.getElementById('tab-'+name).style.display = (name===tab.dataset.tab) ? 'block' : 'none';
+    });
+  });
+});
+
+
+  // ---- SCT reference image ----
+  const sctReference = document.getElementById('sctReference');
+  const sctReferenceBackdrop = document.getElementById('sctReferenceBackdrop');
+  const sctReferenceClose = document.getElementById('sctReferenceClose');
+
+  function setSctReference(open){
+    document.querySelector('main').classList.toggle('sct-layout', open);
+    sctReference.classList.toggle('open', open);
+    sctReference.setAttribute('aria-hidden', String(!open));
+    sctReferenceBackdrop.setAttribute('aria-hidden', String(!open));
+  }
+
+  function updateSctReference(){
+    const brand = document.getElementById('searchBrand').value.trim();
+    setSctReference(brand.toLowerCase() === 'sct');
+  }
+
+  sctReferenceClose.addEventListener('click', ()=>setSctReference(false));
+  sctReferenceBackdrop.addEventListener('click', ()=>setSctReference(false));
+  document.addEventListener('keydown', e=>{
+    if(e.key === 'Escape') setSctReference(false);
+  });
+
+  // ---- Search ----
+function renderResults(){
+  const brandF = document.getElementById('searchBrand').value;
+  const typeF = document.getElementById('searchType').value.trim().toLowerCase();
+  const diaF = document.getElementById('searchDia').value.trim();
+  const locF = document.getElementById('searchLoc').value.trim();
+  const coolantF = document.getElementById('searchCoolant').value;
+  const kwF = document.getElementById('searchKeyword').value.trim().toLowerCase();
+
+  let list = tools.filter(t=>{
+    if(brandF && t.brand !== brandF) return false;
+    if(typeF && t.type.toLowerCase() !== typeF) return false;
+    if(coolantF && (t.coolant||'') !== coolantF) return false;
+    if(diaF !== ''){
+      const target = parseFloat(diaF);
+      if(isNaN(target)) return true;
+      if(Math.abs(parseFloat(t.diameter) - target) > 0.0005) return false;
+    }
+    if(locF !== ''){
+      const minLoc = parseFloat(locF);
+      const tLoc = parseFloat(t.loc);
+      if(!isNaN(minLoc) && (isNaN(tLoc) || tLoc < minLoc)) return false;
+    }
+    if(kwF){
+      const hay = [t.brand,t.type,t.edp,t.specs,t.notes].join(' ').toLowerCase();
+      if(!hay.includes(kwF)) return false;
+    }
+    return true;
+  });
+
+  list.sort((a,b)=>{
+    const pa = a.price !== '' && !isNaN(parseFloat(a.price)) ? parseFloat(a.price) : Infinity;
+    const pb = b.price !== '' && !isNaN(parseFloat(b.price)) ? parseFloat(b.price) : Infinity;
+    return pa - pb;
+  });
+
+  const resultsEl = document.getElementById('results');
+  const countEl = document.getElementById('resultCount');
+
+  if(tools.length === 0){
+    countEl.textContent = '';
+    resultsEl.innerHTML = `<div class="empty">No tools saved yet. Add a few tools or import a CSV to get started.</div>`;
+    return;
+  }
+  if(list.length === 0){
+    countEl.textContent = '';
+    resultsEl.innerHTML = `<div class="empty">No matches. Try clearing a filter.</div>`;
+    return;
+  }
+
+  countEl.textContent = `${list.length} match${list.length===1?'':'es'} — cheapest first`;
+
+  resultsEl.innerHTML = list.map((t,i)=>{
+    const hasPrice = t.price !== '' && !isNaN(parseFloat(t.price));
+    const isBest = hasPrice && i === list.findIndex(x=>x.price!=='' && !isNaN(parseFloat(x.price)));
+    return `
+    <div class="result ${isBest ? 'best':''}">
+      ${isBest ? '<div class="badge">BEST PRICE</div>' : ''}
+      <div class="result-top">
+        <div class="brand">${escapeHtml(t.brand)}${t.coolant==='Yes' ? ' <span style="font-size:10px;background:#0d3d5c;color:#7fd4ff;padding:2px 6px;border-radius:8px;vertical-align:middle;">COOLANT-THRU</span>' : (t.coolant==='No' ? ' <span style="font-size:10px;background:#3a3a3a;color:#bbb;padding:2px 6px;border-radius:8px;vertical-align:middle;">NO COOLANT</span>' : '')}</div>
+        <div class="price">${hasPrice ? '$'+parseFloat(t.price).toFixed(2) : '<span style="color:var(--muted);font-size:12.5px;">no price</span>'}</div>
+      </div>
+      <div class="meta">
+        ${escapeHtml(t.type)} — ⌀${t.diameter}"${t.loc ? ' &nbsp;|&nbsp; LOC/Neck-L '+escapeHtml(t.loc)+'"' : ''}${t.neckdia ? ' &nbsp;|&nbsp; Neck-Dia '+escapeHtml(t.neckdia)+'"' : ''} &nbsp;|&nbsp; EDP# <span class="edp">${escapeHtml(t.edp)}</span>
+        ${t.specs ? '<br>'+escapeHtml(t.specs) : ''}
+        ${t.notes ? '<br>'+escapeHtml(t.notes) : ''}
+      </div>
+      <div class="actions">
+        <button class="secondary" onclick="deleteTool('${t.id}')">Delete</button>
+      </div>
+    </div>
+  `;}).join('');
+}
+
+window.deleteTool = function(id){
+  const i = added.findIndex(t=>t.id===id);
+  if(i >= 0) added.splice(i,1);          // a tool added on this device
+  else deleted.push(id);                 // hide a catalog tool on this device
+  saveLocal();
+  rebuild();
+}
+
+document.getElementById('searchType').addEventListener('change', renderResults);
+document.getElementById('searchBrand').addEventListener('change', ()=>{ refreshTypeList(); renderResults(); updateSctReference(); });
+document.getElementById('searchDia').addEventListener('input', renderResults);
+document.getElementById('searchLoc').addEventListener('input', renderResults);
+document.getElementById('searchCoolant').addEventListener('change', renderResults);
+document.getElementById('searchKeyword').addEventListener('input', renderResults);
+
+// ---- Add tool ----
+document.getElementById('saveBtn').addEventListener('click', async ()=>{
+  const brand = document.getElementById('f_brand').value.trim();
+  const type = document.getElementById('f_type').value.trim();
+  const dia = document.getElementById('f_dia').value.trim();
+  const edp = document.getElementById('f_edp').value.trim();
+  const price = document.getElementById('f_price').value.trim();
+  const loc = document.getElementById('f_loc').value.trim();
+  const neckdia = document.getElementById('f_neckdia').value.trim();
+  const coolant = document.getElementById('f_coolant').value;
+  const specs = document.getElementById('f_specs').value.trim();
+  const notes = document.getElementById('f_notes').value.trim();
+
+  if(!brand || !type || !dia || !edp){
+    showStatus('addStatus', 'Please fill in brand, type, diameter, and EDP#.', 'err');
+    return;
+  }
+
+  added.push({id:uid(), brand, type, diameter:dia, edp, price, loc, neckdia, coolant, specs, notes});
+  saveLocal();
+  rebuild();
+
+  ['f_brand','f_type','f_dia','f_edp','f_price','f_loc','f_neckdia','f_coolant','f_specs','f_notes'].forEach(id=>{
+    document.getElementById(id).value='';
+  });
+  showStatus('addStatus', `Saved on this device. ${brand} ${type} ⌀${dia}" is in the crib.`, 'ok');
+});
+
+// ---- Bulk paste ----
+document.getElementById('pasteBtn').addEventListener('click', async ()=>{
+  const raw = document.getElementById('pasteBox').value;
+  const lines = raw.split('\n').map(l=>l.trim()).filter(l=>l.length>0);
+  if(lines.length === 0){
+    showStatus('pasteStatus', 'Paste in some tool lines first.', 'err');
+    return;
+  }
+  let nAdded = 0, updated = 0, skipped = 0;
+  lines.forEach(line=>{
+    const parts = line.split(',').map(p=>p.trim());
+    const [brand, type, diameter, edp, price, loc, specs, notes] = parts;
+    if(!brand || !type || !diameter || !edp){
+      skipped++;
+      return;
+    }
+    const newTool = {brand, type, diameter, edp, price: price||'', loc: loc||'', specs: specs||'', notes: notes||''};
+    if(upsert(newTool) === 'updated') updated++; else nAdded++;
+  });
+  saveLocal();
+  rebuild();
+  document.getElementById('pasteBox').value = '';
+  showStatus('pasteStatus', `Added ${nAdded}, updated ${updated}.${skipped ? ' Skipped '+skipped+' incomplete line(s).' : ''}`, 'ok');
+});
+
+// ---- CSV Import / Export ----
+document.getElementById('importBtn').addEventListener('click', ()=>{
+  document.getElementById('csvFileInput').click();
+});
+
+document.getElementById('csvFileInput').addEventListener('change', (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = async (ev)=>{
+    try{
+      const text = ev.target.result;
+      const rows = parseCSV(text);
+      if(rows.length < 2){
+        showStatus('importStatus','CSV looks empty.','err');
+        return;
+      }
+      const header = rows[0].map(h=>h.trim().toLowerCase());
+      const need = ['brand','type','diameter','edp'];
+      const missing = need.filter(n=>!header.includes(n));
+      if(missing.length){
+        showStatus('importStatus', 'Missing columns: '+missing.join(', '), 'err');
+        return;
+      }
+      let nAdded = 0, updated = 0;
+      for(let i=1;i<rows.length;i++){
+        const r = rows[i];
+        if(r.length < 2 || r.every(c=>c.trim()==='')) continue;
+        const obj = {};
+        header.forEach((h,idx)=> obj[h] = (r[idx]||'').trim());
+        if(!obj.brand || !obj.type || !obj.diameter || !obj.edp) continue;
+        const newTool = {
+          brand: obj.brand, type: obj.type, diameter: obj.diameter,
+          edp: obj.edp, price: obj.price, loc: obj.loc||obj.neck_length||'', neckdia: obj.neckdia||obj.neck_diameter||'', coolant: obj.coolant||'', specs: obj.specs||'', notes: obj.notes||''
+        };
+        if(upsert(newTool) === 'updated') updated++; else nAdded++;
+      }
+      saveLocal();
+      rebuild();
+      showStatus('importStatus', `Added ${nAdded} new, updated ${updated} existing. Saved on this device \u2014 download tools.json to share them.`, 'ok');
+    }catch(err){
+      showStatus('importStatus', 'Could not read that CSV.', 'err');
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+});
+
+function parseCSV(text){
+  // simple CSV parser handling quoted fields
+  const rows = [];
+  let row = [], field = '', inQuotes = false;
+  for(let i=0;i<text.length;i++){
+    const c = text[i];
+    if(inQuotes){
+      if(c === '"'){
+        if(text[i+1] === '"'){ field+='"'; i++; } else { inQuotes=false; }
+      } else field += c;
+    } else {
+      if(c === '"') inQuotes = true;
+      else if(c === ','){ row.push(field); field=''; }
+      else if(c === '\n'){ row.push(field); rows.push(row); row=[]; field=''; }
+      else if(c === '\r'){ /* skip */ }
+      else field += c;
+    }
+  }
+  if(field.length || row.length){ row.push(field); rows.push(row); }
+  return rows.filter(r => r.length>1 || (r[0] && r[0].trim()!==''));
+}
+
+document.getElementById('exportBtn').addEventListener('click', ()=>{
+  if(tools.length===0){
+    showStatus('importStatus','Nothing to export yet.','err');
+    return;
+  }
+  const header = ['brand','type','diameter','edp','price','loc','neckdia','coolant','specs','notes'];
+  const csvRows = [header.join(',')];
+  tools.forEach(t=>{
+    const row = header.map(h=>{
+      let v = String(t[h] ?? '');
+      if(v.includes(',') || v.includes('"') || v.includes('\n')){
+        v = '"' + v.replace(/"/g,'""') + '"';
+      }
+      return v;
+    });
+    csvRows.push(row.join(','));
+  });
+  const blob = new Blob([csvRows.join('\n')], {type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'tool-crib-export.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showStatus('importStatus', 'Exported.', 'ok');
+});
+
+document.getElementById('downloadJsonBtn').addEventListener('click', ()=>{
+  if(tools.length === 0){
+    showStatus('importStatus','Nothing to save yet.','err');
+    return;
+  }
+  // one tool per line so GitHub shows a readable diff
+  const text = '[\n' + tools.map(t=>JSON.stringify(t)).join(',\n') + '\n]\n';
+  const blob = new Blob([text], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'tools.json';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showStatus('importStatus', `Downloaded tools.json with ${tools.length} tools. Upload it to GitHub to replace the old one.`, 'ok');
+});
+
+document.getElementById('resetLocalBtn').addEventListener('click', ()=>{
+  if(added.length === 0 && deleted.length === 0){
+    showStatus('importStatus','No local changes to clear.','ok');
+    return;
+  }
+  if(!confirm('Discard the ' + added.length + ' tool(s) added and ' + deleted.length + ' removed on this device? The shared catalog is not affected.')) return;
+  added = []; deleted = [];
+  saveLocal();
+  rebuild();
+  showStatus('importStatus', 'Back to the shared catalog.', 'ok');
+});
+
+// ---- Threads / Ports ----
+let portData = null;
+
+async function loadPorts(){
+  try{
+    const res = await fetch('ports.json', {cache:'no-cache'});
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    portData = await res.json();
+  }catch(err){
+    document.getElementById('portCard').innerHTML =
+      '<div class="empty">Couldn\'t load <b>ports.json</b> (' + escapeHtml(err.message) + ').</div>';
+    return;
+  }
+  const stds = [...new Set(portData.ports.map(p=>p.std))];
+  const stdSel = document.getElementById('p_std');
+  stdSel.innerHTML = stds.map(x=>`<option value="${escapeHtml(x)}">${escapeHtml(x)}</option>`).join('');
+  fillDashes();
+}
+
+function fillDashes(){
+  const std = document.getElementById('p_std').value;
+  const list = portData.ports.filter(p=>p.std===std);
+  const sel = document.getElementById('p_dash');
+  const prev = sel.value;
+  sel.innerHTML = list.map(p=>`<option value="${escapeHtml(p.id)}">${escapeHtml(p.dash)} &nbsp; ${escapeHtml(p.thread)}</option>`).join('');
+  if(list.some(p=>p.id===prev)) sel.value = prev;
+  renderPort();
+}
+
+function portFig(p){
+  return `<svg class="port-fig" viewBox="0 0 340 268" role="img" aria-label="Port cross-section for ${escapeHtml(p.dash)}">
+<rect class="mat" x="45" y="55" width="250" height="170" rx="3"/>
+<line x1="170" y1="42" x2="170" y2="256" stroke="#8b959c" stroke-width=".8" stroke-dasharray="7 3 2 3"/>
+<path class="out" d="M100,55 L112,66 L112,73 L118,73 L118,150 L148,166 L148,225"/>
+<path class="out" d="M240,55 L228,66 L228,73 L222,73 L222,150 L192,166 L192,225"/>
+<line class="out" x1="45" y1="55" x2="100" y2="55"/><line class="out" x1="240" y1="55" x2="295" y2="55"/>
+<path class="thd" d="M118,76 L125,80 L118,85 L125,89 L118,94 L125,98 L118,103 L125,107 L118,112 L125,116 L118,121 L125,125 L118,130 L125,134 L118,139 L125,143 L118,148"/>
+<path class="thd" d="M222,76 L215,80 L222,85 L215,89 L222,94 L215,98 L222,103 L215,107 L222,112 L215,116 L222,121 L215,125 L222,130 L215,134 L222,139 L215,143 L222,148"/>
+<path class="dim" d="M45,24 L45,53 M295,24 L295,53 M45,18 L295,18"/>
+<text class="v" x="170" y="14" text-anchor="middle">G ${p.G}</text>
+<path class="dim" d="M100,36 L100,53 M240,36 L240,53 M100,32 L240,32"/>
+<text class="v" x="170" y="29" text-anchor="middle">A ${p.A}</text>
+<path class="dim" d="M112,50 L112,66 M228,50 L228,66 M112,46 L228,46"/>
+<text class="v" x="170" y="43" text-anchor="middle">D ${p.D}</text>
+<path class="dep" d="M297,55 L312,55 M230,73 L312,73 M304,55 L304,73"/>
+<text class="w" x="252" y="88">E ${p.E}</text>
+<path class="dep" d="M297,150 L330,150 M324,55 L324,150"/>
+<text class="w" x="240" y="140">B ${p.B}</text>
+<path class="dim" d="M148,227 L148,246 M192,227 L192,246 M148,242 L192,242"/>
+<text class="v" x="170" y="260" text-anchor="middle">C ${p.C}</text>
+<path class="rad" d="M112,73 L74,98"/><text x="6" y="102">.020R max</text>
+<path class="rad" d="M103,60 L74,44"/><text x="30" y="41">120&#176;</text>
+</svg>`;
+}
+
+
+function portTools(p){
+  const code = p.dash.replace('-','');
+  const hits = tools.filter(t => t.brand==='SCT' && (t.specs||'').includes('AS5202-'+code+' '));
+  if(hits.length === 0) return '';
+  const byType = {};
+  hits.forEach(t=>{ (byType[t.type] = byType[t.type] || []).push(t); });
+  let html = '<div class="port-tools"><div class="pt-head">Tools that cut this port</div>';
+  Object.keys(byType).sort().forEach(ty=>{
+    html += '<div class="pt-type">' + escapeHtml(ty.replace('AS5202 Port Tool - ','')) + '</div>';
+    byType[ty].forEach(t=>{
+      const pn = (t.specs||'').split('|')[0].trim();
+      const coat = (t.notes||'').includes('ALTiN+') ? 'ALTiN+' : 'uncoated';
+      html += '<div class="pt-row"><span>' + escapeHtml(pn) + ' <span class="pt-c">' + coat +
+              '</span></span><span class="edp">' + escapeHtml(t.edp) + '</span></div>';
+    });
+  });
+  const s = hits.find(t=>t.type.indexOf('solid')>=0);
+  if(s) html += '<div class="pt-cut">Solid pilot cuts: pilot &#8960;' + escapeHtml(s.neckdia) +
+                ' &times; ' + escapeHtml(s.loc) + ' long &nbsp;|&nbsp; spot face &#8960;' +
+                escapeHtml(s.diameter) + '</div>';
+  return html + '</div>';
+}
+
+function renderPort(){
+  const p = portData.ports.find(x=>x.id === document.getElementById('p_dash').value);
+  if(!p){ document.getElementById('portCard').innerHTML=''; return; }
+  const L = portData.meta.letters, X = portData.meta.extra;
+  document.getElementById('portCard').innerHTML = `
+  <div class="panel">
+    <div class="port-head">
+      <span class="t">${escapeHtml(p.thread)}</span>
+      <span class="d">${escapeHtml(p.std)} ${escapeHtml(p.dash)}</span>
+    </div>
+    ${portFig(p)}
+    <table class="port-tbl">
+      <tr><td class="k">Minor dia min</td><td class="v">${p.minor_min}</td></tr>
+      <tr><td class="k">Minor dia max</td><td class="v">${p.minor_max}</td></tr>
+      <tr><td class="k">A &mdash; c'sink dia</td><td class="v">${p.A} &nbsp;+.015/&minus;.000</td></tr>
+      <tr><td class="k">B &mdash; full thd depth</td><td class="v">${p.B} min</td></tr>
+      <tr><td class="k">C &mdash; thru hole</td><td class="v">${p.C} min</td></tr>
+      <tr><td class="k">D &mdash; c'bore dia</td><td class="v">${p.D} &nbsp;+.005/&minus;.000</td></tr>
+      <tr><td class="k">E &mdash; depth of D</td><td class="v">${p.E} &nbsp;+.015/&minus;.000</td></tr>
+      <tr><td class="k">G &mdash; boss face dia</td><td class="v">${p.G} min</td></tr>
+      <tr><td class="k">J &mdash; fitting clearance</td><td class="v">${p.J} min</td></tr>
+      <tr><td class="k">N &mdash; squareness</td><td class="v">${p.N} T.I.R.</td></tr>
+      <tr><td class="k">Tube OD</td><td class="v">${p.tube === '-' ? '&mdash;' : p.tube}</td></tr>
+      <tr><td class="k">Corner radius</td><td class="v">${escapeHtml(X.corner_radius)}</td></tr>
+    </table>
+    ${portTools(p)}
+    <div class="port-note">
+      B is measured from the port face, not from the start of the thread.<br>
+      ${escapeHtml(X.concentricity)}<br>
+      ${escapeHtml(portData.meta.note)}
+    </div>
+  </div>`;
+}
+
+document.getElementById('p_std').addEventListener('change', fillDashes);
+document.getElementById('p_dash').addEventListener('change', renderPort);
+loadPorts();
+
+loadTools();
+</script>
+
+</body>
+</html>
