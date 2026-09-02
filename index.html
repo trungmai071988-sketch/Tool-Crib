@@ -1007,24 +1007,30 @@ async function loadPorts(){
       '<div class="empty">Couldn\'t load <b>ports.json</b> (' + escapeHtml(err.message) + ').</div>';
     return;
   }
-  const stds = [...new Set(portData.ports.map(p=>p.std))];
-  const stdSel = document.getElementById('p_std');
-  stdSel.innerHTML = stds.map(x=>`<option value="${escapeHtml(x)}">${escapeHtml(x)}</option>`).join('');
+  const sel = document.getElementById('p_std');
+  sel.innerHTML = portData.standards.map(s=>
+    `<option value="${escapeHtml(s.id)}">${escapeHtml(s.name)}</option>`).join('');
   fillDashes();
 }
 
+function curStd(){
+  const id = document.getElementById('p_std').value;
+  return portData.standards.find(s=>s.id===id) || portData.standards[0];
+}
+
 function fillDashes(){
-  const std = document.getElementById('p_std').value;
-  const list = portData.ports.filter(p=>p.std===std);
-  const sel = document.getElementById('p_dash');
-  const prev = sel.value;
-  sel.innerHTML = list.map(p=>`<option value="${escapeHtml(p.id)}">${escapeHtml(p.dash)} &nbsp; ${escapeHtml(p.thread)}</option>`).join('');
-  if(list.some(p=>p.id===prev)) sel.value = prev;
+  const st = curStd(), sel = document.getElementById('p_dash'), prev = sel.value;
+  sel.innerHTML = st.rows.map(r=>
+    `<option value="${escapeHtml(r.id)}">${escapeHtml(r.dash)} &nbsp; ${escapeHtml(r.thread)}</option>`).join('');
+  if(st.rows.some(r=>r.id===prev)) sel.value = prev;
   renderPort();
 }
 
-function portFig(p){
-  return `<svg class="port-fig" viewBox="0 0 340 268" role="img" aria-label="Port cross-section for ${escapeHtml(p.dash)}">
+function dimLine(x1,y1,x2,y2,cls){ return `<path class="${cls}" d="M${x1},${y1} L${x2},${y2}"/>`; }
+
+function figAS5202(r){
+  const d = r.dims;
+  return `<svg class="port-fig" viewBox="0 0 340 268" role="img" aria-label="AS5202 port section ${escapeHtml(r.dash)}">
 <rect class="mat" x="45" y="55" width="250" height="170" rx="3"/>
 <line x1="170" y1="42" x2="170" y2="256" stroke="#8b959c" stroke-width=".8" stroke-dasharray="7 3 2 3"/>
 <path class="out" d="M100,55 L112,66 L112,73 L118,73 L118,150 L148,166 L148,225"/>
@@ -1033,26 +1039,60 @@ function portFig(p){
 <path class="thd" d="M118,76 L125,80 L118,85 L125,89 L118,94 L125,98 L118,103 L125,107 L118,112 L125,116 L118,121 L125,125 L118,130 L125,134 L118,139 L125,143 L118,148"/>
 <path class="thd" d="M222,76 L215,80 L222,85 L215,89 L222,94 L215,98 L222,103 L215,107 L222,112 L215,116 L222,121 L215,125 L222,130 L215,134 L222,139 L215,143 L222,148"/>
 <path class="dim" d="M45,24 L45,53 M295,24 L295,53 M45,18 L295,18"/>
-<text class="v" x="170" y="14" text-anchor="middle">G ${p.G}</text>
+<text class="v" x="170" y="14" text-anchor="middle">G ${d.G}</text>
 <path class="dim" d="M100,36 L100,53 M240,36 L240,53 M100,32 L240,32"/>
-<text class="v" x="170" y="29" text-anchor="middle">A ${p.A}</text>
+<text class="v" x="170" y="29" text-anchor="middle">A ${d.A}</text>
 <path class="dim" d="M112,50 L112,66 M228,50 L228,66 M112,46 L228,46"/>
-<text class="v" x="170" y="43" text-anchor="middle">D ${p.D}</text>
+<text class="v" x="170" y="43" text-anchor="middle">D ${d.D}</text>
 <path class="dep" d="M297,55 L312,55 M230,73 L312,73 M304,55 L304,73"/>
-<text class="w" x="252" y="88">E ${p.E}</text>
+<text class="w" x="252" y="88">E ${d.E}</text>
 <path class="dep" d="M297,150 L330,150 M324,55 L324,150"/>
-<text class="w" x="240" y="140">B ${p.B}</text>
+<text class="w" x="240" y="140">B ${d.B}</text>
 <path class="dim" d="M148,227 L148,246 M192,227 L192,246 M148,242 L192,242"/>
-<text class="v" x="170" y="260" text-anchor="middle">C ${p.C}</text>
+<text class="v" x="170" y="260" text-anchor="middle">C ${d.C}</text>
 <path class="rad" d="M112,73 L74,98"/><text x="6" y="102">.020R max</text>
 <path class="rad" d="M103,60 L74,44"/><text x="30" y="41">120&#176;</text>
 </svg>`;
 }
 
+function figAS1300(r){
+  const d = r.dims, s = (v)=> (v||'').split('/')[0];
+  return `<svg class="port-fig" viewBox="0 0 340 286" role="img" aria-label="AS1300 ring locked port section ${escapeHtml(r.dash)}">
+<rect class="mat" x="45" y="50" width="250" height="172" rx="3"/>
+<line x1="170" y1="36" x2="170" y2="276" stroke="#8b959c" stroke-width=".8" stroke-dasharray="7 3 2 3"/>
+<path class="out" d="M98,50 L104,57 L104,83 L116,83 L116,113 L122,113 L122,222"/>
+<path class="out" d="M242,50 L236,57 L236,83 L224,83 L224,113 L218,113 L218,222"/>
+<line class="out" x1="45" y1="50" x2="98" y2="50"/><line class="out" x1="242" y1="50" x2="295" y2="50"/>
+<path class="thd" d="M104,59 L110,61 M104,63 L110,65 M104,67 L110,69 M104,71 L110,73 M104,75 L110,77 M104,79 L110,81"/>
+<path class="thd" d="M236,59 L230,61 M236,63 L230,65 M236,67 L230,69 M236,71 L230,73 M236,75 L230,77 M236,79 L230,81"/>
+<path class="thd" d="M122,116 L129,120 L122,125 L129,129 L122,134 L129,138 L122,143 L129,147 L122,152 L129,156 L122,161 L129,165 L122,170"/>
+<path class="thd" d="M218,116 L211,120 L218,125 L211,129 L218,134 L211,138 L218,143 L211,147 L218,152 L211,156 L218,161 L211,165 L218,170"/>
+<path class="dim" d="M45,26 L45,48 M295,26 L295,48 M45,20 L295,20"/>
+<text class="v" x="170" y="16" text-anchor="middle">B ${d.B}</text>
+<path class="dim" d="M98,38 L98,48 M242,38 L242,48 M98,34 L242,34"/>
+<text class="v" x="170" y="30" text-anchor="middle">A ${d.A}</text>
+<path class="dim" d="M116,224 L116,250 M224,224 L224,250 M116,246 L224,246"/>
+<text class="v" x="170" y="242" text-anchor="middle">D ${s(d.D)}</text>
+<path class="dim" d="M104,224 L104,270 M236,224 L236,270 M104,266 L236,266"/>
+<text class="v" x="170" y="282" text-anchor="middle">C ${s(d.C)}</text>
+<line class="dep" x1="300" y1="50" x2="300" y2="170"/>
+<path class="dep" d="M238,70 L300,70 M226,83 L300,83 M220,113 L300,113 M218,170 L300,170"/>
+<path class="dep" d="M296,70 L304,70 M296,83 L304,83 M296,113 L304,113 M296,170 L304,170"/>
+<text class="w" x="306" y="67">E ${d.E}</text>
+<text class="w" x="306" y="88">F ${s(d.F)}</text>
+<text class="w" x="306" y="117">G ${s(d.G)}</text>
+<text class="w" x="306" y="174">H ${d.H}</text>
+<path class="rad" d="M104,83 L70,100"/><text x="4" y="104">R .010 max</text>
+<path class="rad" d="M101,55 L70,40"/><text x="26" y="37">45&#176;</text>
+<text class="w" x="126" y="103">${d.J} teeth</text>
+</svg>`;
+}
 
-function portTools(p){
-  const code = p.dash.replace('-','');
-  const hits = tools.filter(t => t.brand==='SCT' && (t.specs||'').includes('AS5202-'+code+' '));
+function portTools(r, st){
+  if(st.id !== 'as5202') return '';
+  const code = r.dash.replace('-','');
+  const re = new RegExp('^AS5202-' + code + '(?![0-9])');
+  const hits = tools.filter(t => t.brand==='SCT' && re.test((t.specs||'').trim()));
   if(hits.length === 0) return '';
   const byType = {};
   hits.forEach(t=>{ (byType[t.type] = byType[t.type] || []).push(t); });
@@ -1066,44 +1106,51 @@ function portTools(p){
               '</span></span><span class="edp">' + escapeHtml(t.edp) + '</span></div>';
     });
   });
-  const s = hits.find(t=>t.type.indexOf('solid')>=0);
-  if(s) html += '<div class="pt-cut">Solid pilot cuts: pilot &#8960;' + escapeHtml(s.neckdia) +
-                ' &times; ' + escapeHtml(s.loc) + ' long &nbsp;|&nbsp; spot face &#8960;' +
-                escapeHtml(s.diameter) + '</div>';
   return html + '</div>';
 }
 
+function as1300Tooling(r){
+  const d = r.dims;
+  const n = (d.porting||'').replace(/^RPT0?/,'');
+  const re = new RegExp('^RPT-' + n + '(?![0-9])');
+  const hits = tools.filter(t => t.brand==='SCT' && re.test((t.specs||'').trim()));
+  let stock = '';
+  if(hits.length){
+    stock = '<div class="pt-type">In your crib</div>' + hits.map(t=>{
+      const coat = (t.notes||'').includes('AlTiN+') ? 'AlTiN+' : 'uncoated';
+      return '<div class="pt-row"><span>' + escapeHtml(t.specs) + ' <span class="pt-c">' + coat +
+             '</span></span><span class="edp">' + escapeHtml(t.edp) + '</span></div>';
+    }).join('');
+  }
+  return '<div class="port-tools"><div class="pt-head">Tooling called out by the standard</div>' +
+    '<div class="pt-row"><span>Porting tool</span><span class="edp">' + escapeHtml(d.porting) + '</span></div>' +
+    '<div class="pt-row"><span>Broaching tool</span><span class="edp">' + escapeHtml(d.broach) + '</span></div>' +
+    '<div class="pt-row"><span>Chip removal tool</span><span class="edp">' + escapeHtml(d.chip) + '</span></div>' +
+    stock + '</div>';
+}
+
 function renderPort(){
-  const p = portData.ports.find(x=>x.id === document.getElementById('p_dash').value);
-  if(!p){ document.getElementById('portCard').innerHTML=''; return; }
-  const L = portData.meta.letters, X = portData.meta.extra;
+  if(!portData) return;
+  const st = curStd();
+  const r = st.rows.find(x=>x.id === document.getElementById('p_dash').value);
+  if(!r){ document.getElementById('portCard').innerHTML=''; return; }
+  const fig = st.figure === 'as1300' ? figAS1300(r) : figAS5202(r);
+  const tbl = st.display.map(([k,label,tol])=>{
+    const v = r.dims[k];
+    if(v === undefined || v === '') return '';
+    return '<tr><td class="k">'+label+'</td><td class="v">'+v+(tol?' &nbsp;'+tol:'')+'</td></tr>';
+  }).join('');
+  const extra = st.id==='as1300' ? as1300Tooling(r) : portTools(r, st);
   document.getElementById('portCard').innerHTML = `
   <div class="panel">
     <div class="port-head">
-      <span class="t">${escapeHtml(p.thread)}</span>
-      <span class="d">${escapeHtml(p.std)} ${escapeHtml(p.dash)}</span>
+      <span class="t">${escapeHtml(r.thread)}</span>
+      <span class="d">${escapeHtml(st.name)} ${escapeHtml(r.dash)}</span>
     </div>
-    ${portFig(p)}
-    <table class="port-tbl">
-      <tr><td class="k">Minor dia min</td><td class="v">${p.minor_min}</td></tr>
-      <tr><td class="k">Minor dia max</td><td class="v">${p.minor_max}</td></tr>
-      <tr><td class="k">A &mdash; c'sink dia</td><td class="v">${p.A} &nbsp;+.015/&minus;.000</td></tr>
-      <tr><td class="k">B &mdash; full thd depth</td><td class="v">${p.B} min</td></tr>
-      <tr><td class="k">C &mdash; thru hole</td><td class="v">${p.C} min</td></tr>
-      <tr><td class="k">D &mdash; c'bore dia</td><td class="v">${p.D} &nbsp;+.005/&minus;.000</td></tr>
-      <tr><td class="k">E &mdash; depth of D</td><td class="v">${p.E} &nbsp;+.015/&minus;.000</td></tr>
-      <tr><td class="k">G &mdash; boss face dia</td><td class="v">${p.G} min</td></tr>
-      <tr><td class="k">J &mdash; fitting clearance</td><td class="v">${p.J} min</td></tr>
-      <tr><td class="k">N &mdash; squareness</td><td class="v">${p.N} T.I.R.</td></tr>
-      <tr><td class="k">Tube OD</td><td class="v">${p.tube === '-' ? '&mdash;' : p.tube}</td></tr>
-      <tr><td class="k">Corner radius</td><td class="v">${escapeHtml(X.corner_radius)}</td></tr>
-    </table>
-    ${portTools(p)}
-    <div class="port-note">
-      B is measured from the port face, not from the start of the thread.<br>
-      ${escapeHtml(X.concentricity)}<br>
-      ${escapeHtml(portData.meta.note)}
-    </div>
+    ${fig}
+    <table class="port-tbl">${tbl}</table>
+    ${extra}
+    <div class="port-note">${st.footer.join('<br>')}<br>${escapeHtml(st.note)}</div>
   </div>`;
 }
 
