@@ -185,6 +185,14 @@
   }
   .results-col{flex:1;min-width:0;}
   .figure-col{width:690px;flex:0 0 690px;position:sticky;top:12px;display:none;}
+  .figure-col.on.single{grid-template-columns:1fr;}
+  .figure-col.on.single .tool-card{padding:18px 20px;}
+  .figure-col.on.single .tool-card svg{max-width:600px;margin:14px auto 8px;}
+  .figure-col.on.single .tool-card .pn{font-size:19px;}
+  .figure-col.on.single .tool-card .sub{font-size:13px;}
+  .figure-col.on.single .tool-dims{font-size:15.5px;}
+  .figure-col.on.single .tool-dims td{padding:8px 0;}
+  .figure-col.on.single .tool-dims td.v{font-size:17.5px;}
   .figure-col.on{
     display:grid;
     grid-template-columns:repeat(2,minmax(0,1fr));
@@ -1081,7 +1089,7 @@ function renderToolFigure(){
   const sel = selectedToolId ? tools.find(t=>t.id===selectedToolId) : null;
   if(sel){
     const setW = (on)=>{ if(body) body.className = on ? 'search-body wide' : 'search-body'; };
-    col.className = 'figure-col on';
+    col.className = 'figure-col on single';
     setW(true);
     col.innerHTML = figCutterCard(sel);
     return;
