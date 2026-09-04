@@ -170,6 +170,20 @@
   .pt-row{display:flex;justify-content:space-between;font-size:16px;padding:6px 0;font-family:var(--mono);}
   .pt-c{color:var(--muted);font-size:11.5px;}
   .pt-cut{font-size:14px;color:var(--muted);margin-top:12px;font-family:var(--mono);}
+  .search-body{display:flex;gap:16px;align-items:flex-start;}
+  .results-col{flex:1;min-width:0;}
+  .figure-col{width:330px;flex:0 0 330px;position:sticky;top:12px;display:none;}
+  .figure-col.on{display:block;}
+  .tool-card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:13px;}
+  .tool-card .pn{font:600 16px var(--mono);color:var(--accent);}
+  .tool-card .sub{font:11.5px var(--mono);color:var(--muted);margin-top:2px;}
+  .tool-card svg{width:100%;height:auto;display:block;margin:10px 0 4px;}
+  .tool-card .cap{font:12px var(--mono);color:var(--muted);line-height:1.6;border-top:1px solid var(--line);padding-top:8px;margin-top:6px;}
+  .tool-card .cap b{color:var(--text);}
+  @media (max-width:900px){
+    .search-body{flex-direction:column;}
+    .figure-col{width:100%;flex:none;position:static;order:-1;}
+  }
   #csvFileInput{display:none;}
   .status{font-size:12.5px;padding:8px 10px;border-radius:7px;margin-top:8px;}
   .status.ok{background:#123322;color:var(--good);}
@@ -447,8 +461,13 @@
       </div>
     </div>
 
-    <div class="count" id="resultCount"></div>
-    <div id="results"></div>
+    <div class="search-body">
+      <div class="results-col">
+        <div class="count" id="resultCount"></div>
+        <div id="results"></div>
+      </div>
+      <div class="figure-col" id="toolFigure"></div>
+    </div>
   </section>
 
   <!-- ADD TAB -->
@@ -647,6 +666,7 @@ function rebuild(){
   refreshPitchList();
   refreshPortList();
   renderResults();
+  renderToolFigure();
   updateSctReference();
   updateLocalCount();
   if(portData) renderPort();
@@ -854,6 +874,102 @@ function refreshPortList(){
   field.style.display = '';
 }
 
+
+// ---- port tool drawing ----
+let portToolDims = null;
+fetch('porttools.json', {cache:'no-cache'})
+  .then(r=>r.ok?r.json():null).then(d=>{ portToolDims = d; renderToolFigure(); })
+  .catch(()=>{});
+
+function portFamily(pn, type){
+  const t = (type||'').toUpperCase();
+  if(/^AS5202/.test(pn)){
+    if(/-\d+S/.test(pn)) return 'solid';
+    if(/R-X3/.test(pn))  return 'coolant';
+    if(/-\d+R/.test(pn)) return 'reamer';
+    if(/-\d+X/.test(pn)) return 'nopilot';
+  }
+  if(/^AND10050/.test(pn)) return 'reamer';
+  if(/^RPT|^RFPT/.test(pn)) return 'rosan';
+  return 'generic';
+}
+
+function toolSvg(fam, d){
+  const L = (x,y,txt,col)=>`<text x="${x}" y="${y}" fill="${col}" style="font:9.5px var(--mono);">${txt}</text>`;
+  const B='#7fd4ff', G='#3ecf8e', body='#31373d', edge='#e7e9ea', gr='#8b959c';
+  const flutes = `<path d="M112,66 L126,94 M142,66 L156,94 M172,66 L186,94 M202,66 L216,94 M232,66 L246,94" stroke="${gr}" stroke-width=".9" fill="none"/>`;
+  const cl = `<line x1="14" y1="80" x2="326" y2="80" stroke="${gr}" stroke-width=".7" stroke-dasharray="7 3 2 3"/>`;
+  const shank = `<path d="M300,66 L300,94" stroke="${edge}" stroke-width="1.5"/>`;
+  let nose, notes;
+  if(fam==='solid'){
+    nose = `<path d="M24,69 L58,69 L58,64 L64,60 L74,53 L98,53 L98,66 L300,66 L300,94 L98,94 L98,107 L74,107 L64,100 L58,96 L58,91 L24,91 Z"
+      fill="${body}" stroke="${edge}" stroke-width="1.5" stroke-linejoin="round"/>`;
+    notes = d ? `<b>P ${d.P}</b> pilot &times; <b>J ${d.J}</b> long` : 'solid pilot';
+  }else if(fam==='reamer'||fam==='coolant'){
+    nose = `<path d="M24,72 L34,69 L62,69 L62,64 L68,60 L78,53 L98,53 L98,66 L300,66 L300,94 L98,94 L98,107 L78,107 L68,100 L62,96 L62,91 L34,91 L24,88 Z"
+      fill="${body}" stroke="${edge}" stroke-width="1.5" stroke-linejoin="round"/>
+      <path d="M24,72 L34,69 M24,88 L34,91" stroke="${edge}" stroke-width="1.5"/>`;
+    notes = 'reamer pilot &mdash; <b>cuts the minor thread dia</b>';
+  }else if(fam==='nopilot'){
+    nose = `<path d="M74,53 L98,53 L98,66 L300,66 L300,94 L98,94 L98,107 L74,107 L64,100 L58,96 L58,64 L64,60 Z"
+      fill="${body}" stroke="${edge}" stroke-width="1.5" stroke-linejoin="round"/>`;
+    notes = 'no pilot &mdash; does <b>not</b> cut the minor dia';
+  }else if(fam==='rosan'){
+    nose = `<path d="M30,70 L58,70 L58,62 L96,62 L96,66 L300,66 L300,94 L96,94 L96,98 L58,98 L58,90 L30,90 Z"
+      fill="${body}" stroke="${edge}" stroke-width="1.5" stroke-linejoin="round"/>`;
+    notes = 'Rosan cavity tool &mdash; cuts the AS1300 port';
+  }else{
+    nose = `<path d="M40,62 L96,62 L96,66 L300,66 L300,94 L96,94 L96,98 L40,98 Z"
+      fill="${body}" stroke="${edge}" stroke-width="1.5" stroke-linejoin="round"/>`;
+    notes = 'port tool';
+  }
+  let dims = '';
+  if(d && (fam==='solid')){
+    dims += `<path d="M24,61 L24,45 M58,61 L58,45 M24,49 L58,49" fill="none" stroke="${G}" stroke-width=".8"/>` + L(30,42,'J '+d.J,G);
+  }
+  if(d && fam!=='rosan' && fam!=='generic'){
+    dims += `<path d="M98,49 L98,20 M300,49 L300,20 M98,24 L300,24" fill="none" stroke="${G}" stroke-width=".8"/>` + L(178,18,'OAL '+d.OAL,G);
+    dims += `<path d="M102,100 L102,128 M102,124 L150,124" fill="none" stroke="${B}" stroke-width=".8"/>` + L(154,127,'F '+d.F+' spot face',B);
+    dims += `<path d="M304,66 L322,66 M304,94 L322,94 M316,66 L316,94" fill="none" stroke="${B}" stroke-width=".8"/>` + L(272,112,'S '+d.S+' shank',B);
+    dims += L(96,42,'D '+d.D+' \u00d7 E '+d.E,B) + `<path d="M96,46 L88,58" fill="none" stroke="${B}" stroke-width=".7"/>`;
+  }
+  return {svg:`<svg viewBox="0 0 340 138" role="img" aria-label="Port tool side view">${cl}${nose}${flutes}${shank}${dims}</svg>`, notes};
+}
+
+function renderToolFigure(){
+  const col = document.getElementById('toolFigure');
+  if(!col) return;
+  const portF = document.getElementById('searchPort').value;
+  const brandF = document.getElementById('searchBrand').value;
+  if(!portF || brandF !== 'SCT'){ col.className='figure-col'; col.innerHTML=''; return; }
+
+  const hits = tools.filter(t=>{ const p = toolPort(t); return p && p.key === portF; });
+  if(!hits.length){ col.className='figure-col'; col.innerHTML=''; return; }
+
+  const order = {solid:0, reamer:1, coolant:2, nopilot:3, rosan:4, generic:5};
+  const byFam = {};
+  hits.forEach(t=>{
+    const pn = (t.specs||'').split('|')[0].trim().toUpperCase();
+    const f = portFamily(pn, t.type);
+    if(!byFam[f]) byFam[f] = {pn:pn, edp:t.edp, type:t.type, n:0};
+    byFam[f].n++;
+  });
+  const fams = Object.keys(byFam).sort((a,b)=>order[a]-order[b]);
+  const code = portF[0]==='d' ? String(parseInt(portF.slice(1),10)).padStart(2,'0') : null;
+  const d = (portToolDims && code) ? portToolDims.sizes[code] : null;
+
+  col.className = 'figure-col on';
+  col.innerHTML = fams.map(f=>{
+    const g = byFam[f], fig = toolSvg(f, d);
+    return `<div class="tool-card" style="margin-bottom:12px;">
+      <div class="pn">${escapeHtml(g.pn)}</div>
+      <div class="sub">${escapeHtml(g.type.slice(0,46))}</div>
+      ${fig.svg}
+      <div class="cap">${fig.notes}${d && f!=='rosan' && f!=='generic' ? '<br>c\'sink <b>A '+d.A+'</b>' : ''}</div>
+    </div>`;
+  }).join('');
+}
+
 function refreshTypeList(){
   const brandF = document.getElementById('searchBrand').value;
   const relevantTools = brandF ? tools.filter(t=>t.brand===brandF) : tools;
@@ -1013,12 +1129,12 @@ window.deleteTool = function(id){
 }
 
 document.getElementById('searchType').addEventListener('change', ()=>{ refreshPitchList(); refreshPortList(); renderResults(); });
-document.getElementById('searchBrand').addEventListener('change', ()=>{ refreshTypeList(); refreshPitchList(); refreshPortList(); renderResults(); updateSctReference(); });
+document.getElementById('searchBrand').addEventListener('change', ()=>{ refreshTypeList(); refreshPitchList(); refreshPortList(); renderResults(); renderToolFigure(); updateSctReference(); });
 document.getElementById('searchDia').addEventListener('input', renderResults);
 document.getElementById('searchLoc').addEventListener('input', renderResults);
 document.getElementById('searchCoolant').addEventListener('change', renderResults);
 document.getElementById('searchPitch').addEventListener('change', renderResults);
-document.getElementById('searchPort').addEventListener('change', renderResults);
+document.getElementById('searchPort').addEventListener('change', ()=>{ renderResults(); renderToolFigure(); });
 document.getElementById('searchKeyword').addEventListener('input', renderResults);
 
 // ---- Add tool ----
