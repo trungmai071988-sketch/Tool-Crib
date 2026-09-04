@@ -171,9 +171,26 @@
   .pt-c{color:var(--muted);font-size:11.5px;}
   .pt-cut{font-size:14px;color:var(--muted);margin-top:12px;font-family:var(--mono);}
   .search-body{display:flex;gap:16px;align-items:flex-start;}
+  /* when the drawings are showing, break out of the 820px column and use the whole window */
+  .search-body.wide{
+    width:min(1500px, calc(100vw - 32px));
+    margin-left:calc(410px - min(750px, calc(50vw - 16px)));
+  }
   .results-col{flex:1;min-width:0;}
-  .figure-col{width:330px;flex:0 0 330px;position:sticky;top:12px;display:none;}
-  .figure-col.on{display:block;}
+  .figure-col{width:690px;flex:0 0 690px;position:sticky;top:12px;display:none;}
+  .figure-col.on{
+    display:grid;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:12px;
+    align-content:start;
+    max-height:calc(100vh - 24px);
+    overflow-y:auto;
+  }
+  @media (max-width:1250px){
+    .figure-col{width:340px;flex:0 0 340px;}
+    .figure-col.on{grid-template-columns:1fr;}
+    .search-body.wide{width:auto;margin-left:0;}
+  }
   .tool-card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:13px;}
   .tool-card .pn{font:600 16px var(--mono);color:var(--accent);}
   .tool-card .sub{font:11.5px var(--mono);color:var(--muted);margin-top:2px;}
@@ -183,6 +200,7 @@
   @media (max-width:900px){
     .search-body{flex-direction:column;}
     .figure-col{width:100%;flex:none;position:static;order:-1;}
+    .figure-col.on{grid-template-columns:1fr;max-height:none;overflow:visible;}
   }
   #csvFileInput{display:none;}
   .status{font-size:12.5px;padding:8px 10px;border-radius:7px;margin-top:8px;}
@@ -941,10 +959,12 @@ function renderToolFigure(){
   if(!col) return;
   const portF = document.getElementById('searchPort').value;
   const brandF = document.getElementById('searchBrand').value;
-  if(!portF || brandF !== 'SCT'){ col.className='figure-col'; col.innerHTML=''; return; }
+  const body = document.querySelector('.search-body');
+  const setWide = (on)=>{ if(body) body.className = on ? 'search-body wide' : 'search-body'; };
+  if(!portF || brandF !== 'SCT'){ col.className='figure-col'; col.innerHTML=''; setWide(false); return; }
 
   const hits = tools.filter(t=>{ const p = toolPort(t); return p && p.key === portF; });
-  if(!hits.length){ col.className='figure-col'; col.innerHTML=''; return; }
+  if(!hits.length){ col.className='figure-col'; col.innerHTML=''; setWide(false); return; }
 
   const order = {solid:0, reamer:1, coolant:2, nopilot:3, rosan:4, generic:5};
   const byFam = {};
@@ -959,9 +979,10 @@ function renderToolFigure(){
   const d = (portToolDims && code) ? portToolDims.sizes[code] : null;
 
   col.className = 'figure-col on';
+  setWide(true);
   col.innerHTML = fams.map(f=>{
     const g = byFam[f], fig = toolSvg(f, d);
-    return `<div class="tool-card" style="margin-bottom:12px;">
+    return `<div class="tool-card">
       <div class="pn">${escapeHtml(g.pn)}</div>
       <div class="sub">${escapeHtml(g.type.slice(0,46))}</div>
       ${fig.svg}
