@@ -426,6 +426,10 @@
           <label>Thread pitch</label>
           <select id="searchPitch"><option value="">Any pitch</option></select>
         </div>
+        <div class="field" id="portField" style="display:none;">
+          <label>Port size</label>
+          <select id="searchPort"><option value="">Any port size</option></select>
+        </div>
       </div>
       <div class="row">
         <div class="field">
@@ -641,6 +645,7 @@ function rebuild(){
   ];
   refreshTypeList();
   refreshPitchList();
+  refreshPortList();
   renderResults();
   updateSctReference();
   updateLocalCount();
@@ -776,6 +781,79 @@ function refreshPitchList(){
   field.style.display = '';
 }
 
+
+// ---- port size, parsed from the SCT part number ----
+const _portCache = new Map();
+
+function toolPort(t){
+  if(_portCache.has(t.id)) return _portCache.get(t.id);
+  let out = null;
+  const ty = (t.type||'').toUpperCase();
+  let pn = (t.specs||'').trim().toUpperCase();
+  if(pn.indexOf('|') >= 0) pn = pn.split('|')[0].trim();
+  if(pn && (ty.indexOf('PORT') >= 0 || ty.indexOf('CAVITY') >= 0)){
+    let m = pn.match(/^(?:AS5202|AND10050|MS33514|MS21921|RFPT|RPT)-0*(\d{1,2})/);
+    if(m){
+      const n = parseInt(m[1],10);
+      out = {group:'dash', key:'d'+n, sort:n, label:'-'+String(n).padStart(2,'0')};
+    }else if(/^PT-BSPP-/.test(pn)){
+      const sz = pn.replace(/^PT-BSPP-/,'').replace(/A$/,'');
+      out = {group:'pipe', key:'p'+sz, sort:bspSort(sz), label:sz+'"'};
+    }else if(/^\*?PT-SF/.test(pn)){
+      const d = pn.match(/PT-SF(\d{4})/);
+      if(d){
+        const v = parseInt(d[1],10)/1000;
+        out = {group:'bore', key:'b'+d[1], sort:v,
+               label:(v<1 ? v.toFixed(3).slice(1) : v.toFixed(3)) + '" bore'};
+      }
+    }
+  }
+  _portCache.set(t.id, out);
+  return out;
+}
+function bspSort(s){
+  s = s.trim();
+  let m = s.match(/^(\d+)-(\d+)\/(\d+)$/);          // 1-1/4
+  if(m) return (+m[1]) + (+m[2])/(+m[3]);
+  m = s.match(/^(\d+)\/(\d+)$/);                     // 3/8
+  if(m) return (+m[1])/(+m[2]);
+  return parseFloat(s) || 0;                          // 1.0
+}
+
+function refreshPortList(){
+  const brandF = document.getElementById('searchBrand').value;
+  const typeF  = document.getElementById('searchType').value.trim().toLowerCase();
+  const scope = tools.filter(t=>{
+    if(brandF && t.brand !== brandF) return false;
+    if(typeF && t.type.toLowerCase() !== typeF) return false;
+    return true;
+  });
+  const seen = new Map();
+  scope.forEach(t=>{
+    const p = toolPort(t);
+    if(p && !seen.has(p.key)) seen.set(p.key, p);
+  });
+  const field = document.getElementById('portField');
+  const sel = document.getElementById('searchPort');
+  if(seen.size === 0){
+    field.style.display = 'none';
+    sel.innerHTML = '<option value="">Any port size</option>';
+    sel.value = '';
+    return;
+  }
+  const grp = (g)=>[...seen.values()].filter(p=>p.group===g).sort((a,b)=>a.sort-b.sort);
+  const opt = (p)=>`<option value="${p.key}">${escapeHtml(p.label)}</option>`;
+  let html = '<option value="">Any port size</option>';
+  const d = grp('dash'), pi = grp('pipe'), b = grp('bore');
+  if(d.length)  html += '<optgroup label="Dash size">' + d.map(opt).join('') + '</optgroup>';
+  if(pi.length) html += '<optgroup label="BSPP pipe size">' + pi.map(opt).join('') + '</optgroup>';
+  if(b.length)  html += '<optgroup label="Autoclave bore">' + b.map(opt).join('') + '</optgroup>';
+  const prev = sel.value;
+  sel.innerHTML = html;
+  sel.value = seen.has(prev) ? prev : '';
+  field.style.display = '';
+}
+
 function refreshTypeList(){
   const brandF = document.getElementById('searchBrand').value;
   const relevantTools = brandF ? tools.filter(t=>t.brand===brandF) : tools;
@@ -857,11 +935,13 @@ function renderResults(){
   const coolantF = document.getElementById('searchCoolant').value;
   const kwF = document.getElementById('searchKeyword').value.trim().toLowerCase();
   const pitchF = document.getElementById('searchPitch').value;
+  const portF  = document.getElementById('searchPort').value;
 
   let list = tools.filter(t=>{
     if(brandF && t.brand !== brandF) return false;
     if(typeF && t.type.toLowerCase() !== typeF) return false;
     if(pitchF && !pitchMatches(t, pitchF)) return false;
+    if(portF){ const pp = toolPort(t); if(!pp || pp.key !== portF) return false; }
     if(coolantF && (t.coolant||'') !== coolantF) return false;
     if(diaF !== ''){
       const target = parseFloat(diaF);
@@ -932,12 +1012,13 @@ window.deleteTool = function(id){
   rebuild();
 }
 
-document.getElementById('searchType').addEventListener('change', ()=>{ refreshPitchList(); renderResults(); });
-document.getElementById('searchBrand').addEventListener('change', ()=>{ refreshTypeList(); refreshPitchList(); renderResults(); updateSctReference(); });
+document.getElementById('searchType').addEventListener('change', ()=>{ refreshPitchList(); refreshPortList(); renderResults(); });
+document.getElementById('searchBrand').addEventListener('change', ()=>{ refreshTypeList(); refreshPitchList(); refreshPortList(); renderResults(); updateSctReference(); });
 document.getElementById('searchDia').addEventListener('input', renderResults);
 document.getElementById('searchLoc').addEventListener('input', renderResults);
 document.getElementById('searchCoolant').addEventListener('change', renderResults);
 document.getElementById('searchPitch').addEventListener('change', renderResults);
+document.getElementById('searchPort').addEventListener('change', renderResults);
 document.getElementById('searchKeyword').addEventListener('input', renderResults);
 
 // ---- Add tool ----
