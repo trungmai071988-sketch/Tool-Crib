@@ -42,6 +42,8 @@
   }
   .logo-tile img{height:78px;width:auto;display:block;}
   .header-text{min-width:0;}
+  .header-flag{margin-left:auto;flex:0 0 auto;padding-left:12px;}
+  .header-flag svg{display:block;height:90px;width:auto;}
   header h1{
     margin:0;
     font-size:20px;
@@ -50,12 +52,17 @@
   }
   header h1 span{color:var(--accent);}
   header p{margin:3px 0 0;color:var(--muted);font-size:12.5px;}
+  @media (max-width:900px){
+    .header-flag svg{height:78px;}
+  }
   @media (max-width:620px){
     header{gap:11px;padding:11px 13px;}
     .logo-tile{padding:5px 7px;border-radius:7px;}
     .logo-tile img{height:52px;}
     header h1{font-size:17px;}
     header p{font-size:11.5px;}
+    .header-flag{display:none;}
+    .header-flag svg{height:62px;}
   }
 
   .tabs{display:flex;border-bottom:1px solid var(--line);background:var(--panel);}
@@ -202,6 +209,13 @@
     .figure-col{width:100%;flex:none;position:static;order:-1;}
     .figure-col.on{grid-template-columns:1fr;max-height:none;overflow:visible;}
   }
+  .result{cursor:pointer;}
+  .result.picked{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset;}
+  .tool-dims{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:4px;}
+  .tool-dims td{padding:5px 0;border-bottom:1px solid var(--line);}
+  .tool-dims td.k{color:var(--muted);width:46%;}
+  .tool-dims td.v{text-align:right;font-family:var(--mono);color:#fff;font-size:15px;}
+  .tool-dims tr:last-child td{border-bottom:none;}
   #csvFileInput{display:none;}
   .status{font-size:12.5px;padding:8px 10px;border-radius:7px;margin-top:8px;}
   .status.ok{background:#123322;color:var(--good);}
@@ -332,18 +346,7 @@
     <h1>Trung Mai's <span>Territory</span></h1>
     <p>Search across your brand catalogs by size & type — find the lowest price and EDP# instantly.</p>
   </div>
-</header>
-
-<div class="tabs">
-  <div class="tab active" data-tab="search">Search</div>
-  <div class="tab" data-tab="add">Add Tool</div>
-  <div class="tab" data-tab="ports">Ports</div>
-  <div class="tab" data-tab="threads">Threads</div>
-  <div class="tab" data-tab="import">Import / Export</div>
-</div>
-
-<div class="side-quote left">
-  <svg width="190" height="130" viewBox="0 0 300 200" style="margin-bottom:16px;filter:drop-shadow(0 4px 8px rgba(0,0,0,0.5));">
+  <div class="header-flag"><svg width="135" height="90" viewBox="0 0 300 200" style="filter:drop-shadow(0 3px 6px rgba(0,0,0,0.55));display:block;">
     <defs>
       <clipPath id="waveClip">
         <path d="M0,0
@@ -421,7 +424,19 @@
     </g>
     <!-- flagpole -->
     <rect x="-6" y="0" width="6" height="200" fill="#8b959c"/>
-  </svg>
+  </svg></div>
+</header>
+
+<div class="tabs">
+  <div class="tab active" data-tab="search">Search</div>
+  <div class="tab" data-tab="add">Add Tool</div>
+  <div class="tab" data-tab="ports">Ports</div>
+  <div class="tab" data-tab="threads">Threads</div>
+  <div class="tab" data-tab="import">Import / Export</div>
+</div>
+
+<div class="side-quote left">
+  
   <div>"You complain about work because you have a job."</div>
 </div>
 <div class="side-quote right">"You complain about traffic because you have a car."</div>
@@ -954,12 +969,123 @@ function toolSvg(fam, d){
   return {svg:`<svg viewBox="0 0 340 138" role="img" aria-label="Port tool side view">${cl}${nose}${flutes}${shank}${dims}</svg>`, notes};
 }
 
+
+// ---- cutter drawing: OD / LOC / OAL ----
+let selectedToolId = null;
+window.pickTool = function(id){
+  selectedToolId = (selectedToolId === id) ? null : id;
+  renderResults();
+  renderToolFigure();
+};
+
+function fracVal(s){
+  s = String(s==null?'':s).trim().replace(/"/g,'');
+  let m = s.match(/^(\d+)-(\d+)\/(\d+)$/);   if(m) return (+m[1])+(+m[2])/(+m[3]);
+  m = s.match(/^(\d+)\/(\d+)$/);             if(m) return (+m[1])/(+m[2]);
+  const v = parseFloat(s);
+  return isNaN(v) ? null : v;
+}
+function num(v, dp){
+  if(v==null) return '';
+  let s = v.toFixed(dp==null?4:dp).replace(/0+$/,'').replace(/\.$/,'');
+  return s.charAt(0)==='0' && s.charAt(1)==='.' ? s.slice(1) : s;
+}
+function grab(txt, re){ const m = (txt||'').match(re); return m ? fracVal(m[1]) : null; }
+
+function cutterDims(t){
+  const n = (t.notes||'') + ' ' + (t.specs||'');
+  return {
+    od:    fracVal(t.diameter),
+    loc:   fracVal(t.loc),
+    oal:   grab(n, /OAL[:\s]*([\d./-]+)/i),
+    shank: grab(n, /shank(?:\s*dia)?[:\s]*([\d./-]+)/i),
+    neck:  fracVal(t.neckdia),
+    cr:    grab(n, /\bR\s*(\.?\d[\d.]*)/),
+    flutes:(n.match(/(\d+)\s*FL\b/i) || [])[1]
+        || (t.type.match(/(\d+)\s*(?:Flute|FL)\b/i) || [])[1] || ''
+  };
+}
+function tipStyle(t){
+  const s = (t.type + ' ' + (t.specs||'')).toLowerCase();
+  if(/drill|reamer/.test(s) && !/end mill/.test(s)) return 'drill';
+  if(/ball/.test(s)) return 'ball';
+  if(/chamfer|countersink|dovetail|engrav/.test(s)) return 'chamfer';
+  if(/corner radius|corner-radius/.test(s)) return 'radius';
+  return 'square';
+}
+
+function figCutter(t){
+  const d = cutterDims(t), tip = tipStyle(t);
+  const oal = d.oal || (d.loc ? d.loc*2.5 : null);
+  const X0=30, X1=310, span=X1-X0;
+  const px = oal ? (v)=> X0 + (v/oal)*span : null;
+  const cutEnd = (px && d.loc) ? Math.min(X1, X0 + (d.loc/oal)*span) : X0+90;
+  const cy=92, rOD=26;
+  const rSh = d.shank && d.od ? Math.max(10, Math.min(34, rOD*(d.shank/d.od))) : rOD;
+  let flute='', nose='';
+  for(let x=X0+8; x<cutEnd-6; x+=15) flute += `<path d="M${x},${cy-rOD+2} L${x+11},${cy+rOD-2}" stroke="#8b959c" stroke-width=".9" fill="none"/>`;
+  if(tip==='ball'){
+    nose = `M${X0+rOD},${cy-rOD} A${rOD},${rOD} 0 0 0 ${X0+rOD},${cy+rOD}`;
+    var body = `M${X0+rOD},${cy-rOD} L${cutEnd},${cy-rOD} L${cutEnd},${cy-rSh} L${X1},${cy-rSh} L${X1},${cy+rSh} L${cutEnd},${cy+rSh} L${cutEnd},${cy+rOD} L${X0+rOD},${cy+rOD}`;
+    var d3 = body + ' ' + nose + ' Z';
+  }else if(tip==='drill'){
+    d3 = `M${X0},${cy} L${X0+16},${cy-rOD} L${cutEnd},${cy-rOD} L${cutEnd},${cy-rSh} L${X1},${cy-rSh} L${X1},${cy+rSh} L${cutEnd},${cy+rSh} L${cutEnd},${cy+rOD} L${X0+16},${cy+rOD} Z`;
+  }else if(tip==='chamfer'){
+    d3 = `M${X0},${cy-8} L${X0+22},${cy-rOD} L${cutEnd},${cy-rOD} L${cutEnd},${cy-rSh} L${X1},${cy-rSh} L${X1},${cy+rSh} L${cutEnd},${cy+rSh} L${cutEnd},${cy+rOD} L${X0+22},${cy+rOD} L${X0},${cy+8} Z`;
+  }else if(tip==='radius'){
+    const r=7;
+    d3 = `M${X0+r},${cy-rOD} L${cutEnd},${cy-rOD} L${cutEnd},${cy-rSh} L${X1},${cy-rSh} L${X1},${cy+rSh} L${cutEnd},${cy+rSh} L${cutEnd},${cy+rOD} L${X0+r},${cy+rOD} Q${X0},${cy+rOD} ${X0},${cy+rOD-r} L${X0},${cy-rOD+r} Q${X0},${cy-rOD} ${X0+r},${cy-rOD} Z`;
+  }else{
+    d3 = `M${X0},${cy-rOD} L${cutEnd},${cy-rOD} L${cutEnd},${cy-rSh} L${X1},${cy-rSh} L${X1},${cy+rSh} L${cutEnd},${cy+rSh} L${cutEnd},${cy+rOD} L${X0},${cy+rOD} Z`;
+  }
+  const B='#7fd4ff', G='#3ecf8e';
+  let dims='';
+  if(d.od!=null)  dims += `<path class="dim" d="M${X0-8},${cy-rOD} L${X0-20},${cy-rOD} M${X0-8},${cy+rOD} L${X0-20},${cy+rOD} M${X0-14},${cy-rOD} L${X0-14},${cy+rOD}" fill="none" stroke="${B}" stroke-width=".8"/>`
+                        + `<text x="4" y="${cy+50}" fill="${B}" style="font:11px var(--mono);">OD ${num(d.od)}</text>`
+                        + `<path d="M18,${cy+44} L${X0-14},${cy+rOD+4}" stroke="${B}" stroke-width=".7" fill="none"/>`;
+  if(d.loc!=null) dims += `<path d="M${X0},${cy-rOD-8} L${X0},${cy-rOD-24} M${cutEnd},${cy-rOD-8} L${cutEnd},${cy-rOD-24} M${X0},${cy-rOD-16} L${cutEnd},${cy-rOD-16}" fill="none" stroke="${G}" stroke-width=".8"/>`
+                        + `<text x="${(X0+cutEnd)/2}" y="${cy-rOD-20}" text-anchor="middle" fill="${G}" style="font:11px var(--mono);">LOC ${num(d.loc)}</text>`;
+  if(oal)         dims += `<path d="M${X0},${cy+rOD+10} L${X0},${cy+rOD+30} M${X1},${cy+rOD+10} L${X1},${cy+rOD+30} M${X0},${cy+rOD+22} L${X1},${cy+rOD+22}" fill="none" stroke="${G}" stroke-width=".8"/>`
+                        + `<text x="${(X0+X1)/2}" y="${cy+rOD+38}" text-anchor="middle" fill="${G}" style="font:11px var(--mono);">${d.oal?'OAL '+num(d.oal):'OAL not published'}</text>`;
+  if(d.shank!=null) dims += `<text x="${X1-4}" y="${cy-rSh-8}" text-anchor="end" fill="${B}" style="font:11px var(--mono);">shank ${num(d.shank)}</text>`;
+  return `<svg viewBox="0 0 340 176" role="img" aria-label="Cutter side view">
+    <path d="${d3}" fill="#31373d" stroke="#e7e9ea" stroke-width="1.5" stroke-linejoin="round"/>
+    ${flute}${dims}</svg>`;
+}
+
+function figCutterCard(t){
+  const d = cutterDims(t);
+  const rows = [['OD (cutter dia)', d.od!=null?num(d.od)+'"':''],
+                ['LOC', d.loc!=null?num(d.loc)+'"':''],
+                ['OAL', d.oal!=null?num(d.oal)+'"':'not published'],
+                ['Shank dia', d.shank!=null?num(d.shank)+'"':''],
+                ['Neck dia', d.neck!=null?num(d.neck)+'"':''],
+                ['Corner radius', d.cr!=null?num(d.cr)+'"':''],
+                ['Flutes', d.flutes]]
+    .filter(r=>r[1]!=='' && r[1]!=null)
+    .map(r=>`<tr><td class="k">${r[0]}</td><td class="v">${escapeHtml(String(r[1]))}</td></tr>`).join('');
+  return `<div class="tool-card">
+    <div class="pn">${escapeHtml(t.specs || t.edp)}</div>
+    <div class="sub">${escapeHtml(t.brand)} &middot; ${escapeHtml(t.type.slice(0,44))} &middot; EDP ${escapeHtml(t.edp)}</div>
+    ${figCutter(t)}
+    <table class="tool-dims">${rows}</table>
+  </div>`;
+}
+
 function renderToolFigure(){
   const col = document.getElementById('toolFigure');
   if(!col) return;
   const portF = document.getElementById('searchPort').value;
   const brandF = document.getElementById('searchBrand').value;
   const body = document.querySelector('.search-body');
+  const sel = selectedToolId ? tools.find(t=>t.id===selectedToolId) : null;
+  if(sel){
+    const setW = (on)=>{ if(body) body.className = on ? 'search-body wide' : 'search-body'; };
+    col.className = 'figure-col on';
+    setW(true);
+    col.innerHTML = figCutterCard(sel);
+    return;
+  }
   const setWide = (on)=>{ if(body) body.className = on ? 'search-body wide' : 'search-body'; };
   if(!portF || brandF !== 'SCT'){ col.className='figure-col'; col.innerHTML=''; setWide(false); return; }
 
@@ -1123,7 +1249,7 @@ function renderResults(){
     const hasPrice = t.price !== '' && !isNaN(parseFloat(t.price));
     const isBest = hasPrice && i === list.findIndex(x=>x.price!=='' && !isNaN(parseFloat(x.price)));
     return `
-    <div class="result ${isBest ? 'best':''}">
+    <div class="result ${isBest ? 'best':''}${t.id===selectedToolId ? ' picked':''}" onclick="pickTool('${t.id}')">
       ${isBest ? '<div class="badge">BEST PRICE</div>' : ''}
       <div class="result-top">
         <div class="brand">${escapeHtml(t.brand)}${t.coolant==='Yes' ? ' <span style="font-size:10px;background:#0d3d5c;color:#7fd4ff;padding:2px 6px;border-radius:8px;vertical-align:middle;">COOLANT-THRU</span>' : (t.coolant==='No' ? ' <span style="font-size:10px;background:#3a3a3a;color:#bbb;padding:2px 6px;border-radius:8px;vertical-align:middle;">NO COOLANT</span>' : '')}</div>
@@ -1135,7 +1261,7 @@ function renderResults(){
         ${t.notes ? '<br>'+escapeHtml(t.notes) : ''}
       </div>
       <div class="actions">
-        <button class="secondary" onclick="deleteTool('${t.id}')">Delete</button>
+        <button class="secondary" onclick="event.stopPropagation();deleteTool('${t.id}')">Delete</button>
       </div>
     </div>
   `;}).join('');
