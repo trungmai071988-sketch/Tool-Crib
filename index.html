@@ -422,6 +422,10 @@
           <label>Min. LOC / Neck Length (in)</label>
           <input id="searchLoc" type="number" step="0.001" placeholder='e.g. 1.0'>
         </div>
+        <div class="field" id="pitchField" style="display:none;">
+          <label>Thread pitch</label>
+          <select id="searchPitch"><option value="">Any pitch</option></select>
+        </div>
       </div>
       <div class="row">
         <div class="field">
@@ -636,6 +640,7 @@ function rebuild(){
     ...added.filter(t=>!catIds.has(t.id) && !del.has(t.id))
   ];
   refreshTypeList();
+  refreshPitchList();
   renderResults();
   updateSctReference();
   updateLocalCount();
@@ -684,6 +689,91 @@ function upsert(nt){
   if(c){ deleted.push(c.id); added.push({...c, ...nt, id: uid()}); return 'updated'; }
   added.push({id: uid(), ...nt});
   return 'added';
+}
+
+
+// ---- thread pitch, parsed from the SCT part number ----
+// SPTM single-profile tools cut a RANGE of pitches; ranges are from the SCT catalog.
+const SPTM_TPI = {"032":[90,120],"040":[80,100],"050":[64,80],"059":[56,80],"060":[56,80],
+  "072":[48,80],"080":[40,80],"090":[36,56],"098":[32,56],"120":[32,56],"138":[24,48],
+  "160":[20,48],"182":[18,48],"240":[16,48],"290":[14,48],"332":[14,48],"372":[12,48],
+  "488":[11,32],"595":[10,32],"695":[8,24],"745":[4,8]};
+const SPTM_MM = {"032":[0.20,0.25],"040":[0.20,0.35],"050":[0.30,0.40],"059":[0.30,0.45],
+  "060":[0.30,0.45],"072":[0.35,0.50],"080":[0.40,0.60],"090":[0.40,0.60],"098":[0.40,0.80],
+  "120":[0.45,0.80],"138":[0.45,1.00],"160":[0.50,1.25],"182":[0.50,1.25],"240":[0.50,1.50],
+  "290":[0.75,1.75],"332":[0.80,2.00],"372":[0.80,2.00],"488":[0.80,2.50],"595":[1.00,2.50],
+  "695":[1.00,3.00],"745":[3.00,6.00]};
+const _pitchCache = new Map();
+
+function toolPitch(t){
+  if(_pitchCache.has(t.id)) return _pitchCache.get(t.id);
+  let out = null;
+  const ty = (t.type||'').toUpperCase();
+  const pn = (t.specs||'').trim().toUpperCase();
+  if(pn && (ty.indexOf('THREAD MIL')>=0 || ty.indexOf('ACME')>=0)){
+    const metric = pn.indexOf('MM')>=0 || ty.indexOf('METRIC')>=0;
+    const m = pn.match(/^[A-Z]+[0-9]*\.?[0-9]*(?:SA|FA)?-(\d*\.?\d+)/);
+    if(m){
+      const v = parseFloat(m[1]);
+      out = {exact:v, metric:metric, label: metric ? trimNum(v)+' mm' : trimNum(v)+' TPI'};
+    }else{
+      const r = pn.match(/^SPTM(\d{3})(?:ML|XL|L)?$/);
+      if(r){
+        const tbl = metric ? SPTM_MM : SPTM_TPI;
+        const rg = tbl[r[1]];
+        if(rg) out = {range:rg, metric:metric,
+          label: metric ? rg[0].toFixed(2)+'\u2013'+rg[1].toFixed(2)+' mm' : rg[0]+'\u2013'+rg[1]+' TPI'};
+      }
+    }
+  }
+  _pitchCache.set(t.id, out);
+  return out;
+}
+function trimNum(v){ return (Math.round(v*100)/100).toString(); }
+
+function pitchMatches(t, key){
+  const p = toolPitch(t);
+  if(!p) return false;
+  const want = parseFloat(key.slice(1));
+  const wantMetric = key[0] === 'm';
+  if(p.metric !== wantMetric) return false;
+  if(p.exact !== undefined) return Math.abs(p.exact - want) < 0.001;
+  return want >= p.range[0] - 0.001 && want <= p.range[1] + 0.001;
+}
+
+function refreshPitchList(){
+  const brandF = document.getElementById('searchBrand').value;
+  const typeF  = document.getElementById('searchType').value.trim().toLowerCase();
+  const scope = tools.filter(t=>{
+    if(brandF && t.brand !== brandF) return false;
+    if(typeF && t.type.toLowerCase() !== typeF) return false;
+    return true;
+  });
+  const seen = new Map();
+  scope.forEach(t=>{
+    const p = toolPitch(t);
+    if(!p || p.exact === undefined) return;      // ranges join an existing option, they don't create one
+    const key = (p.metric?'m':'i') + p.exact;
+    if(!seen.has(key)) seen.set(key, p);
+  });
+  const field = document.getElementById('pitchField');
+  const sel = document.getElementById('searchPitch');
+  if(seen.size === 0){
+    field.style.display = 'none';
+    sel.innerHTML = '<option value="">Any pitch</option>';
+    sel.value = '';
+    return;
+  }
+  const inch = [...seen.entries()].filter(([k,p])=>!p.metric).sort((a,b)=>a[1].exact-b[1].exact);
+  const mm   = [...seen.entries()].filter(([k,p])=>p.metric).sort((a,b)=>a[1].exact-b[1].exact);
+  const opt = ([k,p])=>`<option value="${k}">${escapeHtml(p.label)}</option>`;
+  let html = '<option value="">Any pitch</option>';
+  if(inch.length) html += '<optgroup label="Inch \u2014 TPI">' + inch.map(opt).join('') + '</optgroup>';
+  if(mm.length)   html += '<optgroup label="Metric \u2014 mm">' + mm.map(opt).join('') + '</optgroup>';
+  const prev = sel.value;
+  sel.innerHTML = html;
+  sel.value = seen.has(prev) ? prev : '';
+  field.style.display = '';
 }
 
 function refreshTypeList(){
@@ -766,10 +856,12 @@ function renderResults(){
   const locF = document.getElementById('searchLoc').value.trim();
   const coolantF = document.getElementById('searchCoolant').value;
   const kwF = document.getElementById('searchKeyword').value.trim().toLowerCase();
+  const pitchF = document.getElementById('searchPitch').value;
 
   let list = tools.filter(t=>{
     if(brandF && t.brand !== brandF) return false;
     if(typeF && t.type.toLowerCase() !== typeF) return false;
+    if(pitchF && !pitchMatches(t, pitchF)) return false;
     if(coolantF && (t.coolant||'') !== coolantF) return false;
     if(diaF !== ''){
       const target = parseFloat(diaF);
@@ -840,11 +932,12 @@ window.deleteTool = function(id){
   rebuild();
 }
 
-document.getElementById('searchType').addEventListener('change', renderResults);
-document.getElementById('searchBrand').addEventListener('change', ()=>{ refreshTypeList(); renderResults(); updateSctReference(); });
+document.getElementById('searchType').addEventListener('change', ()=>{ refreshPitchList(); renderResults(); });
+document.getElementById('searchBrand').addEventListener('change', ()=>{ refreshTypeList(); refreshPitchList(); renderResults(); updateSctReference(); });
 document.getElementById('searchDia').addEventListener('input', renderResults);
 document.getElementById('searchLoc').addEventListener('input', renderResults);
 document.getElementById('searchCoolant').addEventListener('change', renderResults);
+document.getElementById('searchPitch').addEventListener('change', renderResults);
 document.getElementById('searchKeyword').addEventListener('input', renderResults);
 
 // ---- Add tool ----
