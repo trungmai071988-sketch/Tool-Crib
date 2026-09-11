@@ -1,0 +1,1689 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trung Mai's Territory — EDP & Price Finder</title>
+<style>
+  :root{
+    --bg:#14171a;
+    --panel:#1c2024;
+    --panel2:#22272c;
+    --line:#31373d;
+    --text:#e7e9ea;
+    --muted:#8b959c;
+    --accent:#ff9f1c; /* safety orange, shop-floor */
+    --accent-dim:#8a5713;
+    --good:#3ecf8e;
+    --mono: 'Courier New', ui-monospace, monospace;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;
+  }
+  header{
+    padding:13px 16px;
+    border-bottom:2px solid var(--accent);
+    background:var(--panel);
+    display:flex;
+    align-items:center;
+    gap:15px;
+  }
+  .logo-tile{
+    background:#fff;
+    border-radius:9px;
+    padding:6px 10px;
+    flex:0 0 auto;
+    display:flex;
+    box-shadow:0 1px 3px rgba(0,0,0,0.4);
+  }
+  .logo-tile img{height:78px;width:auto;display:block;}
+  .header-text{min-width:0;}
+  .side-quote.left svg{display:block;margin:0 auto 18px;width:200px;height:auto;}
+  header h1{
+    margin:0;
+    font-size:20px;
+    letter-spacing:0.5px;
+    text-transform:uppercase;
+  }
+  header h1 span{color:var(--accent);}
+  header p{margin:3px 0 0;color:var(--muted);font-size:12.5px;}
+  @media (max-width:620px){
+    header{gap:11px;padding:11px 13px;}
+    .logo-tile{padding:5px 7px;border-radius:7px;}
+    .logo-tile img{height:52px;}
+    header h1{font-size:17px;}
+    header p{font-size:11.5px;}
+  }
+
+  .tabs{display:flex;border-bottom:1px solid var(--line);background:var(--panel);}
+  .tab{
+    flex:1;padding:11px 8px;text-align:center;font-size:13px;font-weight:600;
+    color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;
+  }
+  .tab.active{color:var(--accent);border-bottom-color:var(--accent);}
+
+  main{padding:14px;max-width:820px;margin:0 auto;padding-bottom:60px;}
+  .side-quote{
+    position:fixed;
+    top:50%;
+    transform:translateY(-50%);
+    width:320px;
+    color:var(--muted);
+    font-size:22px;
+    font-style:italic;
+    line-height:1.5;
+    text-align:center;
+    opacity:0.6;
+    display:none;
+  }
+  .side-quote.left{left:24px;top:42%;}
+  .side-quote.right{right:24px;}
+  @media (min-width:1500px){
+    .side-quote{display:block;}
+  }
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:14px;}
+  .row{display:flex;gap:8px;flex-wrap:wrap;}
+  .field{flex:1;min-width:120px;display:flex;flex-direction:column;gap:4px;margin-bottom:10px;}
+  label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.4px;}
+  input,select{
+    background:var(--panel2);
+    border:1px solid var(--line);
+    color:var(--text);
+    padding:9px 10px;
+    border-radius:7px;
+    font-size:14px;
+  }
+  input:focus,select:focus{outline:none;border-color:var(--accent);}
+  button{
+    background:var(--accent);
+    color:#1a1400;
+    border:none;
+    padding:11px 16px;
+    border-radius:7px;
+    font-weight:700;
+    font-size:14px;
+    cursor:pointer;
+  }
+  button.secondary{
+    background:transparent;
+    border:1px solid var(--line);
+    color:var(--text);
+    font-weight:600;
+  }
+  button.danger{background:transparent;border:1px solid #7a2f2f;color:#e07a7a;font-weight:600;}
+  button:active{transform:scale(0.98);}
+
+  .result{
+    background:var(--panel2);
+    border:1px solid var(--line);
+    border-radius:9px;
+    padding:12px;
+    margin-bottom:9px;
+    position:relative;
+  }
+  .result.best{border-color:var(--good);}
+  .result .badge{
+    position:absolute;top:-9px;right:10px;
+    background:var(--good);color:#08251a;
+    font-size:10.5px;font-weight:800;padding:2px 8px;border-radius:10px;
+    letter-spacing:0.3px;
+  }
+  .result-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px;}
+  .result-top .brand{font-weight:800;font-size:14.5px;letter-spacing:0.3px;}
+  .result-top .price{font-family:var(--mono);font-size:17px;font-weight:700;color:var(--accent);}
+  .result .meta{margin-top:5px;color:var(--muted);font-size:12.5px;line-height:1.5;}
+  .result .edp{font-family:var(--mono);color:var(--text);}
+  .result .actions{margin-top:8px;display:flex;gap:8px;}
+  .result .actions button{padding:6px 10px;font-size:12px;}
+
+  .empty{color:var(--muted);text-align:center;padding:30px 10px;font-size:13.5px;}
+  .count{color:var(--muted);font-size:12px;margin-bottom:8px;}
+  .csv-row{display:flex;gap:8px;margin-top:6px;}
+  .csv-row button{flex:1;}
+  .hint{font-size:11.5px;color:var(--muted);margin-top:6px;line-height:1.5;}
+
+  .port-fig{width:100%;max-width:620px;height:auto;display:block;margin:6px auto 24px;}
+  .port-fig .dim{stroke:#7fd4ff;stroke-width:.8;fill:none;}
+  .port-fig .dep{stroke:#3ecf8e;stroke-width:.8;fill:none;}
+  .port-fig .rad{stroke:var(--accent);stroke-width:.8;fill:none;}
+  .port-fig .mat{fill:#31373d;opacity:.55;}
+  .port-fig .out{stroke:#e7e9ea;stroke-width:1.6;fill:none;}
+  .port-fig .thd{stroke:#8b959c;stroke-width:1;fill:none;}
+  .port-fig text{font:9.5px var(--mono);fill:#e7e9ea;}
+  .port-fig text.v{fill:#7fd4ff;}
+  .port-fig text.w{fill:#3ecf8e;}
+  .port-tbl{width:100%;border-collapse:collapse;font-size:17.5px;}
+  .port-tbl td{padding:11px 0;border-bottom:1px solid var(--line);vertical-align:top;}
+  .port-tbl td.k{color:#c9d1d6;width:46%;}
+  .port-tbl td.v{text-align:right;font-family:var(--mono);font-size:18.5px;color:#fff;}
+  .port-tbl tr:last-child td{border-bottom:none;}
+  .port-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;}
+  .port-head .t{font-size:24px;font-weight:600;color:var(--accent);font-family:var(--mono);}
+  .port-head .d{font-size:12.5px;color:var(--muted);}
+  .port-note{font-size:13.5px;color:var(--muted);margin-top:14px;line-height:1.6;}
+  .port-tools{margin-top:14px;border-top:1px solid var(--line);padding-top:12px;}
+  .pt-head{font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;}
+  .pt-type{font-size:14.5px;color:var(--accent);margin:12px 0 5px;}
+  .pt-row{display:flex;justify-content:space-between;font-size:16px;padding:6px 0;font-family:var(--mono);}
+  .pt-c{color:var(--muted);font-size:11.5px;}
+  .pt-cut{font-size:14px;color:var(--muted);margin-top:12px;font-family:var(--mono);}
+  .search-body{display:flex;gap:16px;align-items:flex-start;}
+  /* when the drawings are showing, break out of the 820px column and use the whole window */
+  .search-body.wide{
+    width:min(1500px, calc(100vw - 32px));
+    margin-left:calc(410px - min(750px, calc(50vw - 16px)));
+  }
+  .results-col{flex:1;min-width:0;}
+  .figure-col{width:690px;flex:0 0 690px;position:sticky;top:12px;display:none;}
+  .figure-col.on.single{grid-template-columns:1fr;}
+  .figure-col.on.single .tool-card{padding:18px 20px;}
+  .figure-col.on.single .tool-card svg{max-width:500px;margin:12px auto 8px;}
+  .figure-col.on.single .tool-card .pn{font-size:19px;}
+  .figure-col.on.single .tool-card .sub{font-size:13px;}
+  .figure-col.on.single .tool-dims{font-size:15.5px;}
+  .figure-col.on.single .tool-dims td{padding:8px 0;}
+  .figure-col.on.single .tool-dims td.v{font-size:17.5px;}
+  .figure-col.on{
+    display:grid;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:12px;
+    align-content:start;
+    max-height:calc(100vh - 24px);
+    overflow-y:auto;
+  }
+  @media (max-width:1250px){
+    .figure-col{width:340px;flex:0 0 340px;}
+    .figure-col.on{grid-template-columns:1fr;}
+    .search-body.wide{width:auto;margin-left:0;}
+  }
+  .tool-card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:13px;}
+  .tool-card .pn{font:600 16px var(--mono);color:var(--accent);}
+  .tool-card .sub{font:11.5px var(--mono);color:var(--muted);margin-top:2px;}
+  .tool-card svg{width:100%;height:auto;display:block;margin:10px 0 4px;}
+  .tool-card .cap{font:12px var(--mono);color:var(--muted);line-height:1.6;border-top:1px solid var(--line);padding-top:8px;margin-top:6px;}
+  .tool-card .cap b{color:var(--text);}
+  @media (max-width:900px){
+    .search-body{flex-direction:column;}
+    .figure-col{width:100%;flex:none;position:static;order:-1;}
+    .figure-col.on{grid-template-columns:1fr;max-height:none;overflow:visible;}
+  }
+  .result{cursor:pointer;}
+  .result.picked{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset;}
+  .tool-dims{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:4px;}
+  .tool-dims td{padding:5px 0;border-bottom:1px solid var(--line);}
+  .tool-dims td.k{color:var(--muted);width:46%;}
+  .tool-dims td.v{text-align:right;font-family:var(--mono);color:#fff;font-size:15px;}
+  .tool-dims tr:last-child td{border-bottom:none;}
+  #csvFileInput{display:none;}
+  .status{font-size:12.5px;padding:8px 10px;border-radius:7px;margin-top:8px;}
+  .status.ok{background:#123322;color:var(--good);}
+  .status.err{background:#3a1414;color:#e07a7a;}
+
+  /* SCT product reference: keep the Search page the same size,
+     and place the SCT reference just to its right without covering it. */
+  /* SCT view: keep the original search design, but place a large reference
+     image beside it so the right side of the screen is actually used. */
+  main.sct-layout{
+    position:relative;
+    width:590px;
+    max-width:590px;
+    margin-left:auto;
+    margin-right:auto;
+    left:-190px;
+  }
+  main.sct-layout #tab-search{
+    width:100%;
+  }
+  .sct-reference{
+    position:absolute;
+    top:0;
+    left:calc(100% + 12px);
+    width:775px;
+    max-height:calc(100vh - 32px);
+    opacity:0;
+    visibility:hidden;
+    z-index:10;
+    background:#fff;
+    border:1px solid #d7d7d7;
+    border-radius:9px;
+    box-shadow:0 12px 35px rgba(0,0,0,.38);
+    overflow:hidden;
+    transition:opacity .2s ease, visibility .2s ease;
+  }
+  .sct-reference.open{
+    opacity:1;
+    visibility:visible;
+  }
+  .sct-reference-head{
+    position:absolute;
+    top:8px;
+    right:8px;
+    z-index:2;
+    padding:0;
+    border:0;
+    background:transparent;
+  }
+  .sct-reference-head strong{
+    display:none;
+  }
+  .sct-reference-close{
+    width:34px;
+    height:34px;
+    padding:0;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    background:rgba(0,0,0,.58);
+    border:1px solid rgba(255,255,255,.65);
+    color:#fff;
+    border-radius:50%;
+    font-size:22px;
+    line-height:1;
+  }
+  .sct-reference-body{
+    padding:0;
+    max-height:calc(100vh - 32px);
+    overflow:auto;
+  }
+  .sct-reference-body img{
+    display:block;
+    width:100%;
+    height:auto;
+    border-radius:8px;
+    background:#fff;
+  }
+  .sct-reference-backdrop{
+    display:none;
+  }
+  @media (max-width:1250px){
+    main.sct-layout{
+      left:0;
+      width:calc(100vw - 40px);
+      max-width:calc(100vw - 40px);
+    }
+    .sct-reference{
+      width:min(62vw, 700px);
+    }
+  }
+  @media (max-width:1050px){
+    main.sct-layout{
+      width:620px;
+      max-width:620px;
+      left:-70px;
+    }
+    .sct-reference{
+      left:calc(100% + 10px);
+      width:430px;
+    }
+  }
+  @media (max-width:760px){
+    main.sct-layout{
+      display:block;
+      left:0;
+    }
+    .sct-reference{
+      position:relative;
+      top:auto;
+      left:auto;
+      width:100%;
+      max-height:none;
+      margin-top:14px;
+    }
+    .sct-reference-body{
+      max-height:none;
+    }
+  }
+
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo-tile"><img src="sh-logo.png" alt="S&amp;H Machine"></div>
+  <div class="header-text">
+    <h1>Trung Mai's <span>Territory</span></h1>
+    <p>Search across your brand catalogs by size & type — find the lowest price and EDP# instantly.</p>
+  </div>
+
+</header>
+
+<div class="tabs">
+  <div class="tab active" data-tab="search">Search</div>
+  <div class="tab" data-tab="add">Add Tool</div>
+  <div class="tab" data-tab="ports">Ports</div>
+  <div class="tab" data-tab="threads">Threads</div>
+  <div class="tab" data-tab="import">Import / Export</div>
+</div>
+
+<div class="side-quote left">
+  <svg width="135" height="90" viewBox="0 0 300 200" style="filter:drop-shadow(0 3px 6px rgba(0,0,0,0.55));display:block;">
+    <defs>
+      <clipPath id="waveClip">
+        <path d="M0,0
+          C 20,6 40,-6 60,0 S 100,6 120,0 S 160,-6 180,0 S 220,6 240,0 S 280,-6 300,0
+          L 300,20 C 280,26 260,14 240,20 S 200,26 180,20 S 140,14 120,20 S 80,26 60,20 S 20,14 0,20 Z
+          M0,20
+          C 20,26 40,14 60,20 S 100,26 120,20 S 160,14 180,20 S 220,26 240,20 S 280,14 300,20
+          L 300,40 C 280,46 260,34 240,40 S 200,46 180,40 S 140,34 120,40 S 80,46 60,40 S 20,34 0,40 Z
+          M0,40
+          C 20,46 40,34 60,40 S 100,46 120,40 S 160,34 180,40 S 220,46 240,40 S 280,34 300,40
+          L 300,60 C 280,66 260,54 240,60 S 200,66 180,60 S 140,54 120,60 S 80,66 60,60 S 20,54 0,60 Z
+          M0,60
+          C 20,66 40,54 60,60 S 100,66 120,60 S 160,54 180,60 S 220,66 240,60 S 280,54 300,60
+          L 300,80 C 280,86 260,74 240,80 S 200,86 180,80 S 140,74 120,80 S 80,86 60,80 S 20,74 0,80 Z
+          M0,80
+          C 20,86 40,74 60,80 S 100,86 120,80 S 160,74 180,80 S 220,86 240,80 S 280,74 300,80
+          L 300,100 C 280,106 260,94 240,100 S 200,106 180,100 S 140,94 120,100 S 80,106 60,100 S 20,94 0,100 Z
+          M0,100
+          C 20,106 40,94 60,100 S 100,106 120,100 S 160,94 180,100 S 220,106 240,100 S 280,94 300,100
+          L 300,120 C 280,126 260,114 240,120 S 200,126 180,120 S 140,114 120,120 S 80,126 60,120 S 20,114 0,120 Z
+          M0,120
+          C 20,126 40,114 60,120 S 100,126 120,120 S 160,114 180,120 S 220,126 240,120 S 280,114 300,120
+          L 300,140 C 280,146 260,134 240,140 S 200,146 180,140 S 140,134 120,140 S 80,146 60,140 S 20,134 0,140 Z
+          M0,140
+          C 20,146 40,134 60,140 S 100,146 120,140 S 160,134 180,140 S 220,146 240,140 S 280,134 300,140
+          L 300,160 C 280,166 260,154 240,160 S 200,166 180,160 S 140,154 120,160 S 80,166 60,160 S 20,154 0,160 Z
+          M0,160
+          C 20,166 40,154 60,160 S 100,166 120,160 S 160,154 180,160 S 220,166 240,160 S 280,154 300,160
+          L 300,180 C 280,186 260,174 240,180 S 200,186 180,180 S 140,174 120,180 S 80,186 60,180 S 20,174 0,180 Z
+          M0,180
+          C 20,186 40,174 60,180 S 100,186 120,180 S 160,174 180,180 S 220,186 240,180 S 280,174 300,180
+          L 300,200 C 280,206 260,194 240,200 S 200,206 180,200 S 140,194 120,200 S 80,206 60,200 S 20,194 0,200 Z"/>
+      </clipPath>
+    </defs>
+    <g clip-path="url(#waveClip)">
+      <rect width="300" height="200" fill="#f2f2f2"/>
+      <rect y="0" width="300" height="15.4" fill="#c8302f"/>
+      <rect y="30.8" width="300" height="15.4" fill="#c8302f"/>
+      <rect y="61.6" width="300" height="15.4" fill="#c8302f"/>
+      <rect y="92.4" width="300" height="15.4" fill="#c8302f"/>
+      <rect y="123.1" width="300" height="15.4" fill="#c8302f"/>
+      <rect y="153.9" width="300" height="15.4" fill="#c8302f"/>
+      <rect y="184.6" width="300" height="15.4" fill="#c8302f"/>
+      <rect width="120" height="107.7" fill="#1c3a5e"/>
+      <g fill="#ffffff">
+        <g id="fstar"><polygon points="0,-5 1.5,-1.5 5,0 1.5,1.5 0,5 -1.5,1.5 -5,0 -1.5,-1.5"/></g>
+        <use href="#fstar" transform="translate(15,12)"/>
+        <use href="#fstar" transform="translate(35,12)"/>
+        <use href="#fstar" transform="translate(55,12)"/>
+        <use href="#fstar" transform="translate(75,12)"/>
+        <use href="#fstar" transform="translate(95,12)"/>
+        <use href="#fstar" transform="translate(25,28)"/>
+        <use href="#fstar" transform="translate(45,28)"/>
+        <use href="#fstar" transform="translate(65,28)"/>
+        <use href="#fstar" transform="translate(85,28)"/>
+        <use href="#fstar" transform="translate(15,44)"/>
+        <use href="#fstar" transform="translate(35,44)"/>
+        <use href="#fstar" transform="translate(55,44)"/>
+        <use href="#fstar" transform="translate(75,44)"/>
+        <use href="#fstar" transform="translate(95,44)"/>
+        <use href="#fstar" transform="translate(25,60)"/>
+        <use href="#fstar" transform="translate(45,60)"/>
+        <use href="#fstar" transform="translate(65,60)"/>
+        <use href="#fstar" transform="translate(85,60)"/>
+        <use href="#fstar" transform="translate(15,76)"/>
+        <use href="#fstar" transform="translate(35,76)"/>
+        <use href="#fstar" transform="translate(55,76)"/>
+        <use href="#fstar" transform="translate(75,76)"/>
+        <use href="#fstar" transform="translate(95,76)"/>
+        <use href="#fstar" transform="translate(25,92)"/>
+        <use href="#fstar" transform="translate(45,92)"/>
+        <use href="#fstar" transform="translate(65,92)"/>
+        <use href="#fstar" transform="translate(85,92)"/>
+      </g>
+    </g>
+    <!-- flagpole -->
+    <rect x="-6" y="0" width="6" height="200" fill="#8b959c"/>
+  </svg>
+  <div>"You complain about work because you have a job."</div>
+</div>
+<div class="side-quote right">"You complain about traffic because you have a car."</div>
+
+<main>
+
+  <!-- SEARCH TAB -->
+  <section id="tab-search">
+    <div class="panel">
+      <div class="row">
+        <div class="field" style="flex:2;">
+          <label>Brand</label>
+          <select id="searchBrand">
+            <option value="">All brands</option>
+          </select>
+        </div>
+        <div class="field" style="flex:2;">
+          <label>Tool Type</label>
+          <select id="searchType">
+            <option value="">All types</option>
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label>Diameter (in)</label>
+          <input id="searchDia" type="number" step="0.001" placeholder='e.g. 0.5'>
+        </div>
+        <div class="field">
+          <label>Min. LOC / Neck Length (in)</label>
+          <input id="searchLoc" type="number" step="0.001" placeholder='e.g. 1.0'>
+        </div>
+        <div class="field" id="pitchField" style="display:none;">
+          <label>Thread pitch</label>
+          <select id="searchPitch"><option value="">Any pitch</option></select>
+        </div>
+        <div class="field" id="portField" style="display:none;">
+          <label>Port size</label>
+          <select id="searchPort"><option value="">Any port size</option></select>
+        </div>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label>Coolant-Thru</label>
+          <select id="searchCoolant">
+            <option value="">Either</option>
+            <option value="Yes">Coolant-Thru only</option>
+            <option value="No">No Coolant only</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Keyword (brand, notes, EDP#)</label>
+          <input id="searchKeyword" type="text" placeholder="e.g. carbide, Harvey, coolant-through">
+        </div>
+      </div>
+    </div>
+
+    <div class="search-body">
+      <div class="results-col">
+        <div class="count" id="resultCount"></div>
+        <div id="results"></div>
+      </div>
+      <div class="figure-col" id="toolFigure"></div>
+    </div>
+  </section>
+
+  <!-- ADD TAB -->
+  <section id="tab-add" style="display:none;">
+    <div class="panel">
+      <div class="row">
+        <div class="field">
+          <label>Brand *</label>
+          <input id="f_brand" type="text" placeholder="e.g. Harvey Tool">
+        </div>
+        <div class="field">
+          <label>Tool Type *</label>
+          <input id="f_type" type="text" placeholder="e.g. Carbide Drill" list="typeList">
+          <datalist id="typeList"></datalist>
+        </div>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label>Diameter (in) *</label>
+          <input id="f_dia" type="number" step="0.001" placeholder="0.5">
+        </div>
+        <div class="field">
+          <label>EDP # *</label>
+          <input id="f_edp" type="text" placeholder="e.g. 12345">
+        </div>
+        <div class="field">
+          <label>Price ($)</label>
+          <input id="f_price" type="number" step="0.01" placeholder="42.50">
+        </div>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label>Length of Cut / Neck Length (in)</label>
+          <input id="f_loc" type="number" step="0.001" placeholder="e.g. 1.0">
+        </div>
+        <div class="field">
+          <label>Neck Diameter (in)</label>
+          <input id="f_neckdia" type="number" step="0.001" placeholder="e.g. 0.125">
+        </div>
+        <div class="field">
+          <label>Coolant-Thru</label>
+          <select id="f_coolant">
+            <option value="">Unknown</option>
+            <option value="Yes">Yes</option>
+            <option value="No">No</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Flutes / Coating (optional)</label>
+          <input id="f_specs" type="text" placeholder="e.g. 2FL, 3xD, AlTiN">
+        </div>
+      </div>
+      <div class="row">
+        <div class="field" style="flex:100%;">
+          <label>Notes (optional)</label>
+          <input id="f_notes" type="text" placeholder="e.g. coolant-through, for 316SS">
+        </div>
+      </div>
+      <button id="saveBtn" style="width:100%;">Save Tool</button>
+      <div id="addStatus"></div>
+    </div>
+  </section>
+
+  <!-- IMPORT/EXPORT TAB -->
+
+  <section id="tab-ports" style="display:none;">
+    <div class="panel">
+      <div class="row">
+        <div>
+          <label for="p_std">Standard</label>
+          <select id="p_std"></select>
+        </div>
+        <div>
+          <label for="p_dash">Dash size</label>
+          <select id="p_dash"></select>
+        </div>
+      </div>
+      <div id="portStatus"></div>
+    </div>
+    <div id="portCard"></div>
+  </section>
+
+  <section id="tab-threads" style="display:none;">
+    <div class="panel">
+      <div class="row">
+        <div>
+          <label for="t_std">Standard</label>
+          <select id="t_std"></select>
+        </div>
+        <div>
+          <label for="t_dash">Thread size</label>
+          <select id="t_dash"></select>
+        </div>
+      </div>
+      <div id="threadStatus"></div>
+    </div>
+    <div id="threadCard"></div>
+  </section>
+
+  <section id="tab-import" style="display:none;">
+    <div class="panel">
+      <label style="margin-bottom:8px;display:block;">Paste multiple tools at once</label>
+      <div class="hint">
+        One tool per line, fields separated by commas:<br>
+        <b>brand, type, diameter, edp, price, loc, specs, notes</b><br>
+        (loc = length of cut in inches. loc, specs, and notes are optional — leave blank if unknown)<br><br>
+        Example:<br>
+        Guhring, Carbide Drill, 0.5, GU-4021, 38.50, 1.0, 2FL AlTiN, coolant-through<br>
+        Maford, Carbide Drill, 0.5, MF-1187, 41.20, 1.25, 2FL, 
+      </div>
+      <textarea id="pasteBox" rows="6" style="width:100%;margin-top:8px;background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:7px;padding:9px 10px;font-size:13.5px;font-family:var(--mono);" placeholder="Guhring, Carbide Drill, 0.5, GU-4021, 38.50, 1.0
+Maford, Carbide Drill, 0.5, MF-1187, 41.20, 1.25"></textarea>
+      <button id="pasteBtn" style="width:100%;margin-top:8px;">Add Pasted Tools</button>
+      <div id="pasteStatus"></div>
+    </div>
+    <div class="panel">
+      <label style="margin-bottom:8px;display:block;">Bulk load from a catalog spreadsheet</label>
+      <div class="hint">
+        Fastest way to load a whole brand catalog: export it (or retype it) as a CSV with these columns:<br>
+        <b>brand, type, diameter, edp, price, loc, specs, notes</b><br>
+        (loc = length of cut in inches, optional)<br>
+        Then import below. You can do this once per brand catalog.
+      </div>
+      <div class="csv-row">
+        <button class="secondary" id="importBtn">Import CSV</button>
+        <button class="secondary" id="exportBtn">Export CSV</button>
+      </div>
+      <input type="file" id="csvFileInput" accept=".csv">
+      <div id="importStatus"></div>
+    </div>
+    <div class="panel">
+      <label style="margin-bottom:8px;display:block;">Shared catalog (tools.json)</label>
+      <div class="hint">
+        The catalog lives in <b>tools.json</b>, right next to this page on GitHub.
+        Tools you add or delete here are saved on this device only.<br>
+        To share them with everyone: <b>Download tools.json</b>, then upload that file to GitHub
+        replacing the old one. Never edit index.html to add tools.
+      </div>
+      <div class="csv-row">
+        <button class="secondary" id="downloadJsonBtn">Download tools.json</button>
+        <button class="secondary" id="resetLocalBtn">Clear local changes</button>
+      </div>
+      <div id="localCount" class="hint"></div>
+    </div>
+  </section>
+
+
+  <!-- SCT reference image: shown automatically when SCT is selected -->
+  <div id="sctReferenceBackdrop" class="sct-reference-backdrop" aria-hidden="true"></div>
+  <aside id="sctReference" class="sct-reference" aria-hidden="true" aria-label="SCT thread mill reference">
+    <div class="sct-reference-head">
+      <strong>SCT Thread Mill Reference</strong>
+      <button type="button" id="sctReferenceClose" class="sct-reference-close" aria-label="Close SCT reference">×</button>
+    </div>
+    <div class="sct-reference-body">
+      <img src="sct-reference.png" alt="Thread mills product overview reference for SCT">
+    </div>
+  </aside>
+
+</main>
+
+<script>
+const CATALOG_URL = 'tools.json';   // the shared catalog, lives next to this file on GitHub
+const LS_ADDED   = 'toolfinder_added';    // tools added on THIS device only
+const LS_DELETED = 'toolfinder_deleted';  // catalog tools hidden on THIS device only
+
+let catalog = [];   // loaded from tools.json
+let added   = [];
+let deleted = [];
+let tools   = [];   // what the search screen shows
+
+function uid(){ return 't_' + Date.now() + '_' + Math.random().toString(36).slice(2,8); }
+
+function readLS(key){
+  try{ const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : []; }
+  catch(e){ return []; }
+}
+
+function saveLocal(){
+  try{
+    localStorage.setItem(LS_ADDED, JSON.stringify(added));
+    localStorage.setItem(LS_DELETED, JSON.stringify(deleted));
+  }catch(e){
+    showStatus('addStatus', 'Save failed \u2014 device storage full or unavailable.', 'err');
+  }
+}
+
+function rebuild(){
+  const del = new Set(deleted);
+  const catIds = new Set(catalog.map(t=>t.id));
+  tools = [
+    ...catalog.filter(t=>!del.has(t.id)),
+    ...added.filter(t=>!catIds.has(t.id) && !del.has(t.id))
+  ];
+  refreshTypeList();
+  refreshPitchList();
+  refreshPortList();
+  renderResults();
+  renderToolFigure();
+  updateSctReference();
+  updateLocalCount();
+  if(portData) renderPort();
+}
+
+function updateLocalCount(){
+  const el = document.getElementById('localCount');
+  if(!el) return;
+  if(added.length === 0 && deleted.length === 0){
+    el.textContent = 'Catalog: ' + catalog.length + ' tools. No unsaved changes on this device.';
+  }else{
+    el.innerHTML = '<b>' + added.length + ' added, ' + deleted.length + ' removed on this device.</b> ' +
+      'These are not in the shared catalog yet \u2014 download tools.json and upload it to GitHub.';
+  }
+}
+
+async function loadTools(){
+  added   = readLS(LS_ADDED);
+  deleted = readLS(LS_DELETED);
+  const resultsEl = document.getElementById('results');
+  resultsEl.innerHTML = '<div class="empty">Loading catalog\u2026</div>';
+  try{
+    const res = await fetch(CATALOG_URL, {cache:'no-cache'});
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    if(!Array.isArray(data)) throw new Error('tools.json is not a list');
+    catalog = data;
+    rebuild();
+  }catch(err){
+    catalog = [];
+    rebuild();
+    resultsEl.innerHTML = '<div class="empty">Couldn\'t load <b>tools.json</b> (' + escapeHtml(err.message) + ').' +
+      '<br><br>Make sure tools.json sits in the same folder as this page on GitHub.' +
+      '<br>If you opened this file by double-clicking it on your PC, the browser blocks reading tools.json \u2014 ' +
+      'open the GitHub Pages address instead.</div>';
+  }
+}
+
+// merge one incoming record; returns 'added' or 'updated'
+function upsert(nt){
+  const i = added.findIndex(t=>t.edp===nt.edp && t.brand===nt.brand);
+  if(i >= 0){ added[i] = {...added[i], ...nt}; return 'updated'; }
+  const del = new Set(deleted);
+  const c = catalog.find(t=>t.edp===nt.edp && t.brand===nt.brand && !del.has(t.id));
+  if(c){ deleted.push(c.id); added.push({...c, ...nt, id: uid()}); return 'updated'; }
+  added.push({id: uid(), ...nt});
+  return 'added';
+}
+
+
+// ---- thread pitch, parsed from the SCT part number ----
+// SPTM single-profile tools cut a RANGE of pitches; ranges are from the SCT catalog.
+const SPTM_TPI = {"032":[90,120],"040":[80,100],"050":[64,80],"059":[56,80],"060":[56,80],
+  "072":[48,80],"080":[40,80],"090":[36,56],"098":[32,56],"120":[32,56],"138":[24,48],
+  "160":[20,48],"182":[18,48],"240":[16,48],"290":[14,48],"332":[14,48],"372":[12,48],
+  "488":[11,32],"595":[10,32],"695":[8,24],"745":[4,8]};
+const SPTM_MM = {"032":[0.20,0.25],"040":[0.20,0.35],"050":[0.30,0.40],"059":[0.30,0.45],
+  "060":[0.30,0.45],"072":[0.35,0.50],"080":[0.40,0.60],"090":[0.40,0.60],"098":[0.40,0.80],
+  "120":[0.45,0.80],"138":[0.45,1.00],"160":[0.50,1.25],"182":[0.50,1.25],"240":[0.50,1.50],
+  "290":[0.75,1.75],"332":[0.80,2.00],"372":[0.80,2.00],"488":[0.80,2.50],"595":[1.00,2.50],
+  "695":[1.00,3.00],"745":[3.00,6.00]};
+const _pitchCache = new Map();
+
+function toolPitch(t){
+  if(_pitchCache.has(t.id)) return _pitchCache.get(t.id);
+  let out = null;
+  const ty = (t.type||'').toUpperCase();
+  const pn = (t.specs||'').trim().toUpperCase();
+  if(pn && (ty.indexOf('THREAD MIL')>=0 || ty.indexOf('ACME')>=0)){
+    const metric = pn.indexOf('MM')>=0 || ty.indexOf('METRIC')>=0;
+    const m = pn.match(/^[A-Z]+[0-9]*\.?[0-9]*(?:SA|FA)?-(\d*\.?\d+)/);
+    if(m){
+      const v = parseFloat(m[1]);
+      out = {exact:v, metric:metric, label: metric ? trimNum(v)+' mm' : trimNum(v)+' TPI'};
+    }else{
+      const r = pn.match(/^SPTM(\d{3})(?:ML|XL|L)?$/);
+      if(r){
+        const tbl = metric ? SPTM_MM : SPTM_TPI;
+        const rg = tbl[r[1]];
+        if(rg) out = {range:rg, metric:metric,
+          label: metric ? rg[0].toFixed(2)+'\u2013'+rg[1].toFixed(2)+' mm' : rg[0]+'\u2013'+rg[1]+' TPI'};
+      }
+    }
+  }
+  _pitchCache.set(t.id, out);
+  return out;
+}
+function trimNum(v){ return (Math.round(v*100)/100).toString(); }
+
+function pitchMatches(t, key){
+  const p = toolPitch(t);
+  if(!p) return false;
+  const want = parseFloat(key.slice(1));
+  const wantMetric = key[0] === 'm';
+  if(p.metric !== wantMetric) return false;
+  if(p.exact !== undefined) return Math.abs(p.exact - want) < 0.001;
+  return want >= p.range[0] - 0.001 && want <= p.range[1] + 0.001;
+}
+
+function refreshPitchList(){
+  const brandF = document.getElementById('searchBrand').value;
+  const typeF  = document.getElementById('searchType').value.trim().toLowerCase();
+  const scope = tools.filter(t=>{
+    if(brandF && t.brand !== brandF) return false;
+    if(typeF && t.type.toLowerCase() !== typeF) return false;
+    return true;
+  });
+  const seen = new Map();
+  scope.forEach(t=>{
+    const p = toolPitch(t);
+    if(!p || p.exact === undefined) return;      // ranges join an existing option, they don't create one
+    const key = (p.metric?'m':'i') + p.exact;
+    if(!seen.has(key)) seen.set(key, p);
+  });
+  const field = document.getElementById('pitchField');
+  const sel = document.getElementById('searchPitch');
+  if(seen.size === 0){
+    field.style.display = 'none';
+    sel.innerHTML = '<option value="">Any pitch</option>';
+    sel.value = '';
+    return;
+  }
+  const inch = [...seen.entries()].filter(([k,p])=>!p.metric).sort((a,b)=>a[1].exact-b[1].exact);
+  const mm   = [...seen.entries()].filter(([k,p])=>p.metric).sort((a,b)=>a[1].exact-b[1].exact);
+  const opt = ([k,p])=>`<option value="${k}">${escapeHtml(p.label)}</option>`;
+  let html = '<option value="">Any pitch</option>';
+  if(inch.length) html += '<optgroup label="Inch \u2014 TPI">' + inch.map(opt).join('') + '</optgroup>';
+  if(mm.length)   html += '<optgroup label="Metric \u2014 mm">' + mm.map(opt).join('') + '</optgroup>';
+  const prev = sel.value;
+  sel.innerHTML = html;
+  sel.value = seen.has(prev) ? prev : '';
+  field.style.display = '';
+}
+
+
+// ---- port size, parsed from the SCT part number ----
+const _portCache = new Map();
+
+function toolPort(t){
+  if(_portCache.has(t.id)) return _portCache.get(t.id);
+  let out = null;
+  const ty = (t.type||'').toUpperCase();
+  let pn = (t.specs||'').trim().toUpperCase();
+  if(pn.indexOf('|') >= 0) pn = pn.split('|')[0].trim();
+  if(pn && (ty.indexOf('PORT') >= 0 || ty.indexOf('CAVITY') >= 0)){
+    let m = pn.match(/^(?:AS5202|AND10050|MS33514|MS21921|RFPT|RPT)-0*(\d{1,2})/);
+    if(m){
+      const n = parseInt(m[1],10);
+      out = {group:'dash', key:'d'+n, sort:n, label:'-'+String(n).padStart(2,'0')};
+    }else if(/^PT-BSPP-/.test(pn)){
+      const sz = pn.replace(/^PT-BSPP-/,'').replace(/A$/,'');
+      out = {group:'pipe', key:'p'+sz, sort:bspSort(sz), label:sz+'"'};
+    }else if(/^\*?PT-SF/.test(pn)){
+      const d = pn.match(/PT-SF(\d{4})/);
+      if(d){
+        const v = parseInt(d[1],10)/1000;
+        out = {group:'bore', key:'b'+d[1], sort:v,
+               label:(v<1 ? v.toFixed(3).slice(1) : v.toFixed(3)) + '" bore'};
+      }
+    }
+  }
+  _portCache.set(t.id, out);
+  return out;
+}
+function bspSort(s){
+  s = s.trim();
+  let m = s.match(/^(\d+)-(\d+)\/(\d+)$/);          // 1-1/4
+  if(m) return (+m[1]) + (+m[2])/(+m[3]);
+  m = s.match(/^(\d+)\/(\d+)$/);                     // 3/8
+  if(m) return (+m[1])/(+m[2]);
+  return parseFloat(s) || 0;                          // 1.0
+}
+
+function refreshPortList(){
+  const brandF = document.getElementById('searchBrand').value;
+  const typeF  = document.getElementById('searchType').value.trim().toLowerCase();
+  const scope = tools.filter(t=>{
+    if(brandF && t.brand !== brandF) return false;
+    if(typeF && t.type.toLowerCase() !== typeF) return false;
+    return true;
+  });
+  const seen = new Map();
+  scope.forEach(t=>{
+    const p = toolPort(t);
+    if(p && !seen.has(p.key)) seen.set(p.key, p);
+  });
+  const field = document.getElementById('portField');
+  const sel = document.getElementById('searchPort');
+  if(seen.size === 0){
+    field.style.display = 'none';
+    sel.innerHTML = '<option value="">Any port size</option>';
+    sel.value = '';
+    return;
+  }
+  const grp = (g)=>[...seen.values()].filter(p=>p.group===g).sort((a,b)=>a.sort-b.sort);
+  const opt = (p)=>`<option value="${p.key}">${escapeHtml(p.label)}</option>`;
+  let html = '<option value="">Any port size</option>';
+  const d = grp('dash'), pi = grp('pipe'), b = grp('bore');
+  if(d.length)  html += '<optgroup label="Dash size">' + d.map(opt).join('') + '</optgroup>';
+  if(pi.length) html += '<optgroup label="BSPP pipe size">' + pi.map(opt).join('') + '</optgroup>';
+  if(b.length)  html += '<optgroup label="Autoclave bore">' + b.map(opt).join('') + '</optgroup>';
+  const prev = sel.value;
+  sel.innerHTML = html;
+  sel.value = seen.has(prev) ? prev : '';
+  field.style.display = '';
+}
+
+
+// ---- port tool drawing ----
+let portToolDims = null;
+fetch('porttools.json', {cache:'no-cache'})
+  .then(r=>r.ok?r.json():null).then(d=>{ portToolDims = d; renderToolFigure(); })
+  .catch(()=>{});
+
+function portFamily(pn, type){
+  const t = (type||'').toUpperCase();
+  if(/^AS5202/.test(pn)){
+    if(/-\d+S/.test(pn)) return 'solid';
+    if(/R-X3/.test(pn))  return 'coolant';
+    if(/-\d+R/.test(pn)) return 'reamer';
+    if(/-\d+X/.test(pn)) return 'nopilot';
+  }
+  if(/^AND10050/.test(pn)) return 'reamer';
+  if(/^RPT|^RFPT/.test(pn)) return 'rosan';
+  return 'generic';
+}
+
+function toolSvg(fam, d){
+  const L = (x,y,txt,col)=>`<text x="${x}" y="${y}" fill="${col}" style="font:9.5px var(--mono);">${txt}</text>`;
+  const B='#7fd4ff', G='#3ecf8e', body='#31373d', edge='#e7e9ea', gr='#8b959c';
+  const flutes = `<path d="M112,66 L126,94 M142,66 L156,94 M172,66 L186,94 M202,66 L216,94 M232,66 L246,94" stroke="${gr}" stroke-width=".9" fill="none"/>`;
+  const cl = `<line x1="14" y1="80" x2="326" y2="80" stroke="${gr}" stroke-width=".7" stroke-dasharray="7 3 2 3"/>`;
+  const shank = `<path d="M300,66 L300,94" stroke="${edge}" stroke-width="1.5"/>`;
+  let nose, notes;
+  if(fam==='solid'){
+    nose = `<path d="M24,69 L58,69 L58,64 L64,60 L74,53 L98,53 L98,66 L300,66 L300,94 L98,94 L98,107 L74,107 L64,100 L58,96 L58,91 L24,91 Z"
+      fill="${body}" stroke="${edge}" stroke-width="1.5" stroke-linejoin="round"/>`;
+    notes = d ? `<b>P ${d.P}</b> pilot &times; <b>J ${d.J}</b> long` : 'solid pilot';
+  }else if(fam==='reamer'||fam==='coolant'){
+    nose = `<path d="M24,72 L34,69 L62,69 L62,64 L68,60 L78,53 L98,53 L98,66 L300,66 L300,94 L98,94 L98,107 L78,107 L68,100 L62,96 L62,91 L34,91 L24,88 Z"
+      fill="${body}" stroke="${edge}" stroke-width="1.5" stroke-linejoin="round"/>
+      <path d="M24,72 L34,69 M24,88 L34,91" stroke="${edge}" stroke-width="1.5"/>`;
+    notes = 'reamer pilot &mdash; <b>cuts the minor thread dia</b>';
+  }else if(fam==='nopilot'){
+    nose = `<path d="M74,53 L98,53 L98,66 L300,66 L300,94 L98,94 L98,107 L74,107 L64,100 L58,96 L58,64 L64,60 Z"
+      fill="${body}" stroke="${edge}" stroke-width="1.5" stroke-linejoin="round"/>`;
+    notes = 'no pilot &mdash; does <b>not</b> cut the minor dia';
+  }else if(fam==='rosan'){
+    nose = `<path d="M30,70 L58,70 L58,62 L96,62 L96,66 L300,66 L300,94 L96,94 L96,98 L58,98 L58,90 L30,90 Z"
+      fill="${body}" stroke="${edge}" stroke-width="1.5" stroke-linejoin="round"/>`;
+    notes = 'Rosan cavity tool &mdash; cuts the AS1300 port';
+  }else{
+    nose = `<path d="M40,62 L96,62 L96,66 L300,66 L300,94 L96,94 L96,98 L40,98 Z"
+      fill="${body}" stroke="${edge}" stroke-width="1.5" stroke-linejoin="round"/>`;
+    notes = 'port tool';
+  }
+  let dims = '';
+  if(d && (fam==='solid')){
+    dims += `<path d="M24,61 L24,45 M58,61 L58,45 M24,49 L58,49" fill="none" stroke="${G}" stroke-width=".8"/>` + L(30,42,'J '+d.J,G);
+  }
+  if(d && fam!=='rosan' && fam!=='generic'){
+    dims += `<path d="M98,49 L98,20 M300,49 L300,20 M98,24 L300,24" fill="none" stroke="${G}" stroke-width=".8"/>` + L(178,18,'OAL '+d.OAL,G);
+    dims += `<path d="M102,100 L102,128 M102,124 L150,124" fill="none" stroke="${B}" stroke-width=".8"/>` + L(154,127,'F '+d.F+' spot face',B);
+    dims += `<path d="M304,66 L322,66 M304,94 L322,94 M316,66 L316,94" fill="none" stroke="${B}" stroke-width=".8"/>` + L(272,112,'S '+d.S+' shank',B);
+    dims += L(96,42,'D '+d.D+' \u00d7 E '+d.E,B) + `<path d="M96,46 L88,58" fill="none" stroke="${B}" stroke-width=".7"/>`;
+  }
+  return {svg:`<svg viewBox="0 0 340 138" role="img" aria-label="Port tool side view">${cl}${nose}${flutes}${shank}${dims}</svg>`, notes};
+}
+
+
+// ---- cutter drawing: OD / LOC / OAL ----
+let selectedToolId = null;
+window.pickTool = function(id){
+  selectedToolId = (selectedToolId === id) ? null : id;
+  renderResults();
+  renderToolFigure();
+};
+
+function fracVal(s){
+  s = String(s==null?'':s).trim().replace(/"/g,'');
+  let m = s.match(/^(\d+)-(\d+)\/(\d+)$/);   if(m) return (+m[1])+(+m[2])/(+m[3]);
+  m = s.match(/^(\d+)\/(\d+)$/);             if(m) return (+m[1])/(+m[2]);
+  const v = parseFloat(s);
+  return isNaN(v) ? null : v;
+}
+function num(v, dp){
+  if(v==null) return '';
+  let s = v.toFixed(dp==null?4:dp).replace(/0+$/,'').replace(/\.$/,'');
+  return s.charAt(0)==='0' && s.charAt(1)==='.' ? s.slice(1) : s;
+}
+function grab(txt, re){ const m = (txt||'').match(re); return m ? fracVal(m[1]) : null; }
+
+function cutterDims(t){
+  const n = (t.notes||'') + ' ' + (t.specs||'');
+  return {
+    od:    fracVal(t.diameter),
+    loc:   fracVal(t.loc),
+    oal:   grab(n, /OAL[:\s]*([\d./-]+)/i),
+    shank: grab(n, /shank(?:\s*dia)?[:\s]*([\d./-]+)/i),
+    neck:  fracVal(t.neckdia),
+    cr:    grab(n, /\bR\s*(\.?\d[\d.]*)/),
+    flutes:(n.match(/(\d+)\s*FL\b/i) || [])[1]
+        || (t.type.match(/(\d+)\s*(?:Flute|FL)\b/i) || [])[1] || ''
+  };
+}
+function tipStyle(t){
+  const s = (t.type + ' ' + (t.specs||'')).toLowerCase();
+  if(/drill|reamer/.test(s) && !/end mill/.test(s)) return 'drill';
+  if(/ball/.test(s)) return 'ball';
+  if(/chamfer|countersink|dovetail|engrav/.test(s)) return 'chamfer';
+  if(/corner radius|corner-radius/.test(s)) return 'radius';
+  return 'square';
+}
+
+function figCutter(t){
+  const d = cutterDims(t), tip = tipStyle(t);
+  const oal = d.oal || (d.loc ? d.loc*2.5 : null);
+  const X0=30, X1=310, span=X1-X0;
+  const px = oal ? (v)=> X0 + (v/oal)*span : null;
+  const cutEnd = (px && d.loc) ? Math.min(X1, X0 + (d.loc/oal)*span) : X0+90;
+  const cy=92, rOD=26;
+  const rSh = d.shank && d.od ? Math.max(10, Math.min(34, rOD*(d.shank/d.od))) : rOD;
+  let flute='', nose='';
+  for(let x=X0+8; x<cutEnd-6; x+=15) flute += `<path d="M${x},${cy-rOD+2} L${x+11},${cy+rOD-2}" stroke="#8b959c" stroke-width=".9" fill="none"/>`;
+  if(tip==='ball'){
+    nose = `M${X0+rOD},${cy-rOD} A${rOD},${rOD} 0 0 0 ${X0+rOD},${cy+rOD}`;
+    var body = `M${X0+rOD},${cy-rOD} L${cutEnd},${cy-rOD} L${cutEnd},${cy-rSh} L${X1},${cy-rSh} L${X1},${cy+rSh} L${cutEnd},${cy+rSh} L${cutEnd},${cy+rOD} L${X0+rOD},${cy+rOD}`;
+    var d3 = body + ' ' + nose + ' Z';
+  }else if(tip==='drill'){
+    d3 = `M${X0},${cy} L${X0+16},${cy-rOD} L${cutEnd},${cy-rOD} L${cutEnd},${cy-rSh} L${X1},${cy-rSh} L${X1},${cy+rSh} L${cutEnd},${cy+rSh} L${cutEnd},${cy+rOD} L${X0+16},${cy+rOD} Z`;
+  }else if(tip==='chamfer'){
+    d3 = `M${X0},${cy-8} L${X0+22},${cy-rOD} L${cutEnd},${cy-rOD} L${cutEnd},${cy-rSh} L${X1},${cy-rSh} L${X1},${cy+rSh} L${cutEnd},${cy+rSh} L${cutEnd},${cy+rOD} L${X0+22},${cy+rOD} L${X0},${cy+8} Z`;
+  }else if(tip==='radius'){
+    const r=7;
+    d3 = `M${X0+r},${cy-rOD} L${cutEnd},${cy-rOD} L${cutEnd},${cy-rSh} L${X1},${cy-rSh} L${X1},${cy+rSh} L${cutEnd},${cy+rSh} L${cutEnd},${cy+rOD} L${X0+r},${cy+rOD} Q${X0},${cy+rOD} ${X0},${cy+rOD-r} L${X0},${cy-rOD+r} Q${X0},${cy-rOD} ${X0+r},${cy-rOD} Z`;
+  }else{
+    d3 = `M${X0},${cy-rOD} L${cutEnd},${cy-rOD} L${cutEnd},${cy-rSh} L${X1},${cy-rSh} L${X1},${cy+rSh} L${cutEnd},${cy+rSh} L${cutEnd},${cy+rOD} L${X0},${cy+rOD} Z`;
+  }
+  const B='#7fd4ff', G='#3ecf8e';
+  let dims='';
+  if(d.od!=null)  dims += `<path class="dim" d="M${X0-8},${cy-rOD} L${X0-20},${cy-rOD} M${X0-8},${cy+rOD} L${X0-20},${cy+rOD} M${X0-14},${cy-rOD} L${X0-14},${cy+rOD}" fill="none" stroke="${B}" stroke-width=".8"/>`
+                        + `<text x="4" y="${cy+50}" fill="${B}" style="font:11px var(--mono);">OD ${num(d.od)}</text>`
+                        + `<path d="M18,${cy+44} L${X0-14},${cy+rOD+4}" stroke="${B}" stroke-width=".7" fill="none"/>`;
+  if(d.loc!=null) dims += `<path d="M${X0},${cy-rOD-8} L${X0},${cy-rOD-24} M${cutEnd},${cy-rOD-8} L${cutEnd},${cy-rOD-24} M${X0},${cy-rOD-16} L${cutEnd},${cy-rOD-16}" fill="none" stroke="${G}" stroke-width=".8"/>`
+                        + `<text x="${(X0+cutEnd)/2}" y="${cy-rOD-20}" text-anchor="middle" fill="${G}" style="font:11px var(--mono);">LOC ${num(d.loc)}</text>`;
+  if(oal)         dims += `<path d="M${X0},${cy+rOD+10} L${X0},${cy+rOD+30} M${X1},${cy+rOD+10} L${X1},${cy+rOD+30} M${X0},${cy+rOD+22} L${X1},${cy+rOD+22}" fill="none" stroke="${G}" stroke-width=".8"/>`
+                        + `<text x="${(X0+X1)/2}" y="${cy+rOD+38}" text-anchor="middle" fill="${G}" style="font:11px var(--mono);">${d.oal?'OAL '+num(d.oal):'OAL not published'}</text>`;
+  if(d.shank!=null) dims += `<text x="${X1-4}" y="${cy-rSh-8}" text-anchor="end" fill="${B}" style="font:11px var(--mono);">shank ${num(d.shank)}</text>`;
+  return `<svg viewBox="0 0 340 176" role="img" aria-label="Cutter side view">
+    <path d="${d3}" fill="#31373d" stroke="#e7e9ea" stroke-width="1.5" stroke-linejoin="round"/>
+    ${flute}${dims}</svg>`;
+}
+
+function figCutterCard(t){
+  const d = cutterDims(t);
+  const rows = [['OD (cutter dia)', d.od!=null?num(d.od)+'"':''],
+                ['LOC', d.loc!=null?num(d.loc)+'"':''],
+                ['OAL', d.oal!=null?num(d.oal)+'"':'not published'],
+                ['Shank dia', d.shank!=null?num(d.shank)+'"':''],
+                ['Neck dia', d.neck!=null?num(d.neck)+'"':''],
+                ['Corner radius', d.cr!=null?num(d.cr)+'"':''],
+                ['Flutes', d.flutes]]
+    .filter(r=>r[1]!=='' && r[1]!=null)
+    .map(r=>`<tr><td class="k">${r[0]}</td><td class="v">${escapeHtml(String(r[1]))}</td></tr>`).join('');
+  return `<div class="tool-card">
+    <div class="pn">${escapeHtml(t.specs || t.edp)}</div>
+    <div class="sub">${escapeHtml(t.brand)} &middot; ${escapeHtml(t.type.slice(0,44))} &middot; EDP ${escapeHtml(t.edp)}</div>
+    ${figCutter(t)}
+    <table class="tool-dims">${rows}</table>
+  </div>`;
+}
+
+function renderToolFigure(){
+  const col = document.getElementById('toolFigure');
+  if(!col) return;
+  const portF = document.getElementById('searchPort').value;
+  const brandF = document.getElementById('searchBrand').value;
+  const body = document.querySelector('.search-body');
+  const sel = selectedToolId ? tools.find(t=>t.id===selectedToolId) : null;
+  if(sel){
+    const setW = (on)=>{ if(body) body.className = on ? 'search-body wide' : 'search-body'; };
+    col.className = 'figure-col on single';
+    setW(true);
+    col.innerHTML = figCutterCard(sel);
+    return;
+  }
+  const setWide = (on)=>{ if(body) body.className = on ? 'search-body wide' : 'search-body'; };
+  if(!portF || brandF !== 'SCT'){ col.className='figure-col'; col.innerHTML=''; setWide(false); return; }
+
+  const hits = tools.filter(t=>{ const p = toolPort(t); return p && p.key === portF; });
+  if(!hits.length){ col.className='figure-col'; col.innerHTML=''; setWide(false); return; }
+
+  const order = {solid:0, reamer:1, coolant:2, nopilot:3, rosan:4, generic:5};
+  const byFam = {};
+  hits.forEach(t=>{
+    const pn = (t.specs||'').split('|')[0].trim().toUpperCase();
+    const f = portFamily(pn, t.type);
+    if(!byFam[f]) byFam[f] = {pn:pn, edp:t.edp, type:t.type, n:0};
+    byFam[f].n++;
+  });
+  const fams = Object.keys(byFam).sort((a,b)=>order[a]-order[b]);
+  const code = portF[0]==='d' ? String(parseInt(portF.slice(1),10)).padStart(2,'0') : null;
+  const d = (portToolDims && code) ? portToolDims.sizes[code] : null;
+
+  col.className = 'figure-col on';
+  setWide(true);
+  col.innerHTML = fams.map(f=>{
+    const g = byFam[f], fig = toolSvg(f, d);
+    return `<div class="tool-card">
+      <div class="pn">${escapeHtml(g.pn)}</div>
+      <div class="sub">${escapeHtml(g.type.slice(0,46))}</div>
+      ${fig.svg}
+      <div class="cap">${fig.notes}${d && f!=='rosan' && f!=='generic' ? '<br>c\'sink <b>A '+d.A+'</b>' : ''}</div>
+    </div>`;
+  }).join('');
+}
+
+function refreshTypeList(){
+  const brandF = document.getElementById('searchBrand').value;
+  const relevantTools = brandF ? tools.filter(t=>t.brand===brandF) : tools;
+
+  const types = [...new Set(relevantTools.map(t=>t.type))].sort();
+  const searchSel = document.getElementById('searchType');
+  const prevType = searchSel.value;
+  searchSel.innerHTML = '<option value="">All types</option>' +
+    types.map(t=>`<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+  if(types.includes(prevType)) searchSel.value = prevType;
+  else searchSel.value = '';
+
+  document.getElementById('typeList').innerHTML =
+    [...new Set(tools.map(t=>t.type))].sort().map(t=>`<option value="${escapeHtml(t)}">`).join('');
+
+  const brands = [...new Set(tools.map(t=>t.brand))].sort((a,b)=>{
+    if(a==='MA Ford') return -1;
+    if(b==='MA Ford') return 1;
+    return a.localeCompare(b);
+  });
+  const brandSel = document.getElementById('searchBrand');
+  const prevBrand = brandSel.value;
+  brandSel.innerHTML = '<option value="">All brands</option>' +
+    brands.map(b=>`<option value="${escapeHtml(b)}">${escapeHtml(b)}</option>`).join('');
+  if(brands.includes(prevBrand)) brandSel.value = prevBrand;
+}
+
+function escapeHtml(s){
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function showStatus(id, msg, kind){
+  const el = document.getElementById(id);
+  el.innerHTML = `<div class="status ${kind}">${escapeHtml(msg)}</div>`;
+  setTimeout(()=>{ el.innerHTML=''; }, 3500);
+}
+
+// ---- Tabs ----
+document.querySelectorAll('.tab').forEach(tab=>{
+  tab.addEventListener('click', ()=>{
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    tab.classList.add('active');
+    ['search','add','ports','threads','import'].forEach(name=>{
+      document.getElementById('tab-'+name).style.display = (name===tab.dataset.tab) ? 'block' : 'none';
+    });
+  });
+});
+
+
+  // ---- SCT reference image ----
+  const sctReference = document.getElementById('sctReference');
+  const sctReferenceBackdrop = document.getElementById('sctReferenceBackdrop');
+  const sctReferenceClose = document.getElementById('sctReferenceClose');
+
+  function setSctReference(open){
+    document.querySelector('main').classList.toggle('sct-layout', open);
+    sctReference.classList.toggle('open', open);
+    sctReference.setAttribute('aria-hidden', String(!open));
+    sctReferenceBackdrop.setAttribute('aria-hidden', String(!open));
+  }
+
+  function updateSctReference(){
+    const brand = document.getElementById('searchBrand').value.trim();
+    setSctReference(brand.toLowerCase() === 'sct');
+  }
+
+  sctReferenceClose.addEventListener('click', ()=>setSctReference(false));
+  sctReferenceBackdrop.addEventListener('click', ()=>setSctReference(false));
+  document.addEventListener('keydown', e=>{
+    if(e.key === 'Escape') setSctReference(false);
+  });
+
+  // ---- Search ----
+function renderResults(){
+  const brandF = document.getElementById('searchBrand').value;
+  const typeF = document.getElementById('searchType').value.trim().toLowerCase();
+  const diaF = document.getElementById('searchDia').value.trim();
+  const locF = document.getElementById('searchLoc').value.trim();
+  const coolantF = document.getElementById('searchCoolant').value;
+  const kwF = document.getElementById('searchKeyword').value.trim().toLowerCase();
+  const pitchF = document.getElementById('searchPitch').value;
+  const portF  = document.getElementById('searchPort').value;
+
+  let list = tools.filter(t=>{
+    if(brandF && t.brand !== brandF) return false;
+    if(typeF && t.type.toLowerCase() !== typeF) return false;
+    if(pitchF && !pitchMatches(t, pitchF)) return false;
+    if(portF){ const pp = toolPort(t); if(!pp || pp.key !== portF) return false; }
+    if(coolantF && (t.coolant||'') !== coolantF) return false;
+    if(diaF !== ''){
+      const target = parseFloat(diaF);
+      if(isNaN(target)) return true;
+      if(Math.abs(parseFloat(t.diameter) - target) > 0.0005) return false;
+    }
+    if(locF !== ''){
+      const minLoc = parseFloat(locF);
+      const tLoc = parseFloat(t.loc);
+      if(!isNaN(minLoc) && (isNaN(tLoc) || tLoc < minLoc)) return false;
+    }
+    if(kwF){
+      const hay = [t.brand,t.type,t.edp,t.specs,t.notes].join(' ').toLowerCase();
+      if(!hay.includes(kwF)) return false;
+    }
+    return true;
+  });
+
+  list.sort((a,b)=>{
+    const pa = a.price !== '' && !isNaN(parseFloat(a.price)) ? parseFloat(a.price) : Infinity;
+    const pb = b.price !== '' && !isNaN(parseFloat(b.price)) ? parseFloat(b.price) : Infinity;
+    return pa - pb;
+  });
+
+  const resultsEl = document.getElementById('results');
+  const countEl = document.getElementById('resultCount');
+
+  if(tools.length === 0){
+    countEl.textContent = '';
+    resultsEl.innerHTML = `<div class="empty">No tools saved yet. Add a few tools or import a CSV to get started.</div>`;
+    return;
+  }
+  if(list.length === 0){
+    countEl.textContent = '';
+    resultsEl.innerHTML = `<div class="empty">No matches. Try clearing a filter.</div>`;
+    return;
+  }
+
+  countEl.textContent = `${list.length} match${list.length===1?'':'es'} — cheapest first`;
+
+  resultsEl.innerHTML = list.map((t,i)=>{
+    const hasPrice = t.price !== '' && !isNaN(parseFloat(t.price));
+    const isBest = hasPrice && i === list.findIndex(x=>x.price!=='' && !isNaN(parseFloat(x.price)));
+    return `
+    <div class="result ${isBest ? 'best':''}${t.id===selectedToolId ? ' picked':''}" onclick="pickTool('${t.id}')">
+      ${isBest ? '<div class="badge">BEST PRICE</div>' : ''}
+      <div class="result-top">
+        <div class="brand">${escapeHtml(t.brand)}${t.coolant==='Yes' ? ' <span style="font-size:10px;background:#0d3d5c;color:#7fd4ff;padding:2px 6px;border-radius:8px;vertical-align:middle;">COOLANT-THRU</span>' : (t.coolant==='No' ? ' <span style="font-size:10px;background:#3a3a3a;color:#bbb;padding:2px 6px;border-radius:8px;vertical-align:middle;">NO COOLANT</span>' : '')}</div>
+        <div class="price">${hasPrice ? '$'+parseFloat(t.price).toFixed(2) : '<span style="color:var(--muted);font-size:12.5px;">no price</span>'}</div>
+      </div>
+      <div class="meta">
+        ${escapeHtml(t.type)} — ⌀${t.diameter}"${t.loc ? ' &nbsp;|&nbsp; LOC/Neck-L '+escapeHtml(t.loc)+'"' : ''}${t.neckdia ? ' &nbsp;|&nbsp; Neck-Dia '+escapeHtml(t.neckdia)+'"' : ''} &nbsp;|&nbsp; EDP# <span class="edp">${escapeHtml(t.edp)}</span>
+        ${t.specs ? '<br>'+escapeHtml(t.specs) : ''}
+        ${t.notes ? '<br>'+escapeHtml(t.notes) : ''}
+      </div>
+      <div class="actions">
+        <button class="secondary" onclick="event.stopPropagation();deleteTool('${t.id}')">Delete</button>
+      </div>
+    </div>
+  `;}).join('');
+}
+
+window.deleteTool = function(id){
+  const i = added.findIndex(t=>t.id===id);
+  if(i >= 0) added.splice(i,1);          // a tool added on this device
+  else deleted.push(id);                 // hide a catalog tool on this device
+  saveLocal();
+  rebuild();
+}
+
+document.getElementById('searchType').addEventListener('change', ()=>{ refreshPitchList(); refreshPortList(); renderResults(); });
+document.getElementById('searchBrand').addEventListener('change', ()=>{ refreshTypeList(); refreshPitchList(); refreshPortList(); renderResults(); renderToolFigure(); updateSctReference(); });
+document.getElementById('searchDia').addEventListener('input', renderResults);
+document.getElementById('searchLoc').addEventListener('input', renderResults);
+document.getElementById('searchCoolant').addEventListener('change', renderResults);
+document.getElementById('searchPitch').addEventListener('change', renderResults);
+document.getElementById('searchPort').addEventListener('change', ()=>{ renderResults(); renderToolFigure(); });
+document.getElementById('searchKeyword').addEventListener('input', renderResults);
+
+// ---- Add tool ----
+document.getElementById('saveBtn').addEventListener('click', async ()=>{
+  const brand = document.getElementById('f_brand').value.trim();
+  const type = document.getElementById('f_type').value.trim();
+  const dia = document.getElementById('f_dia').value.trim();
+  const edp = document.getElementById('f_edp').value.trim();
+  const price = document.getElementById('f_price').value.trim();
+  const loc = document.getElementById('f_loc').value.trim();
+  const neckdia = document.getElementById('f_neckdia').value.trim();
+  const coolant = document.getElementById('f_coolant').value;
+  const specs = document.getElementById('f_specs').value.trim();
+  const notes = document.getElementById('f_notes').value.trim();
+
+  if(!brand || !type || !dia || !edp){
+    showStatus('addStatus', 'Please fill in brand, type, diameter, and EDP#.', 'err');
+    return;
+  }
+
+  added.push({id:uid(), brand, type, diameter:dia, edp, price, loc, neckdia, coolant, specs, notes});
+  saveLocal();
+  rebuild();
+
+  ['f_brand','f_type','f_dia','f_edp','f_price','f_loc','f_neckdia','f_coolant','f_specs','f_notes'].forEach(id=>{
+    document.getElementById(id).value='';
+  });
+  showStatus('addStatus', `Saved on this device. ${brand} ${type} ⌀${dia}" is in the crib.`, 'ok');
+});
+
+// ---- Bulk paste ----
+document.getElementById('pasteBtn').addEventListener('click', async ()=>{
+  const raw = document.getElementById('pasteBox').value;
+  const lines = raw.split('\n').map(l=>l.trim()).filter(l=>l.length>0);
+  if(lines.length === 0){
+    showStatus('pasteStatus', 'Paste in some tool lines first.', 'err');
+    return;
+  }
+  let nAdded = 0, updated = 0, skipped = 0;
+  lines.forEach(line=>{
+    const parts = line.split(',').map(p=>p.trim());
+    const [brand, type, diameter, edp, price, loc, specs, notes] = parts;
+    if(!brand || !type || !diameter || !edp){
+      skipped++;
+      return;
+    }
+    const newTool = {brand, type, diameter, edp, price: price||'', loc: loc||'', specs: specs||'', notes: notes||''};
+    if(upsert(newTool) === 'updated') updated++; else nAdded++;
+  });
+  saveLocal();
+  rebuild();
+  document.getElementById('pasteBox').value = '';
+  showStatus('pasteStatus', `Added ${nAdded}, updated ${updated}.${skipped ? ' Skipped '+skipped+' incomplete line(s).' : ''}`, 'ok');
+});
+
+// ---- CSV Import / Export ----
+document.getElementById('importBtn').addEventListener('click', ()=>{
+  document.getElementById('csvFileInput').click();
+});
+
+document.getElementById('csvFileInput').addEventListener('change', (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = async (ev)=>{
+    try{
+      const text = ev.target.result;
+      const rows = parseCSV(text);
+      if(rows.length < 2){
+        showStatus('importStatus','CSV looks empty.','err');
+        return;
+      }
+      const header = rows[0].map(h=>h.trim().toLowerCase());
+      const need = ['brand','type','diameter','edp'];
+      const missing = need.filter(n=>!header.includes(n));
+      if(missing.length){
+        showStatus('importStatus', 'Missing columns: '+missing.join(', '), 'err');
+        return;
+      }
+      let nAdded = 0, updated = 0;
+      for(let i=1;i<rows.length;i++){
+        const r = rows[i];
+        if(r.length < 2 || r.every(c=>c.trim()==='')) continue;
+        const obj = {};
+        header.forEach((h,idx)=> obj[h] = (r[idx]||'').trim());
+        if(!obj.brand || !obj.type || !obj.diameter || !obj.edp) continue;
+        const newTool = {
+          brand: obj.brand, type: obj.type, diameter: obj.diameter,
+          edp: obj.edp, price: obj.price, loc: obj.loc||obj.neck_length||'', neckdia: obj.neckdia||obj.neck_diameter||'', coolant: obj.coolant||'', specs: obj.specs||'', notes: obj.notes||''
+        };
+        if(upsert(newTool) === 'updated') updated++; else nAdded++;
+      }
+      saveLocal();
+      rebuild();
+      showStatus('importStatus', `Added ${nAdded} new, updated ${updated} existing. Saved on this device \u2014 download tools.json to share them.`, 'ok');
+    }catch(err){
+      showStatus('importStatus', 'Could not read that CSV.', 'err');
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+});
+
+function parseCSV(text){
+  // simple CSV parser handling quoted fields
+  const rows = [];
+  let row = [], field = '', inQuotes = false;
+  for(let i=0;i<text.length;i++){
+    const c = text[i];
+    if(inQuotes){
+      if(c === '"'){
+        if(text[i+1] === '"'){ field+='"'; i++; } else { inQuotes=false; }
+      } else field += c;
+    } else {
+      if(c === '"') inQuotes = true;
+      else if(c === ','){ row.push(field); field=''; }
+      else if(c === '\n'){ row.push(field); rows.push(row); row=[]; field=''; }
+      else if(c === '\r'){ /* skip */ }
+      else field += c;
+    }
+  }
+  if(field.length || row.length){ row.push(field); rows.push(row); }
+  return rows.filter(r => r.length>1 || (r[0] && r[0].trim()!==''));
+}
+
+document.getElementById('exportBtn').addEventListener('click', ()=>{
+  if(tools.length===0){
+    showStatus('importStatus','Nothing to export yet.','err');
+    return;
+  }
+  const header = ['brand','type','diameter','edp','price','loc','neckdia','coolant','specs','notes'];
+  const csvRows = [header.join(',')];
+  tools.forEach(t=>{
+    const row = header.map(h=>{
+      let v = String(t[h] ?? '');
+      if(v.includes(',') || v.includes('"') || v.includes('\n')){
+        v = '"' + v.replace(/"/g,'""') + '"';
+      }
+      return v;
+    });
+    csvRows.push(row.join(','));
+  });
+  const blob = new Blob([csvRows.join('\n')], {type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'tool-crib-export.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showStatus('importStatus', 'Exported.', 'ok');
+});
+
+document.getElementById('downloadJsonBtn').addEventListener('click', ()=>{
+  if(tools.length === 0){
+    showStatus('importStatus','Nothing to save yet.','err');
+    return;
+  }
+  // one tool per line so GitHub shows a readable diff
+  const text = '[\n' + tools.map(t=>JSON.stringify(t)).join(',\n') + '\n]\n';
+  const blob = new Blob([text], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'tools.json';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showStatus('importStatus', `Downloaded tools.json with ${tools.length} tools. Upload it to GitHub to replace the old one.`, 'ok');
+});
+
+document.getElementById('resetLocalBtn').addEventListener('click', ()=>{
+  if(added.length === 0 && deleted.length === 0){
+    showStatus('importStatus','No local changes to clear.','ok');
+    return;
+  }
+  if(!confirm('Discard the ' + added.length + ' tool(s) added and ' + deleted.length + ' removed on this device? The shared catalog is not affected.')) return;
+  added = []; deleted = [];
+  saveLocal();
+  rebuild();
+  showStatus('importStatus', 'Back to the shared catalog.', 'ok');
+});
+
+// ---- Threads / Ports ----
+let portData = null;
+
+async function loadPorts(){
+  try{
+    const res = await fetch('ports.json', {cache:'no-cache'});
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    portData = await res.json();
+  }catch(err){
+    PICKERS.forEach(pk=>{ document.getElementById(pk.card).innerHTML =
+      '<div class="empty">Couldn\'t load <b>ports.json</b> (' + escapeHtml(err.message) + ').</div>'; });
+    return;
+  }
+  PICKERS.forEach(pk=>{
+    const sel = document.getElementById(pk.std);
+    sel.innerHTML = stdsFor(pk.group).map(s=>
+      `<option value="${escapeHtml(s.id)}">${escapeHtml(s.name)}</option>`).join('');
+    fillDashes(pk);
+  });
+}
+
+const PICKERS = [
+  {std:'p_std', dash:'p_dash', card:'portCard',   group:'port'},
+  {std:'t_std', dash:'t_dash', card:'threadCard', group:'thread'}
+];
+function stdsFor(group){
+  return portData.standards.filter(s=>(s.group||'port')===group);
+}
+function pickerOf(el){
+  return PICKERS.find(p=>p.std===el || p.dash===el || p.group===el);
+}
+function curStd(pk){
+  const id = document.getElementById(pk.std).value;
+  const list = stdsFor(pk.group);
+  return list.find(s=>s.id===id) || list[0];
+}
+
+function fillDashes(pk){
+  const st = curStd(pk), sel = document.getElementById(pk.dash), prev = sel.value;
+  sel.innerHTML = st.rows.map(r=>
+    `<option value="${escapeHtml(r.id)}">${escapeHtml(r.dash)} &nbsp; ${escapeHtml(r.thread)}</option>`).join('');
+  if(st.rows.some(r=>r.id===prev)) sel.value = prev;
+  renderPort(pk);
+}
+
+function dimLine(x1,y1,x2,y2,cls){ return `<path class="${cls}" d="M${x1},${y1} L${x2},${y2}"/>`; }
+
+function figAS5202(r){
+  const d = r.dims;
+  return `<svg class="port-fig" viewBox="0 0 340 268" role="img" aria-label="AS5202 port section ${escapeHtml(r.dash)}">
+<rect class="mat" x="45" y="55" width="250" height="170" rx="3"/>
+<line x1="170" y1="42" x2="170" y2="256" stroke="#8b959c" stroke-width=".8" stroke-dasharray="7 3 2 3"/>
+<path class="out" d="M100,55 L112,66 L112,73 L118,73 L118,150 L148,166 L148,225"/>
+<path class="out" d="M240,55 L228,66 L228,73 L222,73 L222,150 L192,166 L192,225"/>
+<line class="out" x1="45" y1="55" x2="100" y2="55"/><line class="out" x1="240" y1="55" x2="295" y2="55"/>
+<path class="thd" d="M118,76 L125,80 L118,85 L125,89 L118,94 L125,98 L118,103 L125,107 L118,112 L125,116 L118,121 L125,125 L118,130 L125,134 L118,139 L125,143 L118,148"/>
+<path class="thd" d="M222,76 L215,80 L222,85 L215,89 L222,94 L215,98 L222,103 L215,107 L222,112 L215,116 L222,121 L215,125 L222,130 L215,134 L222,139 L215,143 L222,148"/>
+<path class="dim" d="M45,24 L45,53 M295,24 L295,53 M45,18 L295,18"/>
+<text class="v" x="170" y="14" text-anchor="middle">G ${d.G}</text>
+<path class="dim" d="M100,36 L100,53 M240,36 L240,53 M100,32 L240,32"/>
+<text class="v" x="170" y="29" text-anchor="middle">A ${d.A}</text>
+<path class="dim" d="M112,50 L112,66 M228,50 L228,66 M112,46 L228,46"/>
+<text class="v" x="170" y="43" text-anchor="middle">D ${d.D}</text>
+<path class="dep" d="M297,55 L312,55 M230,73 L312,73 M304,55 L304,73"/>
+<text class="w" x="252" y="88">E ${d.E}</text>
+<path class="dep" d="M297,150 L330,150 M324,55 L324,150"/>
+<text class="w" x="240" y="140">B ${d.B}</text>
+<path class="dim" d="M148,227 L148,246 M192,227 L192,246 M148,242 L192,242"/>
+<text class="v" x="170" y="260" text-anchor="middle">C ${d.C}</text>
+<path class="rad" d="M112,73 L74,98"/><text x="6" y="102">.020R max</text>
+<path class="rad" d="M103,60 L74,44"/><text x="30" y="41">120&#176;</text>
+</svg>`;
+}
+
+
+function figTap(r){
+  const d = r.dims;
+  return `<svg class="port-fig" viewBox="0 0 340 250" role="img" aria-label="Tapped hole section ${escapeHtml(r.dash)}">
+<rect class="mat" x="45" y="55" width="250" height="150" rx="3"/>
+<line x1="170" y1="40" x2="170" y2="238" stroke="#8b959c" stroke-width=".8" stroke-dasharray="7 3 2 3"/>
+<line class="out" x1="45" y1="55" x2="112" y2="55"/><line class="out" x1="228" y1="55" x2="295" y2="55"/>
+<path class="out" d="M112,55 L112,205"/><path class="out" d="M228,55 L228,205"/>
+<path class="thd" d="M122,58 L112,63 L122,68 L112,73 L122,78 L112,83 L122,88 L112,93 L122,98 L112,103 L122,108 L112,113 L122,118 L112,123 L122,128 L112,133 L122,138 L112,143 L122,148 L112,153 L122,158 L112,163 L122,168 L112,173 L122,178 L112,183 L122,188 L112,193 L122,198"/>
+<path class="thd" d="M218,58 L228,63 L218,68 L228,73 L218,78 L228,83 L218,88 L228,93 L218,98 L228,103 L218,108 L228,113 L218,118 L228,123 L218,128 L228,133 L218,138 L228,143 L218,148 L228,153 L218,158 L228,163 L218,168 L228,173 L218,178 L228,183 L218,188 L228,193 L218,198"/>
+<path class="dim" d="M112,26 L112,53 M228,26 L228,53 M112,20 L228,20"/>
+<text class="v" x="170" y="16" text-anchor="middle">major ${d.major}</text>
+<path class="dim" d="M122,207 L122,232 M218,207 L218,232 M122,228 L218,228"/>
+<text class="v" x="170" y="246" text-anchor="middle">minor ${d.minor_min} / ${d.minor_max}</text>
+<text class="w" x="240" y="130">${d.tpi} tpi</text>
+</svg>`;
+}
+
+function figAS1300(r){
+  const d = r.dims, s = (v)=> (v||'').split('/')[0];
+  return `<svg class="port-fig" viewBox="0 0 340 286" role="img" aria-label="AS1300 ring locked port section ${escapeHtml(r.dash)}">
+<rect class="mat" x="45" y="50" width="250" height="172" rx="3"/>
+<line x1="170" y1="36" x2="170" y2="276" stroke="#8b959c" stroke-width=".8" stroke-dasharray="7 3 2 3"/>
+<path class="out" d="M98,50 L104,57 L104,83 L116,83 L116,113 L122,113 L122,222"/>
+<path class="out" d="M242,50 L236,57 L236,83 L224,83 L224,113 L218,113 L218,222"/>
+<line class="out" x1="45" y1="50" x2="98" y2="50"/><line class="out" x1="242" y1="50" x2="295" y2="50"/>
+<path class="thd" d="M104,59 L110,61 M104,63 L110,65 M104,67 L110,69 M104,71 L110,73 M104,75 L110,77 M104,79 L110,81"/>
+<path class="thd" d="M236,59 L230,61 M236,63 L230,65 M236,67 L230,69 M236,71 L230,73 M236,75 L230,77 M236,79 L230,81"/>
+<path class="thd" d="M122,116 L129,120 L122,125 L129,129 L122,134 L129,138 L122,143 L129,147 L122,152 L129,156 L122,161 L129,165 L122,170"/>
+<path class="thd" d="M218,116 L211,120 L218,125 L211,129 L218,134 L211,138 L218,143 L211,147 L218,152 L211,156 L218,161 L211,165 L218,170"/>
+<path class="dim" d="M45,26 L45,48 M295,26 L295,48 M45,20 L295,20"/>
+<text class="v" x="170" y="16" text-anchor="middle">B ${d.B}</text>
+<path class="dim" d="M98,38 L98,48 M242,38 L242,48 M98,34 L242,34"/>
+<text class="v" x="170" y="30" text-anchor="middle">A ${d.A}</text>
+<path class="dim" d="M116,224 L116,250 M224,224 L224,250 M116,246 L224,246"/>
+<text class="v" x="170" y="242" text-anchor="middle">D ${s(d.D)}</text>
+<path class="dim" d="M104,224 L104,270 M236,224 L236,270 M104,266 L236,266"/>
+<text class="v" x="170" y="282" text-anchor="middle">C ${s(d.C)}</text>
+<line class="dep" x1="300" y1="50" x2="300" y2="170"/>
+<path class="dep" d="M238,70 L300,70 M226,83 L300,83 M220,113 L300,113 M218,170 L300,170"/>
+<path class="dep" d="M296,70 L304,70 M296,83 L304,83 M296,113 L304,113 M296,170 L304,170"/>
+<text class="w" x="306" y="67">E ${d.E}</text>
+<text class="w" x="306" y="88">F ${s(d.F)}</text>
+<text class="w" x="306" y="117">G ${s(d.G)}</text>
+<text class="w" x="306" y="174">H ${d.H}</text>
+<path class="rad" d="M104,83 L70,100"/><text x="4" y="104">R .010 max</text>
+<path class="rad" d="M101,55 L70,40"/><text x="26" y="37">45&#176;</text>
+<text class="w" x="126" y="103">${d.J} teeth</text>
+</svg>`;
+}
+
+function portTools(r, st){
+  if(st.id !== 'as5202') return '';
+  const code = r.dash.replace('-','');
+  const re = new RegExp('^AS5202-' + code + '(?![0-9])');
+  const hits = tools.filter(t => t.brand==='SCT' && re.test((t.specs||'').trim()));
+  if(hits.length === 0) return '';
+  const byType = {};
+  hits.forEach(t=>{ (byType[t.type] = byType[t.type] || []).push(t); });
+  let html = '<div class="port-tools"><div class="pt-head">Tools that cut this port</div>';
+  Object.keys(byType).sort().forEach(ty=>{
+    html += '<div class="pt-type">' + escapeHtml(ty.replace('AS5202 Port Tool - ','')) + '</div>';
+    byType[ty].forEach(t=>{
+      const pn = (t.specs||'').split('|')[0].trim();
+      const coat = (t.notes||'').includes('ALTiN+') ? 'ALTiN+' : 'uncoated';
+      html += '<div class="pt-row"><span>' + escapeHtml(pn) + ' <span class="pt-c">' + coat +
+              '</span></span><span class="edp">' + escapeHtml(t.edp) + '</span></div>';
+    });
+  });
+  return html + '</div>';
+}
+
+function as1300Tooling(r){
+  const d = r.dims;
+  const n = (d.porting||'').replace(/^RPT0?/,'');
+  const re = new RegExp('^RPT-' + n + '(?![0-9])');
+  const hits = tools.filter(t => t.brand==='SCT' && re.test((t.specs||'').trim()));
+  let stock = '';
+  if(hits.length){
+    stock = '<div class="pt-type">In your crib</div>' + hits.map(t=>{
+      const coat = (t.notes||'').includes('AlTiN+') ? 'AlTiN+' : 'uncoated';
+      return '<div class="pt-row"><span>' + escapeHtml(t.specs) + ' <span class="pt-c">' + coat +
+             '</span></span><span class="edp">' + escapeHtml(t.edp) + '</span></div>';
+    }).join('');
+  }
+  return '<div class="port-tools"><div class="pt-head">Tooling called out by the standard</div>' +
+    '<div class="pt-row"><span>Porting tool</span><span class="edp">' + escapeHtml(d.porting) + '</span></div>' +
+    '<div class="pt-row"><span>Broaching tool</span><span class="edp">' + escapeHtml(d.broach) + '</span></div>' +
+    '<div class="pt-row"><span>Chip removal tool</span><span class="edp">' + escapeHtml(d.chip) + '</span></div>' +
+    stock + '</div>';
+}
+
+
+function tapDrills(r){
+  const lo = parseFloat(r.dims.minor_min), hi = parseFloat(r.dims.minor_max);
+  const hits = tools.filter(t=>{
+    const d = parseFloat(t.diameter);
+    if(isNaN(d) || d < lo || d > hi) return false;
+    return /DRILL|REAMER/i.test(t.type);
+  }).sort((a,b)=>parseFloat(a.diameter)-parseFloat(b.diameter)).slice(0,8);
+  let html = '<div class="port-tools"><div class="pt-head">Drills in your crib that fit this hole</div>';
+  if(hits.length === 0){
+    html += '<div class="pt-c" style="font-size:13px;">Nothing in the catalog lands between ' +
+            escapeHtml(r.dims.minor_min) + ' and ' + escapeHtml(r.dims.minor_max) + '.</div>';
+  }else{
+    hits.forEach(t=>{
+      html += '<div class="pt-row"><span>&#8960;' + escapeHtml(t.diameter) + ' &nbsp;<span class="pt-c">' +
+              escapeHtml(t.brand) + '</span></span><span class="edp">' + escapeHtml(t.edp) + '</span></div>';
+    });
+  }
+  return html + '</div>';
+}
+
+function renderPort(pk){
+  if(!portData) return;
+  if(!pk){ PICKERS.forEach(renderPort); return; }
+  const st = curStd(pk);
+  const r = st.rows.find(x=>x.id === document.getElementById(pk.dash).value);
+  if(!r){ document.getElementById(pk.card).innerHTML=''; return; }
+  const fig = st.figure === 'as1300' ? figAS1300(r) : (st.figure === 'tap' ? figTap(r) : figAS5202(r));
+  const tbl = st.display.map(([k,label,tol])=>{
+    const v = r.dims[k];
+    if(v === undefined || v === '') return '';
+    return '<tr><td class="k">'+label+'</td><td class="v">'+v+(tol?' &nbsp;'+tol:'')+'</td></tr>';
+  }).join('');
+  const extra = st.figure==='tap' ? tapDrills(r) : (st.id==='as1300' ? as1300Tooling(r) : portTools(r, st));
+  document.getElementById(pk.card).innerHTML = `
+  <div class="panel">
+    <div class="port-head">
+      <span class="t">${escapeHtml(r.thread)}</span>
+      <span class="d">${escapeHtml(st.name)} ${escapeHtml(r.dash)}</span>
+    </div>
+    ${fig}
+    <table class="port-tbl">${tbl}</table>
+    ${extra}
+    <div class="port-note">${st.footer.join('<br>')}<br>${escapeHtml(st.note)}</div>
+  </div>`;
+}
+
+PICKERS.forEach(pk=>{
+  document.getElementById(pk.std).addEventListener('change', ()=>fillDashes(pk));
+  document.getElementById(pk.dash).addEventListener('change', ()=>renderPort(pk));
+});
+loadPorts();
+
+loadTools();
+</script>
+
+</body>
+</html>
