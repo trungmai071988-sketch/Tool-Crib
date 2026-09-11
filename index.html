@@ -42,7 +42,6 @@
   }
   .logo-tile img{height:78px;width:auto;display:block;}
   .header-text{min-width:0;}
-  .side-quote.left svg{display:block;margin:0 auto 18px;width:200px;height:auto;}
   header h1{
     margin:0;
     font-size:20px;
@@ -80,7 +79,7 @@
     opacity:0.6;
     display:none;
   }
-  .side-quote.left{left:24px;top:42%;}
+  .side-quote.left{left:24px;}
   .side-quote.right{right:24px;}
   @media (min-width:1500px){
     .side-quote{display:block;}
@@ -116,6 +115,29 @@
   }
   button.danger{background:transparent;border:1px solid #7a2f2f;color:#e07a7a;font-weight:600;}
   button:active{transform:scale(0.98);}
+
+  /* ---- speed & feed ---- */
+  .fs-big{display:flex;gap:10px;flex-wrap:wrap;}
+  .fs-big .cell{
+    flex:1;min-width:145px;background:var(--panel2);border:1px solid var(--line);
+    border-radius:9px;padding:12px 10px;text-align:center;
+  }
+  .fs-big .cell.hot{border-color:var(--accent);}
+  .fs-big .cell .k{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;}
+  .fs-big .cell .v{font-family:var(--mono);font-size:31px;font-weight:700;color:var(--accent);line-height:1.1;margin-top:5px;}
+  .fs-big .cell .u{font-size:11px;color:var(--muted);margin-top:2px;}
+  .fs-grid{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;}
+  .fs-grid .g{
+    flex:1;min-width:118px;background:var(--panel2);border:1px solid var(--line);
+    border-radius:8px;padding:9px 10px;
+  }
+  .fs-grid .g .k{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.4px;}
+  .fs-grid .g .v{font-family:var(--mono);font-size:15.5px;margin-top:3px;}
+  .fs-warn{
+    margin-top:11px;font-size:12.5px;line-height:1.55;background:#3a2a0d;
+    border:1px solid var(--accent-dim);color:#ffd694;border-radius:8px;padding:9px 11px;
+  }
+  .fs-hint{margin-top:11px;font-size:12px;color:var(--muted);line-height:1.55;}
 
   .result{
     background:var(--panel2);
@@ -179,14 +201,6 @@
   }
   .results-col{flex:1;min-width:0;}
   .figure-col{width:690px;flex:0 0 690px;position:sticky;top:12px;display:none;}
-  .figure-col.on.single{grid-template-columns:1fr;}
-  .figure-col.on.single .tool-card{padding:18px 20px;}
-  .figure-col.on.single .tool-card svg{max-width:500px;margin:12px auto 8px;}
-  .figure-col.on.single .tool-card .pn{font-size:19px;}
-  .figure-col.on.single .tool-card .sub{font-size:13px;}
-  .figure-col.on.single .tool-dims{font-size:15.5px;}
-  .figure-col.on.single .tool-dims td{padding:8px 0;}
-  .figure-col.on.single .tool-dims td.v{font-size:17.5px;}
   .figure-col.on{
     display:grid;
     grid-template-columns:repeat(2,minmax(0,1fr));
@@ -211,13 +225,6 @@
     .figure-col{width:100%;flex:none;position:static;order:-1;}
     .figure-col.on{grid-template-columns:1fr;max-height:none;overflow:visible;}
   }
-  .result{cursor:pointer;}
-  .result.picked{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset;}
-  .tool-dims{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:4px;}
-  .tool-dims td{padding:5px 0;border-bottom:1px solid var(--line);}
-  .tool-dims td.k{color:var(--muted);width:46%;}
-  .tool-dims td.v{text-align:right;font-family:var(--mono);color:#fff;font-size:15px;}
-  .tool-dims tr:last-child td{border-bottom:none;}
   #csvFileInput{display:none;}
   .status{font-size:12.5px;padding:8px 10px;border-radius:7px;margin-top:8px;}
   .status.ok{background:#123322;color:var(--good);}
@@ -348,19 +355,18 @@
     <h1>Trung Mai's <span>Territory</span></h1>
     <p>Search across your brand catalogs by size & type — find the lowest price and EDP# instantly.</p>
   </div>
-
 </header>
 
 <div class="tabs">
   <div class="tab active" data-tab="search">Search</div>
-  <div class="tab" data-tab="add">Add Tool</div>
+  <div class="tab" data-tab="feeds">Speed &amp; Feed</div>
   <div class="tab" data-tab="ports">Ports</div>
   <div class="tab" data-tab="threads">Threads</div>
   <div class="tab" data-tab="import">Import / Export</div>
 </div>
 
 <div class="side-quote left">
-  <svg width="135" height="90" viewBox="0 0 300 200" style="filter:drop-shadow(0 3px 6px rgba(0,0,0,0.55));display:block;">
+  <svg width="190" height="130" viewBox="0 0 300 200" style="margin-bottom:16px;filter:drop-shadow(0 4px 8px rgba(0,0,0,0.5));">
     <defs>
       <clipPath id="waveClip">
         <path d="M0,0
@@ -494,6 +500,11 @@
           <input id="searchKeyword" type="text" placeholder="e.g. carbide, Harvey, coolant-through">
         </div>
       </div>
+      <div class="row">
+        <div class="field" style="margin-bottom:0;">
+          <button id="resetSearchBtn" class="secondary" type="button">Reset Search</button>
+        </div>
+      </div>
     </div>
 
     <div class="search-body">
@@ -505,64 +516,82 @@
     </div>
   </section>
 
-  <!-- ADD TAB -->
-  <section id="tab-add" style="display:none;">
+  <!-- SPEED & FEED TAB -->
+  <section id="tab-feeds" style="display:none;">
     <div class="panel">
       <div class="row">
-        <div class="field">
-          <label>Brand *</label>
-          <input id="f_brand" type="text" placeholder="e.g. Harvey Tool">
-        </div>
-        <div class="field">
-          <label>Tool Type *</label>
-          <input id="f_type" type="text" placeholder="e.g. Carbide Drill" list="typeList">
-          <datalist id="typeList"></datalist>
-        </div>
-      </div>
-      <div class="row">
-        <div class="field">
-          <label>Diameter (in) *</label>
-          <input id="f_dia" type="number" step="0.001" placeholder="0.5">
-        </div>
-        <div class="field">
-          <label>EDP # *</label>
-          <input id="f_edp" type="text" placeholder="e.g. 12345">
-        </div>
-        <div class="field">
-          <label>Price ($)</label>
-          <input id="f_price" type="number" step="0.01" placeholder="42.50">
-        </div>
-      </div>
-      <div class="row">
-        <div class="field">
-          <label>Length of Cut / Neck Length (in)</label>
-          <input id="f_loc" type="number" step="0.001" placeholder="e.g. 1.0">
-        </div>
-        <div class="field">
-          <label>Neck Diameter (in)</label>
-          <input id="f_neckdia" type="number" step="0.001" placeholder="e.g. 0.125">
-        </div>
-        <div class="field">
-          <label>Coolant-Thru</label>
-          <select id="f_coolant">
-            <option value="">Unknown</option>
-            <option value="Yes">Yes</option>
-            <option value="No">No</option>
+        <div class="field" style="flex:2;">
+          <label>Operation</label>
+          <select id="fs_op">
+            <option value="mill">Milling &mdash; side / slot / HEM</option>
+            <option value="drill">Drilling / reaming</option>
           </select>
         </div>
         <div class="field">
-          <label>Flutes / Coating (optional)</label>
-          <input id="f_specs" type="text" placeholder="e.g. 2FL, 3xD, AlTiN">
+          <label>Max spindle RPM (optional)</label>
+          <input id="fs_maxrpm" type="number" step="100" inputmode="numeric" placeholder="e.g. 12000">
         </div>
       </div>
       <div class="row">
-        <div class="field" style="flex:100%;">
-          <label>Notes (optional)</label>
-          <input id="f_notes" type="text" placeholder="e.g. coolant-through, for 316SS">
+        <div class="field">
+          <label>Tool diameter (in)</label>
+          <input id="fs_dia" type="number" step="0.0001" inputmode="decimal" placeholder="0.5000">
+        </div>
+        <div class="field" id="fs_flutesField">
+          <label>Flutes</label>
+          <input id="fs_flutes" type="number" step="1" min="1" inputmode="numeric" placeholder="4">
         </div>
       </div>
-      <button id="saveBtn" style="width:100%;">Save Tool</button>
-      <div id="addStatus"></div>
+      <div class="row">
+        <div class="field">
+          <label>SFM &mdash; from catalog</label>
+          <input id="fs_sfm" type="number" step="1" inputmode="decimal" placeholder="e.g. 600">
+        </div>
+        <div class="field">
+          <label id="fs_feedLabel">FPT &mdash; chip load (in / tooth)</label>
+          <input id="fs_fpt" type="number" step="0.0001" inputmode="decimal" placeholder="e.g. 0.0025">
+        </div>
+      </div>
+      <div class="row" id="fs_engageRow">
+        <div class="field">
+          <label>Radial WOC (in)</label>
+          <input id="fs_woc" type="number" step="0.0001" inputmode="decimal" placeholder="blank = full slot">
+        </div>
+        <div class="field">
+          <label>Axial DOC (in)</label>
+          <input id="fs_doc" type="number" step="0.0001" inputmode="decimal" placeholder="for MRR">
+        </div>
+      </div>
+      <div class="row">
+        <div class="field" style="margin-bottom:0;">
+          <button id="fs_clear" class="secondary" type="button">Clear</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="fs_out"></div>
+
+    <div class="panel">
+      <div class="row">
+        <div class="field" style="flex:2;">
+          <label>Saved catalog values</label>
+          <select id="fs_presetSel"><option value="">&mdash; pick a saved setup &mdash;</option></select>
+        </div>
+        <div class="field" style="flex:2;">
+          <label>Save current SFM / feed as</label>
+          <input id="fs_presetName" type="text" placeholder="e.g. Helical 1/2 4FL &mdash; 6061">
+        </div>
+      </div>
+      <div class="row">
+        <div class="field" style="margin-bottom:0;">
+          <button id="fs_presetSave" type="button">Save setup</button>
+        </div>
+        <div class="field" style="margin-bottom:0;">
+          <button id="fs_presetDel" class="danger" type="button">Delete selected</button>
+        </div>
+      </div>
+      <div id="fs_presetStatus"></div>
+      <div class="hint">Setups are stored on this device only &mdash; they are not part of tools.json and an import or export will not touch them.</div>
     </div>
   </section>
 
@@ -686,7 +715,7 @@ function saveLocal(){
     localStorage.setItem(LS_ADDED, JSON.stringify(added));
     localStorage.setItem(LS_DELETED, JSON.stringify(deleted));
   }catch(e){
-    showStatus('addStatus', 'Save failed \u2014 device storage full or unavailable.', 'err');
+    alert('Save failed \u2014 device storage is full or unavailable.');
   }
 }
 
@@ -971,123 +1000,12 @@ function toolSvg(fam, d){
   return {svg:`<svg viewBox="0 0 340 138" role="img" aria-label="Port tool side view">${cl}${nose}${flutes}${shank}${dims}</svg>`, notes};
 }
 
-
-// ---- cutter drawing: OD / LOC / OAL ----
-let selectedToolId = null;
-window.pickTool = function(id){
-  selectedToolId = (selectedToolId === id) ? null : id;
-  renderResults();
-  renderToolFigure();
-};
-
-function fracVal(s){
-  s = String(s==null?'':s).trim().replace(/"/g,'');
-  let m = s.match(/^(\d+)-(\d+)\/(\d+)$/);   if(m) return (+m[1])+(+m[2])/(+m[3]);
-  m = s.match(/^(\d+)\/(\d+)$/);             if(m) return (+m[1])/(+m[2]);
-  const v = parseFloat(s);
-  return isNaN(v) ? null : v;
-}
-function num(v, dp){
-  if(v==null) return '';
-  let s = v.toFixed(dp==null?4:dp).replace(/0+$/,'').replace(/\.$/,'');
-  return s.charAt(0)==='0' && s.charAt(1)==='.' ? s.slice(1) : s;
-}
-function grab(txt, re){ const m = (txt||'').match(re); return m ? fracVal(m[1]) : null; }
-
-function cutterDims(t){
-  const n = (t.notes||'') + ' ' + (t.specs||'');
-  return {
-    od:    fracVal(t.diameter),
-    loc:   fracVal(t.loc),
-    oal:   grab(n, /OAL[:\s]*([\d./-]+)/i),
-    shank: grab(n, /shank(?:\s*dia)?[:\s]*([\d./-]+)/i),
-    neck:  fracVal(t.neckdia),
-    cr:    grab(n, /\bR\s*(\.?\d[\d.]*)/),
-    flutes:(n.match(/(\d+)\s*FL\b/i) || [])[1]
-        || (t.type.match(/(\d+)\s*(?:Flute|FL)\b/i) || [])[1] || ''
-  };
-}
-function tipStyle(t){
-  const s = (t.type + ' ' + (t.specs||'')).toLowerCase();
-  if(/drill|reamer/.test(s) && !/end mill/.test(s)) return 'drill';
-  if(/ball/.test(s)) return 'ball';
-  if(/chamfer|countersink|dovetail|engrav/.test(s)) return 'chamfer';
-  if(/corner radius|corner-radius/.test(s)) return 'radius';
-  return 'square';
-}
-
-function figCutter(t){
-  const d = cutterDims(t), tip = tipStyle(t);
-  const oal = d.oal || (d.loc ? d.loc*2.5 : null);
-  const X0=30, X1=310, span=X1-X0;
-  const px = oal ? (v)=> X0 + (v/oal)*span : null;
-  const cutEnd = (px && d.loc) ? Math.min(X1, X0 + (d.loc/oal)*span) : X0+90;
-  const cy=92, rOD=26;
-  const rSh = d.shank && d.od ? Math.max(10, Math.min(34, rOD*(d.shank/d.od))) : rOD;
-  let flute='', nose='';
-  for(let x=X0+8; x<cutEnd-6; x+=15) flute += `<path d="M${x},${cy-rOD+2} L${x+11},${cy+rOD-2}" stroke="#8b959c" stroke-width=".9" fill="none"/>`;
-  if(tip==='ball'){
-    nose = `M${X0+rOD},${cy-rOD} A${rOD},${rOD} 0 0 0 ${X0+rOD},${cy+rOD}`;
-    var body = `M${X0+rOD},${cy-rOD} L${cutEnd},${cy-rOD} L${cutEnd},${cy-rSh} L${X1},${cy-rSh} L${X1},${cy+rSh} L${cutEnd},${cy+rSh} L${cutEnd},${cy+rOD} L${X0+rOD},${cy+rOD}`;
-    var d3 = body + ' ' + nose + ' Z';
-  }else if(tip==='drill'){
-    d3 = `M${X0},${cy} L${X0+16},${cy-rOD} L${cutEnd},${cy-rOD} L${cutEnd},${cy-rSh} L${X1},${cy-rSh} L${X1},${cy+rSh} L${cutEnd},${cy+rSh} L${cutEnd},${cy+rOD} L${X0+16},${cy+rOD} Z`;
-  }else if(tip==='chamfer'){
-    d3 = `M${X0},${cy-8} L${X0+22},${cy-rOD} L${cutEnd},${cy-rOD} L${cutEnd},${cy-rSh} L${X1},${cy-rSh} L${X1},${cy+rSh} L${cutEnd},${cy+rSh} L${cutEnd},${cy+rOD} L${X0+22},${cy+rOD} L${X0},${cy+8} Z`;
-  }else if(tip==='radius'){
-    const r=7;
-    d3 = `M${X0+r},${cy-rOD} L${cutEnd},${cy-rOD} L${cutEnd},${cy-rSh} L${X1},${cy-rSh} L${X1},${cy+rSh} L${cutEnd},${cy+rSh} L${cutEnd},${cy+rOD} L${X0+r},${cy+rOD} Q${X0},${cy+rOD} ${X0},${cy+rOD-r} L${X0},${cy-rOD+r} Q${X0},${cy-rOD} ${X0+r},${cy-rOD} Z`;
-  }else{
-    d3 = `M${X0},${cy-rOD} L${cutEnd},${cy-rOD} L${cutEnd},${cy-rSh} L${X1},${cy-rSh} L${X1},${cy+rSh} L${cutEnd},${cy+rSh} L${cutEnd},${cy+rOD} L${X0},${cy+rOD} Z`;
-  }
-  const B='#7fd4ff', G='#3ecf8e';
-  let dims='';
-  if(d.od!=null)  dims += `<path class="dim" d="M${X0-8},${cy-rOD} L${X0-20},${cy-rOD} M${X0-8},${cy+rOD} L${X0-20},${cy+rOD} M${X0-14},${cy-rOD} L${X0-14},${cy+rOD}" fill="none" stroke="${B}" stroke-width=".8"/>`
-                        + `<text x="4" y="${cy+50}" fill="${B}" style="font:11px var(--mono);">OD ${num(d.od)}</text>`
-                        + `<path d="M18,${cy+44} L${X0-14},${cy+rOD+4}" stroke="${B}" stroke-width=".7" fill="none"/>`;
-  if(d.loc!=null) dims += `<path d="M${X0},${cy-rOD-8} L${X0},${cy-rOD-24} M${cutEnd},${cy-rOD-8} L${cutEnd},${cy-rOD-24} M${X0},${cy-rOD-16} L${cutEnd},${cy-rOD-16}" fill="none" stroke="${G}" stroke-width=".8"/>`
-                        + `<text x="${(X0+cutEnd)/2}" y="${cy-rOD-20}" text-anchor="middle" fill="${G}" style="font:11px var(--mono);">LOC ${num(d.loc)}</text>`;
-  if(oal)         dims += `<path d="M${X0},${cy+rOD+10} L${X0},${cy+rOD+30} M${X1},${cy+rOD+10} L${X1},${cy+rOD+30} M${X0},${cy+rOD+22} L${X1},${cy+rOD+22}" fill="none" stroke="${G}" stroke-width=".8"/>`
-                        + `<text x="${(X0+X1)/2}" y="${cy+rOD+38}" text-anchor="middle" fill="${G}" style="font:11px var(--mono);">${d.oal?'OAL '+num(d.oal):'OAL not published'}</text>`;
-  if(d.shank!=null) dims += `<text x="${X1-4}" y="${cy-rSh-8}" text-anchor="end" fill="${B}" style="font:11px var(--mono);">shank ${num(d.shank)}</text>`;
-  return `<svg viewBox="0 0 340 176" role="img" aria-label="Cutter side view">
-    <path d="${d3}" fill="#31373d" stroke="#e7e9ea" stroke-width="1.5" stroke-linejoin="round"/>
-    ${flute}${dims}</svg>`;
-}
-
-function figCutterCard(t){
-  const d = cutterDims(t);
-  const rows = [['OD (cutter dia)', d.od!=null?num(d.od)+'"':''],
-                ['LOC', d.loc!=null?num(d.loc)+'"':''],
-                ['OAL', d.oal!=null?num(d.oal)+'"':'not published'],
-                ['Shank dia', d.shank!=null?num(d.shank)+'"':''],
-                ['Neck dia', d.neck!=null?num(d.neck)+'"':''],
-                ['Corner radius', d.cr!=null?num(d.cr)+'"':''],
-                ['Flutes', d.flutes]]
-    .filter(r=>r[1]!=='' && r[1]!=null)
-    .map(r=>`<tr><td class="k">${r[0]}</td><td class="v">${escapeHtml(String(r[1]))}</td></tr>`).join('');
-  return `<div class="tool-card">
-    <div class="pn">${escapeHtml(t.specs || t.edp)}</div>
-    <div class="sub">${escapeHtml(t.brand)} &middot; ${escapeHtml(t.type.slice(0,44))} &middot; EDP ${escapeHtml(t.edp)}</div>
-    ${figCutter(t)}
-    <table class="tool-dims">${rows}</table>
-  </div>`;
-}
-
 function renderToolFigure(){
   const col = document.getElementById('toolFigure');
   if(!col) return;
   const portF = document.getElementById('searchPort').value;
   const brandF = document.getElementById('searchBrand').value;
   const body = document.querySelector('.search-body');
-  const sel = selectedToolId ? tools.find(t=>t.id===selectedToolId) : null;
-  if(sel){
-    const setW = (on)=>{ if(body) body.className = on ? 'search-body wide' : 'search-body'; };
-    col.className = 'figure-col on single';
-    setW(true);
-    col.innerHTML = figCutterCard(sel);
-    return;
-  }
   const setWide = (on)=>{ if(body) body.className = on ? 'search-body wide' : 'search-body'; };
   if(!portF || brandF !== 'SCT'){ col.className='figure-col'; col.innerHTML=''; setWide(false); return; }
 
@@ -1131,9 +1049,6 @@ function refreshTypeList(){
   if(types.includes(prevType)) searchSel.value = prevType;
   else searchSel.value = '';
 
-  document.getElementById('typeList').innerHTML =
-    [...new Set(tools.map(t=>t.type))].sort().map(t=>`<option value="${escapeHtml(t)}">`).join('');
-
   const brands = [...new Set(tools.map(t=>t.brand))].sort((a,b)=>{
     if(a==='MA Ford') return -1;
     if(b==='MA Ford') return 1;
@@ -1152,19 +1067,25 @@ function escapeHtml(s){
 
 function showStatus(id, msg, kind){
   const el = document.getElementById(id);
+  if(!el) return;
   el.innerHTML = `<div class="status ${kind}">${escapeHtml(msg)}</div>`;
   setTimeout(()=>{ el.innerHTML=''; }, 3500);
 }
 
 // ---- Tabs ----
-document.querySelectorAll('.tab').forEach(tab=>{
-  tab.addEventListener('click', ()=>{
-    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
-    tab.classList.add('active');
-    ['search','add','ports','threads','import'].forEach(name=>{
-      document.getElementById('tab-'+name).style.display = (name===tab.dataset.tab) ? 'block' : 'none';
-    });
+const TABS = ['search','feeds','ports','threads','import'];
+
+function switchTab(name){
+  if(!TABS.includes(name)) return;
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active', t.dataset.tab === name));
+  TABS.forEach(n=>{
+    document.getElementById('tab-'+n).style.display = (n === name) ? 'block' : 'none';
   });
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
+document.querySelectorAll('.tab').forEach(tab=>{
+  tab.addEventListener('click', ()=>switchTab(tab.dataset.tab));
 });
 
 
@@ -1251,7 +1172,7 @@ function renderResults(){
     const hasPrice = t.price !== '' && !isNaN(parseFloat(t.price));
     const isBest = hasPrice && i === list.findIndex(x=>x.price!=='' && !isNaN(parseFloat(x.price)));
     return `
-    <div class="result ${isBest ? 'best':''}${t.id===selectedToolId ? ' picked':''}" onclick="pickTool('${t.id}')">
+    <div class="result ${isBest ? 'best':''}">
       ${isBest ? '<div class="badge">BEST PRICE</div>' : ''}
       <div class="result-top">
         <div class="brand">${escapeHtml(t.brand)}${t.coolant==='Yes' ? ' <span style="font-size:10px;background:#0d3d5c;color:#7fd4ff;padding:2px 6px;border-radius:8px;vertical-align:middle;">COOLANT-THRU</span>' : (t.coolant==='No' ? ' <span style="font-size:10px;background:#3a3a3a;color:#bbb;padding:2px 6px;border-radius:8px;vertical-align:middle;">NO COOLANT</span>' : '')}</div>
@@ -1263,7 +1184,8 @@ function renderResults(){
         ${t.notes ? '<br>'+escapeHtml(t.notes) : ''}
       </div>
       <div class="actions">
-        <button class="secondary" onclick="event.stopPropagation();deleteTool('${t.id}')">Delete</button>
+        <button class="secondary" onclick="feedsFromTool('${t.id}')">Speed &amp; Feed</button>
+        <button class="secondary" onclick="deleteTool('${t.id}')">Delete</button>
       </div>
     </div>
   `;}).join('');
@@ -1286,33 +1208,211 @@ document.getElementById('searchPitch').addEventListener('change', renderResults)
 document.getElementById('searchPort').addEventListener('change', ()=>{ renderResults(); renderToolFigure(); });
 document.getElementById('searchKeyword').addEventListener('input', renderResults);
 
-// ---- Add tool ----
-document.getElementById('saveBtn').addEventListener('click', async ()=>{
-  const brand = document.getElementById('f_brand').value.trim();
-  const type = document.getElementById('f_type').value.trim();
-  const dia = document.getElementById('f_dia').value.trim();
-  const edp = document.getElementById('f_edp').value.trim();
-  const price = document.getElementById('f_price').value.trim();
-  const loc = document.getElementById('f_loc').value.trim();
-  const neckdia = document.getElementById('f_neckdia').value.trim();
-  const coolant = document.getElementById('f_coolant').value;
-  const specs = document.getElementById('f_specs').value.trim();
-  const notes = document.getElementById('f_notes').value.trim();
+document.getElementById('resetSearchBtn').addEventListener('click', ()=>{
+  // clear values first — refreshTypeList/refreshPitchList/refreshPortList
+  // preserve whatever is currently selected, so they must see a blank slate
+  ['searchBrand','searchType','searchDia','searchLoc','searchCoolant','searchPitch','searchPort','searchKeyword']
+    .forEach(id=>{ const el = document.getElementById(id); if(el) el.value = ''; });
 
-  if(!brand || !type || !dia || !edp){
-    showStatus('addStatus', 'Please fill in brand, type, diameter, and EDP#.', 'err');
+  refreshTypeList();
+  refreshPitchList();
+  refreshPortList();
+  renderResults();
+  renderToolFigure();
+  updateSctReference();
+
+  document.getElementById('tab-search').scrollIntoView({behavior:'smooth', block:'start'});
+});
+
+// ---- Speed & feed ----
+const FS_FIELDS = ['fs_op','fs_maxrpm','fs_dia','fs_flutes','fs_sfm','fs_fpt','fs_woc','fs_doc'];
+const LS_FS = 'tc_fs_presets_v1';
+
+function fsNum(id){
+  const raw = (document.getElementById(id).value || '').trim();
+  if(raw === '') return NaN;
+  const n = parseFloat(raw);
+  return isFinite(n) ? n : NaN;
+}
+
+// pull a flute count out of whatever the catalog put in specs / type / notes
+function fluteCount(t){
+  const hay = [t.specs, t.type, t.notes].join(' ');
+  let m = hay.match(/(\d+)\s*(?:FL\b|FLT\b|-?\s*flutes?\b)/i);
+  if(m) return parseInt(m[1], 10);
+  m = hay.match(/\b(\d+)\s*-?\s*(?:fluted)\b/i);
+  return m ? parseInt(m[1], 10) : null;
+}
+
+function fsSyncMode(){
+  const drill = document.getElementById('fs_op').value === 'drill';
+  document.getElementById('fs_feedLabel').innerHTML =
+    drill ? 'Feed &mdash; IPR (in / rev)' : 'FPT &mdash; chip load (in / tooth)';
+  document.getElementById('fs_fpt').placeholder = drill ? 'e.g. 0.0060' : 'e.g. 0.0025';
+  document.getElementById('fs_engageRow').style.display = drill ? 'none' : '';
+  document.getElementById('fs_flutesField').style.display = drill ? 'none' : '';
+}
+
+function fsCalc(){
+  const out = document.getElementById('fs_out');
+  const drill = document.getElementById('fs_op').value === 'drill';
+  const D = fsNum('fs_dia'), SFM = fsNum('fs_sfm'), FEED = fsNum('fs_fpt');
+  const MAX = fsNum('fs_maxrpm');
+  let Z = fsNum('fs_flutes'), WOC = fsNum('fs_woc'), DOC = fsNum('fs_doc');
+
+  if(!(D > 0) || !(SFM > 0)){
+    out.innerHTML = `<div class="panel"><div class="empty">Enter a tool diameter and the catalog SFM to get RPM. Add the chip load for feed rate.</div></div>`;
     return;
   }
 
-  added.push({id:uid(), brand, type, diameter:dia, edp, price, loc, neckdia, coolant, specs, notes});
-  saveLocal();
-  rebuild();
+  const rpmIdeal = (SFM * 12) / (Math.PI * D);
+  const capped = MAX > 0 && rpmIdeal > MAX;
+  const rpm = capped ? MAX : rpmIdeal;
+  const sfmActual = (Math.PI * D * rpm) / 12;
 
-  ['f_brand','f_type','f_dia','f_edp','f_price','f_loc','f_neckdia','f_coolant','f_specs','f_notes'].forEach(id=>{
-    document.getElementById(id).value='';
+  const warn = [];
+  let ipm = NaN, ipr = NaN, rctf = 1, fptAdj = NaN, mrr = NaN;
+
+  if(drill){
+    if(FEED > 0){ ipr = FEED; ipm = rpm * ipr; mrr = Math.PI / 4 * D * D * ipm; }
+  }else{
+    if(!(Z >= 1)) Z = NaN;
+    if(WOC > D){ WOC = D; warn.push('Radial WOC was larger than the cutter — treated as a full slot.'); }
+    if(WOC > 0 && WOC < D / 2){
+      rctf = D / (2 * Math.sqrt(D * WOC - WOC * WOC));
+    }
+    if(FEED > 0 && Z >= 1){
+      fptAdj = FEED * rctf;
+      ipr = Z * fptAdj;
+      ipm = rpm * ipr;
+      const widthForMrr = WOC > 0 ? WOC : D;
+      if(DOC > 0) mrr = widthForMrr * DOC * ipm;
+    }
+  }
+
+  const f = (n, d) => isFinite(n) ? n.toFixed(d) : '—';
+  const big = (k, v, u, hot) =>
+    `<div class="cell${hot ? ' hot' : ''}"><div class="k">${k}</div><div class="v">${v}</div><div class="u">${u}</div></div>`;
+  const g = (k, v) => `<div class="g"><div class="k">${k}</div><div class="v">${v}</div></div>`;
+
+  if(capped) warn.push(`Catalog SFM wants ${Math.round(rpmIdeal).toLocaleString()} RPM — held at your ${Math.round(MAX).toLocaleString()} RPM limit, so the tool is actually running ${Math.round(sfmActual)} SFM.`);
+  if(rctf > 1.001) warn.push(`Radial chip thinning applied: WOC is under half the cutter, so feed per tooth is stepped up ${rctf.toFixed(2)}× to keep the real chip at ${f(FEED, 4)}".`);
+  if(!drill && FEED > 0 && !(Z >= 1)) warn.push('Enter a flute count to get a feed rate.');
+
+  const grid = drill
+    ? g('Actual SFM', Math.round(sfmActual)) + g('Feed / rev', f(ipr, 4) + '"') +
+      g('Per flute', Z >= 1 && isFinite(ipr) ? f(ipr / Z, 5) + '"' : '—') +
+      g('MRR', isFinite(mrr) ? f(mrr, 3) + ' in³/min' : '—')
+    : g('Actual SFM', Math.round(sfmActual)) + g('Feed / rev', isFinite(ipr) ? f(ipr, 4) + '"' : '—') +
+      g('Chip thinning', rctf > 1.001 ? rctf.toFixed(2) + '×' : 'none') +
+      g('Adjusted FPT', isFinite(fptAdj) ? f(fptAdj, 5) + '"' : '—') +
+      g('MRR', isFinite(mrr) ? f(mrr, 3) + ' in³/min' : '—');
+
+  out.innerHTML = `<div class="panel">
+    <div class="fs-big">
+      ${big('Spindle speed', Math.round(rpm).toLocaleString(), 'RPM', true)}
+      ${big('Feed rate', isFinite(ipm) ? f(ipm, 1) : '—', 'IPM', true)}
+    </div>
+    <div class="fs-grid">${grid}</div>
+    ${warn.map(w=>`<div class="fs-warn">${escapeHtml(w)}</div>`).join('')}
+    <div class="fs-hint">RPM = SFM × 12 ÷ (π × D). Feed = RPM × ${drill ? 'IPR' : 'flutes × FPT'}. These are the catalog numbers you typed, run through the formulas — no material assumptions built in.</div>
+  </div>`;
+}
+
+FS_FIELDS.forEach(id=>{
+  const el = document.getElementById(id);
+  el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'input', ()=>{
+    if(id === 'fs_op') fsSyncMode();
+    fsCalc();
   });
-  showStatus('addStatus', `Saved on this device. ${brand} ${type} ⌀${dia}" is in the crib.`, 'ok');
 });
+
+document.getElementById('fs_clear').addEventListener('click', ()=>{
+  FS_FIELDS.forEach(id=>{
+    const el = document.getElementById(id);
+    if(el.tagName === 'SELECT') el.selectedIndex = 0; else el.value = '';
+  });
+  document.getElementById('fs_presetSel').value = '';
+  document.getElementById('fs_presetName').value = '';
+  fsSyncMode();
+  fsCalc();
+});
+
+// jump from a search hit straight into the calculator
+window.feedsFromTool = function(id){
+  const t = tools.find(x=>x.id === id);
+  if(!t) return;
+  const d = parseFloat(t.diameter);
+  const isDrill = /drill|ream/i.test(t.type || '');
+  document.getElementById('fs_op').value = isDrill ? 'drill' : 'mill';
+  fsSyncMode();
+  if(!isNaN(d)) document.getElementById('fs_dia').value = d;
+  const fl = fluteCount(t);
+  if(fl) document.getElementById('fs_flutes').value = fl;
+  switchTab('feeds');
+  fsCalc();
+};
+
+// ---- saved SFM / feed setups (this device only) ----
+function fsPresets(){
+  try{ const r = localStorage.getItem(LS_FS); return r ? JSON.parse(r) : []; }
+  catch(e){ return []; }
+}
+function fsRenderPresets(keep){
+  const sel = document.getElementById('fs_presetSel');
+  const list = fsPresets();
+  sel.innerHTML = '<option value="">\u2014 pick a saved setup \u2014</option>' +
+    list.map((p, i)=>`<option value="${i}">${escapeHtml(p.name)}</option>`).join('');
+  if(keep !== undefined && list[keep]) sel.value = String(keep);
+}
+document.getElementById('fs_presetSave').addEventListener('click', ()=>{
+  const name = document.getElementById('fs_presetName').value.trim();
+  const sfm = fsNum('fs_sfm'), fpt = fsNum('fs_fpt');
+  if(!name){ showStatus('fs_presetStatus', 'Give the setup a name first.', 'err'); return; }
+  if(!(sfm > 0) || !(fpt > 0)){ showStatus('fs_presetStatus', 'Enter SFM and a chip load before saving.', 'err'); return; }
+  const list = fsPresets();
+  const rec = {
+    name,
+    op: document.getElementById('fs_op').value,
+    sfm: String(sfm),
+    fpt: String(fpt),
+    flutes: document.getElementById('fs_flutes').value.trim()
+  };
+  const at = list.findIndex(p=>p.name.toLowerCase() === name.toLowerCase());
+  if(at >= 0) list[at] = rec; else list.push(rec);
+  list.sort((a,b)=>a.name.localeCompare(b.name));
+  try{ localStorage.setItem(LS_FS, JSON.stringify(list)); }
+  catch(e){ showStatus('fs_presetStatus', 'Device storage is full — setup not saved.', 'err'); return; }
+  fsRenderPresets(list.findIndex(p=>p.name === name));
+  showStatus('fs_presetStatus', at >= 0 ? `Updated "${name}".` : `Saved "${name}".`, 'ok');
+});
+document.getElementById('fs_presetSel').addEventListener('change', (e)=>{
+  const p = fsPresets()[parseInt(e.target.value, 10)];
+  if(!p) return;
+  document.getElementById('fs_op').value = p.op || 'mill';
+  fsSyncMode();
+  document.getElementById('fs_sfm').value = p.sfm || '';
+  document.getElementById('fs_fpt').value = p.fpt || '';
+  if(p.flutes) document.getElementById('fs_flutes').value = p.flutes;
+  document.getElementById('fs_presetName').value = p.name;
+  fsCalc();
+});
+document.getElementById('fs_presetDel').addEventListener('click', ()=>{
+  const sel = document.getElementById('fs_presetSel');
+  const i = parseInt(sel.value, 10);
+  const list = fsPresets();
+  if(isNaN(i) || !list[i]){ showStatus('fs_presetStatus', 'Pick a saved setup to delete.', 'err'); return; }
+  const gone = list[i].name;
+  list.splice(i, 1);
+  try{ localStorage.setItem(LS_FS, JSON.stringify(list)); }catch(e){}
+  fsRenderPresets();
+  document.getElementById('fs_presetName').value = '';
+  showStatus('fs_presetStatus', `Deleted "${gone}".`, 'ok');
+});
+
+fsSyncMode();
+fsRenderPresets();
+fsCalc();
 
 // ---- Bulk paste ----
 document.getElementById('pasteBtn').addEventListener('click', async ()=>{
