@@ -492,8 +492,8 @@
       </div>
       <div class="row">
         <div class="field">
-          <label>Diameter (in)</label>
-          <input id="searchDia" type="number" step="0.001" placeholder='e.g. 0.5'>
+          <label>Diameter (in) &mdash; narrows as you type</label>
+          <input id="searchDia" type="text" inputmode="decimal" placeholder='.12 shows .120-.129'>
         </div>
         <div class="field">
           <label>Min. LOC / Neck Length (in)</label>
@@ -1256,10 +1256,26 @@ document.querySelectorAll('.tab').forEach(tab=>{
   });
 
   // ---- Search ----
+// The diameter box narrows as you type. ".12" matches .120 through .129,
+// ".125" tightens to .1250-.1259, ".1250" tighter still. A fraction pins one size.
+function diaWindow(raw){
+  const s = String(raw == null ? '' : raw).trim().replace(/"/g, '');
+  if(!s) return null;
+  const v = fracVal(s);
+  if(v == null || isNaN(v)) return null;
+  if(s.includes('/')) return {lo: v - 0.0005, hi: v + 0.0005, target: v};   // 1/2, 1-1/4 = exact size
+  const body = s.replace(/\.$/, '');
+  const dot = body.indexOf('.');
+  const dec = dot === -1 ? 0 : body.length - dot - 1;
+  const step = Math.pow(10, -dec);
+  return {lo: v - 1e-9, hi: v + step - 1e-9, target: v};
+}
+
 function renderResults(){
   const brandF = document.getElementById('searchBrand').value;
   const typeF = document.getElementById('searchType').value.trim().toLowerCase();
   const diaF = document.getElementById('searchDia').value.trim();
+  const diaWin = diaWindow(diaF);
   const locF = document.getElementById('searchLoc').value.trim();
   const coolantF = document.getElementById('searchCoolant').value;
   const kwF = document.getElementById('searchKeyword').value.trim().toLowerCase();
@@ -1272,10 +1288,9 @@ function renderResults(){
     if(pitchF && !pitchMatches(t, pitchF)) return false;
     if(portF){ const pp = toolPort(t); if(!pp || pp.key !== portF) return false; }
     if(coolantF && (t.coolant||'') !== coolantF) return false;
-    if(diaF !== ''){
-      const target = parseFloat(diaF);
-      if(isNaN(target)) return true;
-      if(Math.abs(parseFloat(t.diameter) - target) > 0.0005) return false;
+    if(diaWin){
+      const d = parseFloat(t.diameter);
+      if(isNaN(d) || d < diaWin.lo || d >= diaWin.hi) return false;
     }
     if(locF !== ''){
       const minLoc = parseFloat(locF);
@@ -1289,10 +1304,14 @@ function renderResults(){
     return true;
   });
 
+  const priceOf = t => t.price !== '' && !isNaN(parseFloat(t.price)) ? parseFloat(t.price) : Infinity;
   list.sort((a,b)=>{
-    const pa = a.price !== '' && !isNaN(parseFloat(a.price)) ? parseFloat(a.price) : Infinity;
-    const pb = b.price !== '' && !isNaN(parseFloat(b.price)) ? parseFloat(b.price) : Infinity;
-    return pa - pb;
+    if(diaWin){
+      const da = Math.abs(parseFloat(a.diameter) - diaWin.target);
+      const db = Math.abs(parseFloat(b.diameter) - diaWin.target);
+      if(Math.abs(da - db) > 1e-9) return da - db;   // nearest size first
+    }
+    return priceOf(a) - priceOf(b);
   });
 
   const resultsEl = document.getElementById('results');
