@@ -162,6 +162,11 @@
   .result .edp{font-family:var(--mono);color:var(--text);}
   .result .actions{margin-top:8px;display:flex;gap:8px;}
   .result .actions button{padding:6px 10px;font-size:12px;}
+  .catlink{
+    display:inline-block;padding:6px 10px;font-size:12px;font-weight:600;
+    background:transparent;border:1px solid var(--line);border-radius:7px;
+    color:var(--accent);text-decoration:none;line-height:normal;
+  }
 
   .empty{color:var(--muted);text-align:center;padding:30px 10px;font-size:13.5px;}
   .count{color:var(--muted);font-size:12px;margin-bottom:8px;}
@@ -1323,6 +1328,10 @@ function renderResults(){
       </div>
       <div class="actions">
         <button class="secondary" onclick="event.stopPropagation();feedsFromTool('${t.id}')">Speed &amp; Feed</button>
+        ${(()=>{ const L = catalogLink(t); return L
+          ? `<a class="catlink" href="${L.url}" target="_blank" rel="noopener" onclick="event.stopPropagation()"
+               title="${L.verified ? 'Opens the ' + escapeHtml(L.label) + ' page for this EDP' : 'Web search — no confirmed direct link for this brand yet'}">Catalog \u2197</a>`
+          : ''; })()}
         <button class="secondary" onclick="event.stopPropagation();deleteTool('${t.id}')">Delete</button>
       </div>
     </div>
@@ -1363,6 +1372,35 @@ document.getElementById('resetSearchBtn').addEventListener('click', ()=>{
 
   document.getElementById('tab-search').scrollIntoView({behavior:'smooth', block:'start'});
 });
+
+// ---- catalog links (brandlinks.json, optional file) ----
+let brandLinks = null;
+
+fetch('brandlinks.json', {cache:'no-cache'})
+  .then(r=>r.ok ? r.json() : null)
+  .then(d=>{ if(d && Array.isArray(d.brands)){ brandLinks = d; renderResults(); renderToolFigure(); } })
+  .catch(()=>{});
+
+const normBrand = b => (b || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+
+function catalogLink(t){
+  if(!brandLinks) return null;
+  const edp = String(t.edp == null ? '' : t.edp).trim();
+  if(!edp) return null;
+  const nb = normBrand(t.brand);
+  const hit = brandLinks.brands.find(b=>(b.match || []).some(m=>normBrand(m) === nb));
+  const tmpl = (hit && hit.url) || brandLinks.fallback;
+  if(!tmpl) return null;
+  const q = encodeURIComponent(`${t.brand || ''} ${edp} speeds and feeds`.trim());
+  return {
+    url: tmpl.replace('{edp5}', edp.padStart(5, '0'))
+             .replace('{edplower}', encodeURIComponent(edp.toLowerCase()))
+             .replace('{edp}', encodeURIComponent(edp))
+             .replace('{q}', q),
+    label: hit ? hit.label : 'Catalog',
+    verified: !!(hit && hit.verified)
+  };
+}
 
 // ---- Speed & feed ----
 const FS_FIELDS = ['fs_op','fs_maxrpm','fs_hp','fs_dia','fs_flutes','fs_sfm','fs_fpt','fs_woc','fs_doc'];

@@ -1,0 +1,92 @@
+{
+  "version": 1,
+  "note": "Per-brand catalog links. Placeholders: {edp} = EDP as stored, {edplower} = lowercased, {edp5} = zero-padded to 5 digits, {q} = URL-encoded 'brand EDP speeds and feeds' search. 'verified' marks patterns confirmed against a live tool page; the rest fall back to a web search, which always resolves. Drop a real pattern into 'url' and the app picks it up with no code change. 'match' values are compared with punctuation stripped, so they must cover the exact brand strings in tools.json.",
+  "fallback": "https://www.google.com/search?q={q}",
+  "brands": [
+    {
+      "match": [
+        "harvey",
+        "harveytool",
+        "harvey tool"
+      ],
+      "label": "Harvey",
+      "url": "https://www.harveytool.com/products/tool-details-{edplower}",
+      "verified": true,
+      "note": "Coating suffix is part of the URL and must be lowercase: 859415-C6 -> tool-details-859415-c6"
+    },
+    {
+      "match": [
+        "helical",
+        "helicaltool",
+        "helical solutions"
+      ],
+      "label": "Helical",
+      "url": "https://www.helicaltool.com/products/tool-details-{edp5}",
+      "verified": true
+    },
+    {
+      "match": [
+        "maford",
+        "ma ford",
+        "m a ford",
+        "m.a. ford"
+      ],
+      "label": "M.A. Ford",
+      "url": "https://www.maford.com/searchtools/{edp}",
+      "verified": true
+    },
+    {
+      "match": [
+        "sct",
+        "scientific cutting tools"
+      ],
+      "label": "SCT",
+      "url": "https://www.google.com/search?q={q}",
+      "verified": false
+    },
+    {
+      "match": [
+        "precision twist",
+        "precisiontwist",
+        "ptd",
+        "precision twist drill dormer",
+        "precision twist drill (dormer)",
+        "dormer",
+        "dormer pramet"
+      ],
+      "label": "Precision Twist",
+      "url": "https://www.google.com/search?q={q}",
+      "verified": false
+    },
+    {
+      "match": [
+        "internal tool",
+        "internaltool",
+        "iti"
+      ],
+      "label": "Internal Tool",
+      "url": "https://www.google.com/search?q={q}",
+      "verified": false
+    },
+    {
+      "match": [
+        "ultra-tool",
+        "ultra tool",
+        "ultratool"
+      ],
+      "label": "Ultra-Tool",
+      "url": "https://www.google.com/search?q={q}",
+      "verified": false
+    },
+    {
+      "match": [
+        "guhring",
+        "gühring",
+        "guehring"
+      ],
+      "label": "Gühring",
+      "url": "https://www.google.com/search?q={q}",
+      "verified": false
+    }
+  ]
+}
