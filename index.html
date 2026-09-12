@@ -140,6 +140,22 @@
   }
   .fs-hint{margin-top:11px;font-size:12px;color:var(--muted);line-height:1.55;}
 
+  /* ---- available-size strip ---- */
+  #sizeStrip{margin-bottom:10px;}
+  .sizebar{
+    background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:9px 10px;
+  }
+  .sizebar .lead{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:7px;}
+  .sizechips{display:flex;flex-wrap:wrap;gap:6px;}
+  .sizechip{
+    font-family:var(--mono);font-size:13px;padding:6px 9px;border-radius:7px;cursor:pointer;
+    background:var(--panel);border:1px solid var(--line);color:var(--text);white-space:nowrap;
+  }
+  .sizechip .n{font-size:10.5px;color:var(--muted);margin-left:4px;}
+  .sizechip.on{border-color:var(--accent);color:var(--accent);}
+  .sizechip.on .n{color:var(--accent);}
+  .sizebar .more{font-size:11.5px;color:var(--muted);margin-top:7px;line-height:1.5;}
+
   .result{
     background:var(--panel2);
     border:1px solid var(--line);
@@ -532,6 +548,7 @@
     <div class="search-body">
       <div class="results-col">
         <div class="count" id="resultCount"></div>
+        <div id="sizeStrip"></div>
         <div id="results"></div>
       </div>
       <div class="figure-col" id="toolFigure"></div>
@@ -1271,6 +1288,51 @@ function diaWindow(raw){
   return {lo: v - 1e-9, hi: v + step - 1e-9, target: v};
 }
 
+const SIZE_CHIP_CAP = 72;
+
+// Truncate, don't round — a chip must cover exactly the same window that
+// clicking it opens, or the count on the chip won't match the result list.
+function diaKey(v){
+  return (Math.floor(v * 10000 + 1e-9) / 10000).toFixed(4);
+}
+const diaLabel = k => k.replace(/^0\./, '.');
+
+// show which sizes actually exist in the current result set, so you can
+// pick one instead of guessing at digits
+function renderSizeStrip(list, diaF){
+  const el = document.getElementById('sizeStrip');
+  const counts = new Map();
+  list.forEach(t=>{
+    const d = parseFloat(t.diameter);
+    if(isNaN(d)) return;
+    const k = diaKey(d);
+    counts.set(k, (counts.get(k) || 0) + 1);
+  });
+  if(counts.size < 2){ el.innerHTML = ''; return; }
+
+  const keys = [...counts.keys()].sort((a,b)=>parseFloat(a) - parseFloat(b));
+  const cur = diaF.trim().replace(/^\./, '0.');
+
+  if(keys.length > SIZE_CHIP_CAP){
+    el.innerHTML = `<div class="sizebar"><div class="lead">${keys.length} sizes available</div>` +
+      `<div class="more">Too many to list. Type another digit in the diameter box — or a whole fraction like 1/4 — to see them.</div></div>`;
+    return;
+  }
+
+  el.innerHTML = `<div class="sizebar">
+    <div class="lead">${keys.length} sizes available &mdash; tap one</div>
+    <div class="sizechips">${keys.map(k=>
+      `<button type="button" class="sizechip${k === cur ? ' on' : ''}" onclick="pickSize('${k}')">${diaLabel(k)}<span class="n">${counts.get(k)}</span></button>`
+    ).join('')}</div>
+  </div>`;
+}
+
+window.pickSize = function(k){
+  const box = document.getElementById('searchDia');
+  box.value = (box.value.trim().replace(/^\./, '0.') === k) ? '' : k;   // tap again to clear
+  renderResults();
+};
+
 function renderResults(){
   const brandF = document.getElementById('searchBrand').value;
   const typeF = document.getElementById('searchType').value.trim().toLowerCase();
@@ -1319,16 +1381,19 @@ function renderResults(){
 
   if(tools.length === 0){
     countEl.textContent = '';
+    document.getElementById('sizeStrip').innerHTML = '';
     resultsEl.innerHTML = `<div class="empty">No tools saved yet. Add a few tools or import a CSV to get started.</div>`;
     return;
   }
   if(list.length === 0){
     countEl.textContent = '';
+    document.getElementById('sizeStrip').innerHTML = '';
     resultsEl.innerHTML = `<div class="empty">No matches. Try clearing a filter.</div>`;
     return;
   }
 
-  countEl.textContent = `${list.length} match${list.length===1?'':'es'} — cheapest first`;
+  countEl.textContent = `${list.length} match${list.length===1?'':'es'} — ${diaWin ? 'nearest size first' : 'cheapest first'}`;
+  renderSizeStrip(list, diaF);
 
   resultsEl.innerHTML = list.map((t,i)=>{
     const hasPrice = t.price !== '' && !isNaN(parseFloat(t.price));
@@ -1381,6 +1446,7 @@ document.getElementById('resetSearchBtn').addEventListener('click', ()=>{
     .forEach(id=>{ const el = document.getElementById(id); if(el) el.value = ''; });
 
   selectedToolId = null;   // drop the picked cutter and its drawing
+  document.getElementById('sizeStrip').innerHTML = '';
 
   refreshTypeList();
   refreshPitchList();
