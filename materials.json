@@ -1,0 +1,310 @@
+{
+  "version": 2,
+  "note": "Conservative starting points for coated solid carbide with flood coolant. These are NOT from a specific tooling catalog. Overwrite sfm and fptPctDia with the numbers off the tool's own catalog page or with your proven shop values. fptPctDia is chip load per tooth as a fraction of cutter diameter, so FPT = fptPctDia x D. iprPctDia is drill feed per revolution as a fraction of drill diameter.",
+  "powerNote": "unitPower is hp per cubic inch per minute for a sharp tool. Required spindle HP = MRR x unitPower x toolWearFactor / spindleEfficiency. Tune the two factors below to your machines.",
+  "power": {
+    "spindleEfficiency": 0.9,
+    "toolWearFactor": 1.25
+  },
+  "materials": [
+    {
+      "group": "Aluminum",
+      "name": "6061-T6 / 6082",
+      "mill": {
+        "sfm": 800,
+        "fptPctDia": 0.01
+      },
+      "drill": {
+        "sfm": 400,
+        "iprPctDia": 0.02
+      },
+      "unitPower": 0.3
+    },
+    {
+      "group": "Aluminum",
+      "name": "7075-T6 / T651",
+      "mill": {
+        "sfm": 800,
+        "fptPctDia": 0.01
+      },
+      "drill": {
+        "sfm": 400,
+        "iprPctDia": 0.02
+      },
+      "unitPower": 0.33
+    },
+    {
+      "group": "Aluminum",
+      "name": "2024-T3 / T351",
+      "mill": {
+        "sfm": 700,
+        "fptPctDia": 0.009
+      },
+      "drill": {
+        "sfm": 350,
+        "iprPctDia": 0.018
+      },
+      "unitPower": 0.33
+    },
+    {
+      "group": "Aluminum",
+      "name": "A356 / cast aluminum",
+      "mill": {
+        "sfm": 600,
+        "fptPctDia": 0.009
+      },
+      "drill": {
+        "sfm": 300,
+        "iprPctDia": 0.018
+      },
+      "unitPower": 0.3
+    },
+    {
+      "group": "Stainless",
+      "name": "303 free-machining",
+      "mill": {
+        "sfm": 350,
+        "fptPctDia": 0.006
+      },
+      "drill": {
+        "sfm": 200,
+        "iprPctDia": 0.014
+      },
+      "unitPower": 1.3
+    },
+    {
+      "group": "Stainless",
+      "name": "304 / 304L",
+      "mill": {
+        "sfm": 250,
+        "fptPctDia": 0.005
+      },
+      "drill": {
+        "sfm": 130,
+        "iprPctDia": 0.012
+      },
+      "unitPower": 1.45
+    },
+    {
+      "group": "Stainless",
+      "name": "316 / 316L",
+      "mill": {
+        "sfm": 250,
+        "fptPctDia": 0.005
+      },
+      "drill": {
+        "sfm": 130,
+        "iprPctDia": 0.012
+      },
+      "unitPower": 1.45
+    },
+    {
+      "group": "Stainless",
+      "name": "17-4 PH, annealed / H1150",
+      "mill": {
+        "sfm": 300,
+        "fptPctDia": 0.005
+      },
+      "drill": {
+        "sfm": 160,
+        "iprPctDia": 0.012
+      },
+      "unitPower": 1.4
+    },
+    {
+      "group": "Stainless",
+      "name": "17-4 PH, H900 (~40 Rc)",
+      "mill": {
+        "sfm": 220,
+        "fptPctDia": 0.004
+      },
+      "drill": {
+        "sfm": 110,
+        "iprPctDia": 0.01
+      },
+      "unitPower": 1.65
+    },
+    {
+      "group": "Stainless",
+      "name": "15-5 PH, H1025",
+      "mill": {
+        "sfm": 250,
+        "fptPctDia": 0.005
+      },
+      "drill": {
+        "sfm": 130,
+        "iprPctDia": 0.011
+      },
+      "unitPower": 1.5
+    },
+    {
+      "group": "Steel",
+      "name": "1018 / 12L14 low carbon",
+      "mill": {
+        "sfm": 450,
+        "fptPctDia": 0.007
+      },
+      "drill": {
+        "sfm": 250,
+        "iprPctDia": 0.016
+      },
+      "unitPower": 1.0
+    },
+    {
+      "group": "Steel",
+      "name": "4140 / 4340, 28-32 Rc",
+      "mill": {
+        "sfm": 350,
+        "fptPctDia": 0.006
+      },
+      "drill": {
+        "sfm": 200,
+        "iprPctDia": 0.014
+      },
+      "unitPower": 1.3
+    },
+    {
+      "group": "Steel",
+      "name": "A2 / D2 tool steel, annealed",
+      "mill": {
+        "sfm": 250,
+        "fptPctDia": 0.005
+      },
+      "drill": {
+        "sfm": 130,
+        "iprPctDia": 0.011
+      },
+      "unitPower": 1.45
+    },
+    {
+      "group": "Steel",
+      "name": "Hardened 45-50 Rc",
+      "mill": {
+        "sfm": 150,
+        "fptPctDia": 0.003
+      },
+      "drill": {
+        "sfm": 70,
+        "iprPctDia": 0.007
+      },
+      "unitPower": 1.9
+    },
+    {
+      "group": "Titanium",
+      "name": "Ti-6Al-4V",
+      "mill": {
+        "sfm": 200,
+        "fptPctDia": 0.005
+      },
+      "drill": {
+        "sfm": 100,
+        "iprPctDia": 0.01
+      },
+      "unitPower": 1.2
+    },
+    {
+      "group": "Titanium",
+      "name": "CP titanium, grade 2",
+      "mill": {
+        "sfm": 250,
+        "fptPctDia": 0.006
+      },
+      "drill": {
+        "sfm": 130,
+        "iprPctDia": 0.012
+      },
+      "unitPower": 1.0
+    },
+    {
+      "group": "Nickel alloy",
+      "name": "Inconel 718",
+      "mill": {
+        "sfm": 80,
+        "fptPctDia": 0.0035
+      },
+      "drill": {
+        "sfm": 40,
+        "iprPctDia": 0.008
+      },
+      "unitPower": 2.1
+    },
+    {
+      "group": "Nickel alloy",
+      "name": "Inconel 625 / Hastelloy",
+      "mill": {
+        "sfm": 80,
+        "fptPctDia": 0.0035
+      },
+      "drill": {
+        "sfm": 40,
+        "iprPctDia": 0.008
+      },
+      "unitPower": 2.1
+    },
+    {
+      "group": "Nickel alloy",
+      "name": "Monel 400 / K500",
+      "mill": {
+        "sfm": 150,
+        "fptPctDia": 0.004
+      },
+      "drill": {
+        "sfm": 70,
+        "iprPctDia": 0.009
+      },
+      "unitPower": 1.5
+    },
+    {
+      "group": "Copper alloy",
+      "name": "Brass 360",
+      "mill": {
+        "sfm": 600,
+        "fptPctDia": 0.01
+      },
+      "drill": {
+        "sfm": 300,
+        "iprPctDia": 0.018
+      },
+      "unitPower": 0.6
+    },
+    {
+      "group": "Copper alloy",
+      "name": "Bronze / copper",
+      "mill": {
+        "sfm": 400,
+        "fptPctDia": 0.008
+      },
+      "drill": {
+        "sfm": 200,
+        "iprPctDia": 0.016
+      },
+      "unitPower": 0.75
+    },
+    {
+      "group": "Plastic",
+      "name": "Delrin / acetal / nylon",
+      "mill": {
+        "sfm": 1000,
+        "fptPctDia": 0.012
+      },
+      "drill": {
+        "sfm": 400,
+        "iprPctDia": 0.02
+      },
+      "unitPower": 0.1
+    },
+    {
+      "group": "Plastic",
+      "name": "PEEK / Torlon / G10",
+      "mill": {
+        "sfm": 600,
+        "fptPctDia": 0.009
+      },
+      "drill": {
+        "sfm": 250,
+        "iprPctDia": 0.014
+      },
+      "unitPower": 0.15
+    }
+  ]
+}

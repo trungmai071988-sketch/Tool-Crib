@@ -537,6 +537,12 @@
   <section id="tab-feeds" style="display:none;">
     <div class="panel">
       <div class="row">
+        <div class="field" style="flex:100%;">
+          <label>Material (fills SFM &amp; chip load &mdash; type over anything)</label>
+          <select id="fs_mat"><option value="">&mdash; none, I'll type the catalog values &mdash;</option></select>
+        </div>
+      </div>
+      <div class="row">
         <div class="field" style="flex:2;">
           <label>Operation</label>
           <select id="fs_op">
@@ -547,6 +553,10 @@
         <div class="field">
           <label>Max spindle RPM (optional)</label>
           <input id="fs_maxrpm" type="number" step="100" inputmode="numeric" placeholder="e.g. 12000">
+        </div>
+        <div class="field">
+          <label>Machine spindle HP (optional)</label>
+          <input id="fs_hp" type="number" step="0.1" inputmode="decimal" placeholder="e.g. 20">
         </div>
       </div>
       <div class="row">
@@ -1355,7 +1365,7 @@ document.getElementById('resetSearchBtn').addEventListener('click', ()=>{
 });
 
 // ---- Speed & feed ----
-const FS_FIELDS = ['fs_op','fs_maxrpm','fs_dia','fs_flutes','fs_sfm','fs_fpt','fs_woc','fs_doc'];
+const FS_FIELDS = ['fs_op','fs_maxrpm','fs_hp','fs_dia','fs_flutes','fs_sfm','fs_fpt','fs_woc','fs_doc'];
 const LS_FS = 'tc_fs_presets_v1';
 
 function fsNum(id){
@@ -1363,6 +1373,53 @@ function fsNum(id){
   if(raw === '') return NaN;
   const n = parseFloat(raw);
   return isFinite(n) ? n : NaN;
+}
+
+// ---- material starting points (materials.json, optional file) ----
+let fsMaterials = [];
+// overridden by the "power" block in materials.json
+let fsPower = {eff:0.90, wear:1.25};
+// once you type in SFM or chip load yourself, the material stops overwriting it
+let fsTouched = {fs_sfm:false, fs_fpt:false};
+
+fetch('materials.json', {cache:'no-cache'})
+  .then(r=>r.ok ? r.json() : null)
+  .then(d=>{
+    if(!d || !Array.isArray(d.materials)) return;
+    fsMaterials = d.materials;
+    if(d.power){
+      if(d.power.spindleEfficiency > 0) fsPower.eff  = d.power.spindleEfficiency;
+      if(d.power.toolWearFactor   > 0) fsPower.wear = d.power.toolWearFactor;
+    }
+    const sel = document.getElementById('fs_mat');
+    const groups = [...new Set(fsMaterials.map(m=>m.group || 'Other'))];
+    sel.innerHTML = '<option value="">\u2014 none, I\'ll type the catalog values \u2014</option>' +
+      groups.map(gp=>`<optgroup label="${escapeHtml(gp)}">` +
+        fsMaterials.map((m, i)=> (m.group || 'Other') === gp
+          ? `<option value="${i}">${escapeHtml(m.name)}</option>` : '').join('') +
+        `</optgroup>`).join('');
+  })
+  .catch(()=>{});
+
+function fsApplyMaterial(force){
+  const i = parseInt(document.getElementById('fs_mat').value, 10);
+  const m = fsMaterials[i];
+  if(!m) return;
+  const drill = document.getElementById('fs_op').value === 'drill';
+  const set = m[drill ? 'drill' : 'mill'];
+  if(!set) return;
+  const D = fsNum('fs_dia');
+
+  if(force || !fsTouched.fs_sfm){
+    if(set.sfm != null){ document.getElementById('fs_sfm').value = set.sfm; fsTouched.fs_sfm = false; }
+  }
+  if(force || !fsTouched.fs_fpt){
+    const pct = drill ? set.iprPctDia : set.fptPctDia;
+    if(pct != null && D > 0){
+      document.getElementById('fs_fpt').value = +(pct * D).toFixed(5);
+      fsTouched.fs_fpt = false;
+    }
+  }
 }
 
 function fsSyncMode(){
@@ -1408,6 +1465,21 @@ function fsCalc(){
     }
   }
 
+  // engagement angle and the chip the cutter actually sees
+  const engAng = (WOC > 0 && D > 0) ? Math.acos(Math.max(-1, Math.min(1, 1 - 2 * WOC / D))) * 180 / Math.PI
+               : (drill ? NaN : 180);
+  const actualChip = isFinite(fptAdj) ? fptAdj / rctf : NaN;
+
+  // required spindle HP — needs unit power, which rides along with the material
+  const matSel = fsMaterials[parseInt(document.getElementById('fs_mat').value, 10)];
+  const kp = matSel && matSel.unitPower > 0 ? matSel.unitPower : null;
+  const MHP = fsNum('fs_hp');
+  let hp = NaN, torque = NaN;
+  if(kp && isFinite(mrr)){
+    hp = mrr * kp * fsPower.wear / fsPower.eff;
+    torque = hp * 5252 / rpm;
+  }
+
   const f = (n, d) => isFinite(n) ? n.toFixed(d) : '—';
   const big = (k, v, u) => `<div class="cell hot"><div class="k">${k}</div><div class="v">${v}</div><div class="u">${u}</div></div>`;
   const g = (k, v) => `<div class="g"><div class="k">${k}</div><div class="v">${v}</div></div>`;
@@ -1415,15 +1487,31 @@ function fsCalc(){
   if(capped) warn.push(`Catalog SFM wants ${Math.round(rpmIdeal).toLocaleString()} RPM — held at your ${Math.round(MAX).toLocaleString()} RPM limit, so the tool is actually running ${Math.round(sfmActual)} SFM.`);
   if(rctf > 1.001) warn.push(`Radial chip thinning applied: WOC is under half the cutter, so feed per tooth is stepped up ${rctf.toFixed(2)}× to keep the real chip at ${f(FEED, 4)}".`);
   if(!drill && FEED > 0 && !(Z >= 1)) warn.push('Enter a flute count to get a feed rate.');
+  if(isFinite(hp) && MHP > 0 && hp > MHP) warn.push(`This cut wants ${hp.toFixed(2)} hp but the machine is ${MHP} hp — back off the DOC, the WOC, or the feed.`);
+  if(isFinite(mrr) && !kp) warn.push('Pick a material to get required horsepower — the unit power comes from materials.json.');
+
+  const matPicked = fsMaterials[parseInt(document.getElementById('fs_mat').value, 10)];
+  const matNote = matPicked && !(fsTouched.fs_sfm && fsTouched.fs_fpt)
+    ? `Starting values for ${escapeHtml(matPicked.name)} — check them against the tool's own catalog page before you cut.`
+    : 'These are the numbers you typed, run through the formulas — nothing is assumed about the material.';
+  const hpNote = isFinite(hp)
+    ? ` HP = MRR × ${kp} unit power × ${fsPower.wear} wear ÷ ${fsPower.eff} spindle efficiency.`
+    : '';
+
+  const hpCell  = g('Required HP', isFinite(hp) ? f(hp, 2) + ' hp' : (kp ? '—' : 'pick a material'));
+  const trqCell = g('Torque @ RPM', isFinite(torque) ? f(torque, 1) + ' ft-lb' : '—');
+  const mrrCell = g('MRR', isFinite(mrr) ? f(mrr, 3) + ' in³/min' : '—');
 
   const grid = drill
     ? g('Actual SFM', Math.round(sfmActual)) + g('Feed / rev', f(ipr, 4) + '"') +
       g('Per flute', Z >= 1 && isFinite(ipr) ? f(ipr / Z, 5) + '"' : '—') +
-      g('MRR', isFinite(mrr) ? f(mrr, 3) + ' in³/min' : '—')
+      mrrCell + hpCell + trqCell
     : g('Actual SFM', Math.round(sfmActual)) + g('Feed / rev', isFinite(ipr) ? f(ipr, 4) + '"' : '—') +
+      g('Engagement angle', isFinite(engAng) ? engAng.toFixed(1) + '°' : '—') +
       g('Chip thinning', rctf > 1.001 ? rctf.toFixed(2) + '×' : 'none') +
-      g('Adjusted FPT', isFinite(fptAdj) ? f(fptAdj, 5) + '"' : '—') +
-      g('MRR', isFinite(mrr) ? f(mrr, 3) + ' in³/min' : '—');
+      g('Programmed FPT', isFinite(fptAdj) ? f(fptAdj, 5) + '"' : '—') +
+      g('Actual chip', isFinite(actualChip) ? f(actualChip, 5) + '"' : '—') +
+      mrrCell + hpCell + trqCell;
 
   out.innerHTML = `<div class="panel">
     <div class="fs-big">
@@ -1432,16 +1520,24 @@ function fsCalc(){
     </div>
     <div class="fs-grid">${grid}</div>
     ${warn.map(w=>`<div class="fs-warn">${escapeHtml(w)}</div>`).join('')}
-    <div class="fs-hint">RPM = SFM × 12 ÷ (π × D). Feed = RPM × ${drill ? 'IPR' : 'flutes × FPT'}. These are the catalog numbers you typed, run through the formulas — nothing is assumed about the material.</div>
+    <div class="fs-hint">RPM = SFM × 12 ÷ (π × D). Feed = RPM × ${drill ? 'IPR' : 'flutes × FPT'}. ${matNote}${hpNote}</div>
   </div>`;
 }
 
 FS_FIELDS.forEach(id=>{
   const el = document.getElementById(id);
   el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'input', ()=>{
-    if(id === 'fs_op') fsSyncMode();
+    if(id === 'fs_sfm' || id === 'fs_fpt') fsTouched[id] = true;   // you typed it, material won't fight you
+    if(id === 'fs_op'){ fsSyncMode(); fsApplyMaterial(false); }
+    if(id === 'fs_dia') fsApplyMaterial(false);                     // chip load scales with cutter dia
     fsCalc();
   });
+});
+
+document.getElementById('fs_mat').addEventListener('change', ()=>{
+  fsTouched = {fs_sfm:false, fs_fpt:false};
+  fsApplyMaterial(true);
+  fsCalc();
 });
 
 document.getElementById('fs_clear').addEventListener('click', ()=>{
@@ -1449,6 +1545,8 @@ document.getElementById('fs_clear').addEventListener('click', ()=>{
     const el = document.getElementById(id);
     if(el.tagName === 'SELECT') el.selectedIndex = 0; else el.value = '';
   });
+  document.getElementById('fs_mat').value = '';
+  fsTouched = {fs_sfm:false, fs_fpt:false};
   document.getElementById('fs_presetSel').value = '';
   document.getElementById('fs_presetName').value = '';
   fsSyncMode();
@@ -1465,6 +1563,7 @@ window.feedsFromTool = function(id){
   fsSyncMode();
   if(d.od != null) document.getElementById('fs_dia').value = d.od;
   if(d.flutes) document.getElementById('fs_flutes').value = d.flutes;
+  fsApplyMaterial(false);   // rescale chip load to this cutter if a material is picked
   switchTab('feeds');
   fsCalc();
 };
@@ -1507,6 +1606,8 @@ document.getElementById('fs_presetSel').addEventListener('change', (e)=>{
   if(!p) return;
   document.getElementById('fs_op').value = p.op || 'mill';
   fsSyncMode();
+  document.getElementById('fs_mat').value = '';
+  fsTouched = {fs_sfm:true, fs_fpt:true};
   document.getElementById('fs_sfm').value = p.sfm || '';
   document.getElementById('fs_fpt').value = p.fpt || '';
   if(p.flutes) document.getElementById('fs_flutes').value = p.flutes;
