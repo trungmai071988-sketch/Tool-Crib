@@ -1483,11 +1483,17 @@ function renderResults(){
   });
 
   const priceOf = t => t.price !== '' && !isNaN(parseFloat(t.price)) ? parseFloat(t.price) : Infinity;
+  const locOf   = t => { const v = parseFloat(t.loc); return isNaN(v) ? Infinity : v; };
+  const locAsc  = locF !== '' && !isNaN(parseFloat(locF));   // asked for a minimum reach
   list.sort((a,b)=>{
     if(diaWin){
       const da = Math.abs(parseFloat(a.diameter) - diaWin.target);
       const db = Math.abs(parseFloat(b.diameter) - diaWin.target);
       if(Math.abs(da - db) > 1e-9) return da - db;   // nearest size first
+    }
+    if(locAsc){
+      const la = locOf(a), lb = locOf(b);
+      if(Math.abs(la - lb) > 1e-9) return la - lb;   // shortest tool that still reaches
     }
     return priceOf(a) - priceOf(b);
   });
@@ -1512,7 +1518,9 @@ function renderResults(){
   const sig = [brandF,typeF,diaF,locF,radiusF,pitchF,portF,kwF].join('\u0001');
   if(sig !== _lastFilterSig){ _lastFilterSig = sig; _rowCap = ROW_CAP; }
 
-  countEl.textContent = `${list.length} match${list.length===1?'':'es'} — ${diaWin ? 'nearest size first' : 'cheapest first'}`;
+  const orderNote = diaWin ? (locAsc ? 'nearest size, shortest LOC first' : 'nearest size first')
+                           : (locAsc ? 'shortest LOC first' : 'cheapest first');
+  countEl.textContent = `${list.length} match${list.length===1?'':'es'} — ${orderNote}`;
   renderSizeStrip(list, diaF);
 
   const bestIdx = list.findIndex(x=>x.price!=='' && !isNaN(parseFloat(x.price)));   // once, not per row
