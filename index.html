@@ -1482,19 +1482,38 @@ function renderResults(){
     return true;
   });
 
+  // Rank by how well a tool answers what was typed. Price is a last resort,
+  // not a sort key — most records have none.
   const priceOf = t => t.price !== '' && !isNaN(parseFloat(t.price)) ? parseFloat(t.price) : Infinity;
   const locOf   = t => { const v = parseFloat(t.loc); return isNaN(v) ? Infinity : v; };
-  const locAsc  = locF !== '' && !isNaN(parseFloat(locF));   // asked for a minimum reach
+  const diaOf   = t => { const v = parseFloat(t.diameter); return isNaN(v) ? Infinity : v; };
+  const locAsc  = locF !== '' && !isNaN(parseFloat(locF));
+  const kwRank  = t => {
+    if(!kwF) return 0;
+    const edp = (t.edp||'').toLowerCase();
+    if(edp === kwF) return 0;                       // exact EDP wins outright
+    if(edp.includes(kwF)) return 1;
+    if((t.type||'').toLowerCase().includes(kwF)) return 2;
+    if((t.brand||'').toLowerCase().includes(kwF)) return 3;
+    return 4;                                       // matched somewhere in specs/notes
+  };
   list.sort((a,b)=>{
     if(diaWin){
-      const da = Math.abs(parseFloat(a.diameter) - diaWin.target);
-      const db = Math.abs(parseFloat(b.diameter) - diaWin.target);
+      const da = Math.abs(diaOf(a) - diaWin.target), db = Math.abs(diaOf(b) - diaWin.target);
       if(Math.abs(da - db) > 1e-9) return da - db;   // nearest size first
     }
     if(locAsc){
       const la = locOf(a), lb = locOf(b);
       if(Math.abs(la - lb) > 1e-9) return la - lb;   // shortest tool that still reaches
     }
+    if(kwF){
+      const ka = kwRank(a), kb = kwRank(b);
+      if(ka !== kb) return ka - kb;
+    }
+    const da2 = diaOf(a), db2 = diaOf(b);           // otherwise walk the catalog by size
+    if(Math.abs(da2 - db2) > 1e-9) return da2 - db2;
+    const la2 = locOf(a), lb2 = locOf(b);
+    if(Math.abs(la2 - lb2) > 1e-9) return la2 - lb2;
     return priceOf(a) - priceOf(b);
   });
 
@@ -1518,17 +1537,25 @@ function renderResults(){
   const sig = [brandF,typeF,diaF,locF,radiusF,pitchF,portF,kwF].join('\u0001');
   if(sig !== _lastFilterSig){ _lastFilterSig = sig; _rowCap = ROW_CAP; }
 
-  const orderNote = diaWin ? (locAsc ? 'nearest size, shortest LOC first' : 'nearest size first')
-                           : (locAsc ? 'shortest LOC first' : 'cheapest first');
+  const bits = [];
+  if(diaWin) bits.push('nearest size');
+  if(locAsc) bits.push('shortest LOC');
+  if(kwF)    bits.push('closest keyword match');
+  const orderNote = bits.length ? bits.join(', ') + ' first' : 'by diameter';
   countEl.textContent = `${list.length} match${list.length===1?'':'es'} — ${orderNote}`;
   renderSizeStrip(list, diaF);
 
-  const bestIdx = list.findIndex(x=>x.price!=='' && !isNaN(parseFloat(x.price)));   // once, not per row
+  // genuinely the lowest-priced match, since the list is no longer price-ordered
+  let bestId = null, bestPrice = Infinity;
+  for(const x of list){
+    const p = priceOf(x);
+    if(p < bestPrice){ bestPrice = p; bestId = x.id; }
+  }
   const shown = list.slice(0, _rowCap);
 
   resultsEl.innerHTML = shown.map((t,i)=>{
     const hasPrice = t.price !== '' && !isNaN(parseFloat(t.price));
-    const isBest = hasPrice && i === bestIdx;
+    const isBest = hasPrice && t.id === bestId;
     return `
     <div class="result ${isBest ? 'best':''}${t.id===selectedToolId ? ' picked':''}" onclick="pickTool('${t.id}')">
       ${isBest ? '<div class="badge">BEST PRICE</div>' : ''}
