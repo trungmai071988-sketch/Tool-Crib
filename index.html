@@ -544,6 +544,7 @@
     <div class="search-body">
       <div class="results-col">
         <div class="count" id="resultCount"></div>
+        <div id="typeNote"></div>
         <div id="sizeStrip"></div>
         <div id="results"></div>
       </div>
@@ -893,6 +894,19 @@ function toolCoolant(t){
   return null;
 }
 
+const CAT_LABEL = {
+  square:'Square / Flat End Mill', ball:'Ball End Mill', radius:'Corner Radius End Mill',
+  chamfer:'Chamfer Mill', lollipop:'Undercutting / Lollipop', thread:'Thread Mill',
+  drill:'Drill', spot:'Spot Drill', reamer:'Reamer'
+};
+const CAT_ORDER = ['square','radius','ball','chamfer','lollipop','thread','drill','spot','reamer'];
+
+function typeMatches(t, typeF){
+  if(!typeF) return true;
+  if(typeF.slice(0,4) === 'cat:') return tipStyle(t) === typeF.slice(4);
+  return (t.type||'').toLowerCase() === typeF;
+}
+
 function toolRadius(t){
   const d = cutterDims(t);
   return (d.cr != null && d.cr > 0) ? d.cr : null;
@@ -906,7 +920,7 @@ function refreshRadiusList(){
   const seen = new Set();
   tools.forEach(t=>{
     if(brandF && t.brand !== brandF) return;
-    if(typeF && t.type.toLowerCase() !== typeF) return;
+    if(!typeMatches(t, typeF)) return;
     const r = toolRadius(t);
     if(r != null) seen.add(r.toFixed(4));
   });
@@ -922,7 +936,7 @@ function refreshPitchList(){
   const typeF  = document.getElementById('searchType').value.trim().toLowerCase();
   const scope = tools.filter(t=>{
     if(brandF && t.brand !== brandF) return false;
-    if(typeF && t.type.toLowerCase() !== typeF) return false;
+    if(!typeMatches(t, typeF)) return false;
     return true;
   });
   const seen = new Map();
@@ -996,7 +1010,7 @@ function refreshPortList(){
   const typeF  = document.getElementById('searchType').value.trim().toLowerCase();
   const scope = tools.filter(t=>{
     if(brandF && t.brand !== brandF) return false;
-    if(typeF && t.type.toLowerCase() !== typeF) return false;
+    if(!typeMatches(t, typeF)) return false;
     return true;
   });
   const seen = new Map();
@@ -1306,6 +1320,8 @@ function renderToolFigure(){
   }).join('');
 }
 
+const _typeCatAll = {};   // vendor type name -> shape, learned as lists are built
+let _typeNote = '';
 function refreshTypeList(){
   const brandF = document.getElementById('searchBrand').value;
   const relevantTools = brandF ? tools.filter(t=>t.brand===brandF) : tools;
@@ -1313,10 +1329,41 @@ function refreshTypeList(){
   const types = [...new Set(relevantTools.map(t=>t.type))].sort();
   const searchSel = document.getElementById('searchType');
   const prevType = searchSel.value;
-  searchSel.innerHTML = '<option value="">All types</option>' +
-    types.map(t=>`<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
-  if(types.includes(prevType)) searchSel.value = prevType;
+
+  const catCount = {}, typeCat = {};
+  relevantTools.forEach(t=>{
+    const c = tipStyle(t);
+    catCount[c] = (catCount[c]||0) + 1;
+    typeCat[t.type] = c;
+  });
+  const cats = CAT_ORDER.filter(c=>catCount[c]);
+
+  searchSel.innerHTML = '<option value="">All types</option>'
+    + (cats.length ? '<optgroup label="By shape \u2014 works across every brand">'
+        + cats.map(c=>`<option value="cat:${c}">${escapeHtml(CAT_LABEL[c])} (${catCount[c].toLocaleString()})</option>`).join('')
+        + '</optgroup>' : '')
+    + '<optgroup label="Exact catalog name">'
+        + types.map(t=>`<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('')
+    + '</optgroup>';
+
+  // keep the selection alive across a brand change: a shape always survives,
+  // and a vendor name that vanished falls back to its shape
+  _typeNote = '';
+  const labelOf = v => v.slice(0,4)==='cat:' ? (CAT_LABEL[v.slice(4)]||v) : v;
+  if(prevType.slice(0,4) === 'cat:' && catCount[prevType.slice(4)]) searchSel.value = prevType;
+  else if(types.includes(prevType)) searchSel.value = prevType;
+  else if(prevType && _typeCatAll[prevType] && catCount[_typeCatAll[prevType]]){
+    searchSel.value = 'cat:' + _typeCatAll[prevType];
+    _typeNote = `Switched to <b>${escapeHtml(CAT_LABEL[_typeCatAll[prevType]])}</b> \u2014 ` +
+                `${escapeHtml(brandF||'this brand')} doesn't use the name \u201c${escapeHtml(prevType)}\u201d.`;
+  }
+  else if(prevType){
+    searchSel.value = '';
+    _typeNote = `${escapeHtml(brandF||'This brand')} has no <b>${escapeHtml(labelOf(prevType))}</b> \u2014 showing all types.`;
+  }
   else searchSel.value = '';
+
+  Object.assign(_typeCatAll, typeCat);
 
   const brands = [...new Set(tools.map(t=>t.brand))].sort((a,b)=>{
     if(a==='MA Ford') return -1;
@@ -1458,7 +1505,7 @@ function renderResults(){
 
   let list = tools.filter(t=>{
     if(brandF && t.brand !== brandF) return false;
-    if(typeF && t.type.toLowerCase() !== typeF) return false;
+    if(!typeMatches(t, typeF)) return false;
     if(pitchF && !pitchMatches(t, pitchF)) return false;
     if(portF){ const pp = toolPort(t); if(!pp || pp.key !== portF) return false; }
     if(radiusF){
@@ -1544,6 +1591,11 @@ function renderResults(){
   const orderNote = bits.length ? bits.join(', ') + ' first' : 'by diameter';
   countEl.textContent = `${list.length} match${list.length===1?'':'es'} — ${orderNote}`;
   renderSizeStrip(list, diaF);
+  const noteEl = document.getElementById('typeNote');
+  if(noteEl){
+    noteEl.innerHTML = _typeNote ? `<div class="sizebar" style="border-color:var(--accent-dim);color:#ffd694;">${_typeNote}</div>` : '';
+    noteEl.style.marginBottom = _typeNote ? '10px' : '0';
+  }
 
   // genuinely the lowest-priced match, since the list is no longer price-ordered
   let bestId = null, bestPrice = Infinity;
