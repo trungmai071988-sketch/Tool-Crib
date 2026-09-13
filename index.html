@@ -1102,7 +1102,12 @@ function num(v, dp){
 }
 function grab(txt, re){ const m = (txt||'').match(re); return m ? fracVal(m[1]) : null; }
 
+const _dimCache = new WeakMap(), _tipCache = new WeakMap();
 function cutterDims(t){
+  const c = _dimCache.get(t); if(c) return c;
+  const v = _cutterDims(t); _dimCache.set(t, v); return v;
+}
+function _cutterDims(t){
   const n = (t.notes||'') + ' ' + (t.specs||'');
   return {
     od:    fracVal(t.diameter),
@@ -1118,6 +1123,10 @@ function cutterDims(t){
   };
 }
 function tipStyle(t){
+  const c = _tipCache.get(t); if(c) return c;
+  const v = _tipStyle(t); _tipCache.set(t, v); return v;
+}
+function _tipStyle(t){
   const s = (t.type + ' ' + (t.specs||'')).toLowerCase();
   if(/undercut|lollipop|spherical/.test(s)) return 'lollipop';
   if(/thread\s*mill|threadmill/.test(s)) return 'thread';
@@ -1425,6 +1434,9 @@ window.pickSize = function(k){
   renderResults();
 };
 
+const ROW_CAP = 150;
+let _rowCap = ROW_CAP, _lastFilterSig = null;
+
 function renderResults(){
   const brandF = document.getElementById('searchBrand').value;
   const typeF = document.getElementById('searchType').value.trim().toLowerCase();
@@ -1488,12 +1500,19 @@ function renderResults(){
     return;
   }
 
+  // reset the row cap whenever the filters actually change
+  const sig = [brandF,typeF,diaF,locF,radiusF,pitchF,portF,kw].join('\u0001');
+  if(sig !== _lastFilterSig){ _lastFilterSig = sig; _rowCap = ROW_CAP; }
+
   countEl.textContent = `${list.length} match${list.length===1?'':'es'} — ${diaWin ? 'nearest size first' : 'cheapest first'}`;
   renderSizeStrip(list, diaF);
 
-  resultsEl.innerHTML = list.map((t,i)=>{
+  const bestIdx = list.findIndex(x=>x.price!=='' && !isNaN(parseFloat(x.price)));   // once, not per row
+  const shown = list.slice(0, _rowCap);
+
+  resultsEl.innerHTML = shown.map((t,i)=>{
     const hasPrice = t.price !== '' && !isNaN(parseFloat(t.price));
-    const isBest = hasPrice && i === list.findIndex(x=>x.price!=='' && !isNaN(parseFloat(x.price)));
+    const isBest = hasPrice && i === bestIdx;
     return `
     <div class="result ${isBest ? 'best':''}${t.id===selectedToolId ? ' picked':''}" onclick="pickTool('${t.id}')">
       ${isBest ? '<div class="badge">BEST PRICE</div>' : ''}
@@ -1526,8 +1545,13 @@ function renderResults(){
         <button class="secondary" onclick="event.stopPropagation();deleteTool('${t.id}')">Delete</button>
       </div>
     </div>
-  `;}).join('');
+  `;}).join('') + (list.length > shown.length
+    ? `<div class="empty" style="padding:14px 10px;">Showing ${shown.length} of ${list.length}.
+         <button class="secondary" style="margin-left:8px;" onclick="showAllRows()">Show all ${list.length}</button></div>`
+    : '');
 }
+
+window.showAllRows = function(){ _rowCap = Infinity; renderResults(); };
 
 window.deleteTool = function(id){
   const i = added.findIndex(t=>t.id===id);
@@ -1539,12 +1563,14 @@ window.deleteTool = function(id){
 
 document.getElementById('searchType').addEventListener('change', ()=>{ refreshRadiusList(); refreshPitchList(); refreshPortList(); renderResults(); });
 document.getElementById('searchBrand').addEventListener('change', ()=>{ refreshTypeList(); refreshRadiusList(); refreshPitchList(); refreshPortList(); renderResults(); renderToolFigure(); updateSctReference(); });
-document.getElementById('searchDia').addEventListener('input', renderResults);
-document.getElementById('searchLoc').addEventListener('input', renderResults);
+function debounce(fn, ms){ let h; return function(){ clearTimeout(h); h=setTimeout(fn, ms); }; }
+const renderSoon = debounce(renderResults, 130);
+document.getElementById('searchDia').addEventListener('input', renderSoon);
+document.getElementById('searchLoc').addEventListener('input', renderSoon);
 document.getElementById('searchRadius').addEventListener('change', renderResults);
 document.getElementById('searchPitch').addEventListener('change', renderResults);
 document.getElementById('searchPort').addEventListener('change', ()=>{ renderResults(); renderToolFigure(); });
-document.getElementById('searchKeyword').addEventListener('input', renderResults);
+document.getElementById('searchKeyword').addEventListener('input', renderSoon);
 
 document.getElementById('resetSearchBtn').addEventListener('click', ()=>{
   // clear values first — refreshTypeList/refreshPitchList/refreshPortList
