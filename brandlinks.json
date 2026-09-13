@@ -87,6 +87,17 @@
       "label": "Gühring",
       "url": "https://www.google.com/search?q={q}",
       "verified": false
+    },
+    {
+      "match": [
+        "imco",
+        "imco carbide tool",
+        "imco carbide"
+      ],
+      "label": "IMCO",
+      "url": "https://www.imcousa.com/parts/{edp}",
+      "verified": true,
+      "note": "URL pattern taken from the product-link field in IMCO's own CAM tool library, so it is exact."
     }
   ]
 }
