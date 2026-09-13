@@ -526,12 +526,8 @@
       </div>
       <div class="row">
         <div class="field">
-          <label>Coolant-Thru</label>
-          <select id="searchCoolant">
-            <option value="">Either</option>
-            <option value="Yes">Coolant-Thru only</option>
-            <option value="No">No Coolant only</option>
-          </select>
+          <label>Corner Radius (in)</label>
+          <select id="searchRadius"><option value="">Any radius</option></select>
         </div>
         <div class="field">
           <label>Keyword (brand, notes, EDP#)</label>
@@ -776,6 +772,7 @@ function rebuild(){
     ...added.filter(t=>!catIds.has(t.id) && !del.has(t.id))
   ];
   refreshTypeList();
+  refreshRadiusList();
   refreshPitchList();
   refreshPortList();
   renderResults();
@@ -877,6 +874,30 @@ function pitchMatches(t, key){
   if(p.metric !== wantMetric) return false;
   if(p.exact !== undefined) return Math.abs(p.exact - want) < 0.001;
   return want >= p.range[0] - 0.001 && want <= p.range[1] + 0.001;
+}
+
+function toolRadius(t){
+  const d = cutterDims(t);
+  return (d.cr != null && d.cr > 0) ? d.cr : null;
+}
+
+function refreshRadiusList(){
+  const brandF = document.getElementById('searchBrand').value;
+  const typeF  = document.getElementById('searchType').value.trim().toLowerCase();
+  const sel = document.getElementById('searchRadius');
+  const prev = sel.value;
+  const seen = new Set();
+  tools.forEach(t=>{
+    if(brandF && t.brand !== brandF) return;
+    if(typeF && t.type.toLowerCase() !== typeF) return;
+    const r = toolRadius(t);
+    if(r != null) seen.add(r.toFixed(4));
+  });
+  const list = [...seen].sort((a,b)=>parseFloat(a)-parseFloat(b));
+  sel.innerHTML = '<option value="">Any radius</option>'
+    + '<option value="sharp">Sharp corner only (no radius)</option>'
+    + list.map(r=>`<option value="${r}">R${num(parseFloat(r))}"</option>`).join('');
+  sel.value = (prev && [...list, 'sharp'].includes(prev)) ? prev : '';
 }
 
 function refreshPitchList(){
@@ -1080,7 +1101,7 @@ function cutterDims(t){
     oal:   grab(n, /OAL[:\s]*([\d./-]+)/i),
     shank: grab(n, /shank(?:\s*dia)?[:\s]*([\d./-]+)/i),
     neck:  fracVal(t.neckdia),
-    cr:    grab(n, /\bR\s*(\.?\d[\d.]*)/),
+    cr:    grab(n, /corner\s*radius[:\s]*([\d.]+)/i) ?? grab(n, /(?:^|[^a-zA-Z])R\s*(\.?\d[\d.]*)/),
     necklen: grab(n, /neck\s*(?:length|len|l)[:\s]*([\d./-]+)/i),
     flutes:(n.match(/(\d+)\s*FL\b/i) || [])[1]
         || (t.type.match(/(\d+)\s*(?:Flute|FL)\b/i) || [])[1] || ''
@@ -1387,7 +1408,7 @@ function renderResults(){
   const diaF = document.getElementById('searchDia').value.trim();
   const diaWin = diaWindow(diaF);
   const locF = document.getElementById('searchLoc').value.trim();
-  const coolantF = document.getElementById('searchCoolant').value;
+  const radiusF = document.getElementById('searchRadius').value;
   const kwF = document.getElementById('searchKeyword').value.trim().toLowerCase();
   const pitchF = document.getElementById('searchPitch').value;
   const portF  = document.getElementById('searchPort').value;
@@ -1397,7 +1418,11 @@ function renderResults(){
     if(typeF && t.type.toLowerCase() !== typeF) return false;
     if(pitchF && !pitchMatches(t, pitchF)) return false;
     if(portF){ const pp = toolPort(t); if(!pp || pp.key !== portF) return false; }
-    if(coolantF && (t.coolant||'') !== coolantF) return false;
+    if(radiusF){
+      const r = toolRadius(t);
+      if(radiusF === 'sharp'){ if(r != null) return false; }
+      else if(r == null || Math.abs(r - parseFloat(radiusF)) > 0.0005) return false;
+    }
     if(diaWin){
       const d = parseFloat(t.diameter);
       if(isNaN(d) || d < diaWin.lo || d >= diaWin.hi) return false;
@@ -1450,7 +1475,7 @@ function renderResults(){
     <div class="result ${isBest ? 'best':''}${t.id===selectedToolId ? ' picked':''}" onclick="pickTool('${t.id}')">
       ${isBest ? '<div class="badge">BEST PRICE</div>' : ''}
       <div class="result-top">
-        <div class="brand">${escapeHtml(t.brand)}${t.coolant==='Yes' ? ' <span style="font-size:10px;background:#0d3d5c;color:#7fd4ff;padding:2px 6px;border-radius:8px;vertical-align:middle;">COOLANT-THRU</span>' : (t.coolant==='No' ? ' <span style="font-size:10px;background:#3a3a3a;color:#bbb;padding:2px 6px;border-radius:8px;vertical-align:middle;">NO COOLANT</span>' : '')}</div>
+        <div class="brand">${escapeHtml(t.brand)}${(()=>{ const r=toolRadius(t); return r!=null ? ` <span style="font-size:10px;background:#0d3d5c;color:#7fd4ff;padding:2px 6px;border-radius:8px;vertical-align:middle;">R${num(r)}"</span>` : ''; })()}</div>
         <div class="price">${hasPrice ? '$'+parseFloat(t.price).toFixed(2) : '<span style="color:var(--muted);font-size:12.5px;">no price</span>'}</div>
       </div>
       <div class="meta">
@@ -1478,11 +1503,11 @@ window.deleteTool = function(id){
   rebuild();
 }
 
-document.getElementById('searchType').addEventListener('change', ()=>{ refreshPitchList(); refreshPortList(); renderResults(); });
-document.getElementById('searchBrand').addEventListener('change', ()=>{ refreshTypeList(); refreshPitchList(); refreshPortList(); renderResults(); renderToolFigure(); updateSctReference(); });
+document.getElementById('searchType').addEventListener('change', ()=>{ refreshRadiusList(); refreshPitchList(); refreshPortList(); renderResults(); });
+document.getElementById('searchBrand').addEventListener('change', ()=>{ refreshTypeList(); refreshRadiusList(); refreshPitchList(); refreshPortList(); renderResults(); renderToolFigure(); updateSctReference(); });
 document.getElementById('searchDia').addEventListener('input', renderResults);
 document.getElementById('searchLoc').addEventListener('input', renderResults);
-document.getElementById('searchCoolant').addEventListener('change', renderResults);
+document.getElementById('searchRadius').addEventListener('change', renderResults);
 document.getElementById('searchPitch').addEventListener('change', renderResults);
 document.getElementById('searchPort').addEventListener('change', ()=>{ renderResults(); renderToolFigure(); });
 document.getElementById('searchKeyword').addEventListener('input', renderResults);
@@ -1490,13 +1515,14 @@ document.getElementById('searchKeyword').addEventListener('input', renderResults
 document.getElementById('resetSearchBtn').addEventListener('click', ()=>{
   // clear values first — refreshTypeList/refreshPitchList/refreshPortList
   // restore whatever is currently selected, so they must see a blank slate
-  ['searchBrand','searchType','searchDia','searchLoc','searchCoolant','searchPitch','searchPort','searchKeyword']
+  ['searchBrand','searchType','searchDia','searchLoc','searchRadius','searchPitch','searchPort','searchKeyword']
     .forEach(id=>{ const el = document.getElementById(id); if(el) el.value = ''; });
 
   selectedToolId = null;   // drop the picked cutter and its drawing
   document.getElementById('sizeStrip').innerHTML = '';
 
   refreshTypeList();
+  refreshRadiusList();
   refreshPitchList();
   refreshPortList();
   renderResults();
