@@ -876,6 +876,15 @@ function pitchMatches(t, key){
   return want >= p.range[0] - 0.001 && want <= p.range[1] + 0.001;
 }
 
+// SCT encodes coolant-through as an -X3 suffix, so blank fields aren't always "no"
+function toolCoolant(t){
+  const v = (t.coolant||'').trim();
+  if(v === 'Yes' || v === 'No') return v;
+  const hay = (t.type||'') + ' ' + (t.specs||'') + ' ' + (t.notes||'');
+  if(/coolant[\s-]*(?:thru|through)|thru[\s-]*coolant|-X3\b/i.test(hay)) return 'Yes';
+  return null;
+}
+
 function toolRadius(t){
   const d = cutterDims(t);
   return (d.cr != null && d.cr > 0) ? d.cr : null;
@@ -1103,6 +1112,7 @@ function cutterDims(t){
     neck:  fracVal(t.neckdia),
     cr:    grab(n, /corner\s*radius[:\s]*([\d.]+)/i) ?? grab(n, /(?:^|[^a-zA-Z])R\s*(\.?\d[\d.]*)/),
     necklen: grab(n, /neck\s*(?:length|len|l)[:\s]*([\d./-]+)/i),
+    ang:   grab((t.type||'') + ' ' + n, /(\d{2,3})\s*(?:deg\b|degrees?\b|\u00b0)/i),
     flutes:(n.match(/(\d+)\s*FL\b/i) || [])[1]
         || (t.type.match(/(\d+)\s*(?:Flute|FL)\b/i) || [])[1] || ''
   };
@@ -1145,13 +1155,21 @@ function schemaFig(d, tip){
   if(tip==='ball'){
     g+=`<path d="M${cx-rC},${yFl} L${cx-rC},${yBot-rC} A${rC},${rC} 0 0 0 ${cx+rC},${yBot-rC} L${cx+rC},${yFl} Z" fill="${MET}" stroke="${EDGE}" stroke-width="1.3"/>`;
   }else if(tip==='radius'){
-    const r=Math.max(4,Math.min(rC*0.45, rC*0.35));
+    const r = (d.cr>0 && d.od>0) ? Math.max(3, Math.min(rC*0.9, rC*(d.cr/(d.od/2)))) : Math.max(4, rC*0.35);
     g+=`<path d="M${cx-rC},${yFl} L${cx-rC},${yBot-r} A${r},${r} 0 0 0 ${cx-rC+r},${yBot} L${cx+rC-r},${yBot} A${r},${r} 0 0 0 ${cx+rC},${yBot-r} L${cx+rC},${yFl} Z" fill="${MET}" stroke="${EDGE}" stroke-width="1.3"/>`;
   }else if(tip==='chamfer'){
-    g+=`<path d="M${cx-rC},${yFl} L${cx-rC},${yBot-30} L${cx-7},${yBot} L${cx+7},${yBot} L${cx+rC},${yBot-30} L${cx+rC},${yFl} Z" fill="${MET}" stroke="${EDGE}" stroke-width="1.3"/>`;
+    const A = (d.ang>0 && d.ang<180) ? d.ang : 90;
+    const con = Math.max(10, Math.min(rC*2.2, (rC-7)/Math.tan(A*Math.PI/360)));
+    g+=`<path d="M${cx-rC},${yFl} L${cx-rC},${yBot-con} L${cx-7},${yBot} L${cx+7},${yBot} L${cx+rC},${yBot-con} L${cx+rC},${yFl} Z" fill="${MET}" stroke="${EDGE}" stroke-width="1.3"/>`;
+    if(d.ang>0) g+=`<path d="M${cx+10},${yBot-6} L${cx+rC+22},${yBot+14}" stroke="${DIM}" stroke-width=".9" fill="none"/>`
+               + `<text x="${cx+rC+25}" y="${yBot+18}" fill="${DIM}" style="font:11px var(--mono)">${d.ang}\u00b0</text>`;
   }else if(tip==='drill'||tip==='spot'){
-    const pt = tip==='spot' ? rC*1.0 : rC*0.60;   // 90 deg spot vs 118 deg drill
+    // included angle A -> point height = r / tan(A/2); 118 deg is the drill default
+    const A = (d.ang>0 && d.ang<180) ? d.ang : (tip==='spot' ? 90 : 118);
+    const pt = Math.max(6, Math.min(rC*2.4, rC/Math.tan(A*Math.PI/360)));
     g+=`<path d="M${cx-rC},${yFl} L${cx-rC},${yBot-pt} L${cx},${yBot} L${cx+rC},${yBot-pt} L${cx+rC},${yFl} Z" fill="${MET}" stroke="${EDGE}" stroke-width="1.3"/>`;
+    if(d.ang>0) g+=`<path d="M${cx+6},${yBot-4} L${cx+rC+22},${yBot+14}" stroke="${DIM}" stroke-width=".9" fill="none"/>`
+               + `<text x="${cx+rC+25}" y="${yBot+18}" fill="${DIM}" style="font:11px var(--mono)">${d.ang}\u00b0</text>`;
   }else if(tip==='reamer'){
     g+=`<path d="M${cx-rC},${yFl} L${cx-rC},${yBot-9} L${cx-rC+7},${yBot} L${cx+rC-7},${yBot} L${cx+rC},${yBot-9} L${cx+rC},${yFl} Z" fill="${MET}" stroke="${EDGE}" stroke-width="1.3"/>`;
   }else if(tip==='thread'){
@@ -1190,6 +1208,10 @@ function schemaFig(d, tip){
     `<path d="M${x1},${y} L${x2},${y} M${x1},${y-5} L${x1},${y+5} M${x2},${y-5} L${x2},${y+5}" stroke="${col}" stroke-width="1" fill="none"/>`+
     `<text x="${(x1+x2)/2}" y="${y+18}" text-anchor="middle" fill="${col}" style="font:11px var(--mono)">${label}</text>`;
 
+  if(tip==='radius' && d.cr>0){
+    g+=`<path d="M${cx-rC+2},${yBot-3} L${cx-rC-20},${yBot-16}" stroke="${DIM}" stroke-width=".9" fill="none"/>`
+     + `<text x="${cx-rC-22}" y="${yBot-18}" text-anchor="end" fill="${DIM}" style="font:11px var(--mono)">R${num(d.cr)}</text>`;
+  }
   if(d.od!=null)   g+=hdim(yBot+15, cx-rC, cx+rC, `DC ${num(d.od)}`, DIM);
   if(d.loc!=null)  g+=vdim(cx+rC+16, yFl, yBot, `LCF ${num(d.loc)}`, DIM2);
   if(d.shank!=null)g+=hdim(yTop+34, cx-rS, cx+rS, `SFDM ${num(d.shank)}`, DIM);
@@ -1210,7 +1232,8 @@ function figCutterCard(t){
                 ['Neck dia', d.neck!=null?num(d.neck)+'"':''],
                 ['Corner radius', d.cr!=null?num(d.cr)+'"':''],
                 ['Neck length', d.necklen!=null?num(d.necklen)+'"':''],
-                ['Flutes', d.flutes]]
+                ['Flutes', d.flutes],
+                ['Coolant-thru', toolCoolant(t)==='Yes' ? 'Yes' : '']]
     .filter(r=>r[1]!=='' && r[1]!=null)
     .map(r=>`<tr><td class="k">${r[0]}</td><td class="v">${escapeHtml(String(r[1]))}</td></tr>`).join('');
   return `<div class="tool-card">
@@ -1475,7 +1498,14 @@ function renderResults(){
     <div class="result ${isBest ? 'best':''}${t.id===selectedToolId ? ' picked':''}" onclick="pickTool('${t.id}')">
       ${isBest ? '<div class="badge">BEST PRICE</div>' : ''}
       <div class="result-top">
-        <div class="brand">${escapeHtml(t.brand)}${(()=>{ const r=toolRadius(t); return r!=null ? ` <span style="font-size:10px;background:#0d3d5c;color:#7fd4ff;padding:2px 6px;border-radius:8px;vertical-align:middle;">R${num(r)}"</span>` : ''; })()}</div>
+        <div class="brand">${escapeHtml(t.brand)}${(()=>{
+          const pill = (bg,fg,txt)=>` <span style="font-size:10px;background:${bg};color:${fg};padding:2px 6px;border-radius:8px;vertical-align:middle;">${txt}</span>`;
+          const r = toolRadius(t), c = toolCoolant(t);
+          let out = '';
+          if(r != null) out += pill('#0d3d5c','#7fd4ff',`R${num(r)}"`);
+          if(c === 'Yes') out += pill('#0d3d5c','#7fd4ff','COOLANT-THRU');
+          return out;
+        })()}</div>
         <div class="price">${hasPrice ? '$'+parseFloat(t.price).toFixed(2) : '<span style="color:var(--muted);font-size:12.5px;">no price</span>'}</div>
       </div>
       <div class="meta">
