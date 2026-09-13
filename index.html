@@ -804,10 +804,18 @@ async function loadTools(){
     const data = await res.json();
     if(!Array.isArray(data)) throw new Error('tools.json is not a list');
     catalog = data;
-    rebuild();
+    try{
+      rebuild();
+    }catch(err){
+      resultsEl.innerHTML = '<div class="empty"><b>' + catalog.length.toLocaleString() +
+        ' tools loaded fine</b> \u2014 but the app hit an error while displaying them:<br><br><code>' +
+        escapeHtml(err.message) + '</code><br><br>Your catalog is safe. This is a bug in index.html, not in tools.json.</div>';
+      throw err;
+    }
+    return;
   }catch(err){
     catalog = [];
-    rebuild();
+    try{ rebuild(); }catch(e){}
     resultsEl.innerHTML = '<div class="empty">Couldn\'t load <b>tools.json</b> (' + escapeHtml(err.message) + ').' +
       '<br><br>Make sure tools.json sits in the same folder as this page on GitHub.' +
       '<br>If you opened this file by double-clicking it on your PC, the browser blocks reading tools.json \u2014 ' +
@@ -1501,7 +1509,7 @@ function renderResults(){
   }
 
   // reset the row cap whenever the filters actually change
-  const sig = [brandF,typeF,diaF,locF,radiusF,pitchF,portF,kw].join('\u0001');
+  const sig = [brandF,typeF,diaF,locF,radiusF,pitchF,portF,kwF].join('\u0001');
   if(sig !== _lastFilterSig){ _lastFilterSig = sig; _rowCap = ROW_CAP; }
 
   countEl.textContent = `${list.length} match${list.length===1?'':'es'} — ${diaWin ? 'nearest size first' : 'cheapest first'}`;
