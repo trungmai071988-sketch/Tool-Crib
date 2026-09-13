@@ -1501,7 +1501,11 @@ function renderResults(){
         <div class="brand">${escapeHtml(t.brand)}${(()=>{
           const pill = (bg,fg,txt)=>` <span style="font-size:10px;background:${bg};color:${fg};padding:2px 6px;border-radius:8px;vertical-align:middle;">${txt}</span>`;
           const r = toolRadius(t), c = toolCoolant(t);
+          const tip = tipStyle(t);
+          const isMill = !['drill','reamer','spot'].includes(tip);   // LOC is the number you reach for on a mill
+          const loc = cutterDims(t).loc;
           let out = '';
+          if(isMill && loc != null) out += pill('#0d3d5c','#7fd4ff',`LOC ${num(loc)}"`);
           if(r != null) out += pill('#0d3d5c','#7fd4ff',`R${num(r)}"`);
           if(c === 'Yes') out += pill('#0d3d5c','#7fd4ff','COOLANT-THRU');
           return out;
