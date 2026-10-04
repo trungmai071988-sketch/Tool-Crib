@@ -1265,7 +1265,7 @@ function smApply(dt){
   // Same as Mastercam "object mode": the part follows the cap. Raw axes: x right, y toward you, z down.
   const k=(+cfg.smSpeed||1)*dt,fr=cfg.smFlipR?-1:1,fz=cfg.smFlipZ?-1:1,ud=cfg.smZoomUD;
   const zoomAx=ud?-tz:ty,vertAx=ud?-ty:tz;                            // Zoom direction: Forward/Backward (default) or Up/Down
-  cam.px+=tx*W*0.9*k;cam.py+=vertAx*H*0.9*k;                          // push sideways = pan, press down / lift = pan down / up
+  cam.px-=tx*W*0.9*k;cam.py+=vertAx*H*0.9*k;                          // push sideways = pan (left/right swapped to match the user's Mastercam), press down / lift = pan down / up
   if(zoomAx)zoomAt(W/2,H/2,Math.exp(zoomAx*2.2*k*fz));                // push forward = zoom out, pull back = zoom in
   cam.yaw-=rz*2.6*k*fr;                                               // twist clockwise = part spins clockwise
   cam.pitch=Math.max(-Math.PI/2,Math.min(Math.PI/2,cam.pitch+rx*2.0*k*fr));  // tilt forward = part tips away
