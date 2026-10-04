@@ -1,0 +1,1243 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="description" content="G-code backplotter and program checker: 3D toolpath, line-by-line stepping, T/H/D, plane, coolant and spindle checks.">
+<style>body{margin:0}[hidden]{display:none!important}img{max-width:100%}</style>
+<title>G-Code Backplot</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout: machine-control screen — dark backplot with a stacked DRO on the left, full-height program listing on the right, inspection tabs under the listing */
+:root{
+  --bg:#e9ecea; --panel:#f6f7f6; --ink:#192022; --muted:#5a6567; --line:#cdd4d2;
+  --accent:#0c7480; --accent-ink:#ffffff; --chip:#dfe5e3;
+  --err:#c93a3a; --warn:#a87400; --info:#3d6fa6; --ok:#2f8a4e; --mcode:#a3407a;
+  --vp:#14191b;
+  --f-disp:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
+  --f-body:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#101415; --panel:#171d1f; --ink:#e3e9e8; --muted:#93a0a2; --line:#2a3437;
+  --accent:#2bb3c0; --accent-ink:#06191b; --chip:#222b2e;
+  --err:#f06a6a; --warn:#e5b23c; --info:#7eaee0; --ok:#5cc47f; --mcode:#e48ac0;
+  --vp:#0b0f10; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#101415; --panel:#171d1f; --ink:#e3e9e8; --muted:#93a0a2; --line:#2a3437;
+  --accent:#2bb3c0; --accent-ink:#06191b; --chip:#222b2e;
+  --err:#f06a6a; --warn:#e5b23c; --info:#7eaee0; --ok:#5cc47f; --mcode:#e48ac0;
+  --vp:#0b0f10; color-scheme:dark}
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.45}
+*{box-sizing:border-box}
+button,select,input{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.app{display:flex;flex-direction:column;min-height:100%}
+.top{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding-block:8px;padding-inline:16px;border-bottom:1px solid var(--line);background:var(--panel)}
+.brand{display:flex;align-items:baseline;gap:10px;margin-right:auto;min-width:0}
+.brand h1{font-family:var(--f-disp);font-weight:700;font-size:22px;letter-spacing:.02em;margin:0;text-transform:uppercase;white-space:nowrap}
+.brand .prog{font-family:var(--f-mono);font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:46vw}
+.btn{border:1px solid var(--line);background:var(--bg);border-radius:6px;padding:6px 12px;font-family:var(--f-disp);font-weight:600;font-size:15px;letter-spacing:.04em;text-transform:uppercase}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+
+.main{display:grid;grid-template-columns:minmax(0,1fr)}
+.stage{min-width:0;display:flex;flex-direction:column}
+.vpwrap{position:relative;height:52vh;min-height:280px;background:var(--vp);overflow:hidden}
+.vpwrap canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+#cv{touch-action:none;cursor:grab}
+#cv:active{cursor:grabbing}
+
+/* DRO: stacked axis readout, top-left */
+.dro{position:absolute;top:10px;left:10px;background:rgba(9,13,14,.84);border:1px solid #2a3437;border-radius:6px;padding:8px 12px 7px;font-family:var(--f-mono);color:#e8f0f1;font-variant-numeric:tabular-nums;min-width:178px;pointer-events:none}
+.dro .ax{display:grid;grid-template-columns:22px 1fr;align-items:baseline;font-size:21px;font-weight:500;line-height:1.28}
+.dro .ax b{font-family:var(--f-disp);font-weight:700;font-size:18px;color:#7fd3dc}
+.dro .ax.rot b{color:#f0c36a}
+.dro .ax span{text-align:right}
+.dro .meta{display:flex;gap:10px;justify-content:space-between;margin-top:6px;padding-top:5px;border-top:1px solid #2a3437;font-size:12px;color:#a9b6b8}
+.dro .mode{font-family:var(--f-disp);font-weight:700;letter-spacing:.08em;font-size:13px}
+.dro .mode.rapid{color:#ff7a5e}.dro .mode.feed{color:#4cc3ff}
+
+.views{position:absolute;top:10px;right:10px;display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;max-width:calc(100% - 210px)}
+.views button{background:rgba(20,26,28,.82);color:#cfd9db;border:1px solid #2f3a3d;border-radius:5px;padding:4px 9px;font-family:var(--f-disp);font-weight:600;font-size:13px;letter-spacing:.06em;text-transform:uppercase}
+.views button.on{color:#14191b;background:#cfd9db}
+.legend{position:absolute;right:10px;bottom:10px;display:flex;gap:12px;font-family:var(--f-mono);font-size:11px;color:#9aa8ab;background:rgba(11,15,16,.7);padding:4px 8px;border-radius:4px;pointer-events:none}
+.legend i{display:inline-block;width:18px;height:0;border-top:2px solid;vertical-align:middle;margin-right:5px}
+.drop{position:absolute;inset:0;border:2px dashed var(--accent);background:rgba(12,116,128,.14);display:grid;place-items:center;color:#cfe;font-family:var(--f-disp);font-size:22px;text-transform:uppercase;letter-spacing:.06em;pointer-events:none}
+@media (max-width:600px){.views{flex-direction:column;max-width:none}.dro{min-width:150px}.dro .ax{font-size:17px}}
+
+.transport{display:flex;flex-direction:column;gap:8px;padding-block:10px;padding-inline:16px;background:var(--panel);border-bottom:1px solid var(--line)}
+.trow{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.tb{width:38px;height:34px;border:1px solid var(--line);background:var(--bg);border-radius:6px;display:grid;place-items:center;padding:0}
+.tb svg{width:16px;height:16px;fill:currentColor}
+.tb.play{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);width:46px}
+#scrub{flex:1;min-width:140px;accent-color:var(--accent)}
+.spd{flex-wrap:nowrap;gap:8px;max-width:480px}
+.lbl{font-family:var(--f-disp);font-weight:600;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);width:46px}
+.tb.sm{width:32px;height:30px;font-size:19px;line-height:1;font-weight:600}
+#speed{flex:1;min-width:0;accent-color:var(--accent);height:26px}
+.spdout{font-family:var(--f-mono);font-weight:600;font-size:15px;min-width:64px;text-align:right;font-variant-numeric:tabular-nums}
+.chk{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--line);cursor:pointer}
+.chk input{margin-top:4px;accent-color:var(--accent)}
+.chk small{display:block;color:var(--muted);font-size:12px}
+.toggles{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;color:var(--muted)}
+.toggles label{display:flex;align-items:center;gap:5px;cursor:pointer}
+.toggles input{accent-color:var(--accent)}
+.sel{border:1px solid var(--line);background:var(--bg);border-radius:5px;padding:2px 4px;font-size:13px;color:var(--ink)}
+
+/* Right column: program listing + info tabs */
+.side{background:var(--panel);min-width:0;display:flex;flex-direction:column}
+.pp{display:flex;flex-direction:column;min-height:0}
+.pp-head{display:flex;align-items:center;gap:12px;padding-block:8px;padding-inline:14px;border-bottom:1px solid var(--line)}
+.pp-title{font-family:var(--f-disp);font-weight:700;font-size:16px;letter-spacing:.08em;text-transform:uppercase}
+.pp-pos{font-family:var(--f-mono);font-size:12px;color:var(--muted);margin-right:auto;white-space:nowrap;font-variant-numeric:tabular-nums}
+.pp-head label{display:flex;align-items:center;gap:5px;font-size:13px;color:var(--muted);cursor:pointer}
+.pp-head input{accent-color:var(--accent)}
+.code{position:relative;height:44vh;overflow:auto;font-family:var(--f-mono);font-size:14px;background:var(--bg);overscroll-behavior:contain}
+#layer,#hlLayer{position:absolute;top:0;left:0;right:0;will-change:transform;pointer-events:none}
+#rows{position:absolute;top:0;left:0;right:0}
+#codeText{position:absolute;inset:0;width:100%;height:100%;margin:0;border:0;outline:none;resize:none;background:transparent;color:transparent;caret-color:var(--ink);
+  font-family:var(--f-mono);font-size:inherit;font-weight:400;line-height:22px;letter-spacing:normal;tab-size:4;white-space:pre;overflow:auto;padding:0 14px 0 var(--numw,58px);z-index:2}
+#codeText::selection{background:color-mix(in srgb,var(--accent) 38%,transparent);color:transparent}
+#codeText:focus-visible{box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--accent) 60%,transparent)}
+.tag{font-family:var(--f-disp);font-weight:700;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent-ink);background:var(--warn);border-radius:4px;padding:1px 6px}
+.mini{border:1px solid var(--line);background:var(--bg);border-radius:5px;padding:3px 9px;font-size:12px;color:var(--muted)}
+.mini:hover{color:var(--ink);border-color:var(--muted)}
+#btnRevert{display:none}
+.pp:has(#editedTag:not([hidden])) #btnRevert{display:inline-block}
+@media (max-width:600px){.code{font-size:16px}}
+.hlbar{position:absolute;left:0;right:0;top:0;height:22px;background:color-mix(in srgb,var(--accent) 24%,transparent);box-shadow:inset 4px 0 0 var(--accent);pointer-events:none;will-change:transform}
+.row{position:absolute;left:0;min-width:100%;height:22px;line-height:22px;white-space:pre;padding-right:14px}
+.row.bad{box-shadow:inset 4px 0 0 var(--err)}
+.row.bad .num{color:var(--err);opacity:1}
+.row.wn{box-shadow:inset 4px 0 0 var(--warn)}
+.row.wn .num{color:var(--warn);opacity:1}
+.num{display:inline-block;width:var(--numw,58px);text-align:right;padding-right:14px;color:var(--muted);opacity:.7;user-select:none}
+.k-g{color:var(--accent);font-weight:600} .k-m{color:var(--mcode);font-weight:500} .k-t{color:var(--warn)} .k-f{color:var(--ok)} .k-n{color:var(--muted)} .k-c{color:var(--muted);font-style:italic}
+
+.info{display:flex;flex-direction:column;min-height:0;border-top:1px solid var(--line)}
+.tabs{display:flex;align-items:stretch;border-bottom:1px solid var(--line);overflow-x:auto}
+.tabs button{flex:1;background:none;border:0;border-bottom:3px solid transparent;padding:9px 8px 7px;font-family:var(--f-disp);font-weight:600;font-size:15px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+.tabs button.on{color:var(--ink);border-bottom-color:var(--accent)}
+.tabs .collapse{flex:0 0 40px;font-family:var(--f-body);font-size:14px}
+.badge{display:inline-block;min-width:18px;padding:0 5px;margin-left:4px;border-radius:9px;font-family:var(--f-mono);font-size:11px;line-height:18px;background:var(--err);color:#fff;vertical-align:1px}
+.badge.w{background:var(--warn);color:#1b1400}
+.badge.ok{background:var(--ok)}
+.tabbody{padding-block:12px;padding-inline:14px}
+
+.verdict{display:flex;gap:12px;align-items:center;padding:10px 12px;border-radius:8px;background:var(--bg);border:1px solid var(--line);margin-bottom:10px}
+.verdict .big{font-family:var(--f-disp);font-weight:700;font-size:19px;text-transform:uppercase;letter-spacing:.03em}
+.verdict .sub{font-size:13px;color:var(--muted)}
+.dot{width:12px;height:12px;border-radius:50%;flex:none}
+.issues{display:flex;flex-direction:column;gap:2px;list-style:none;margin:0;padding:0}
+.groups{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.grp{border:1px solid var(--line);border-left:4px solid var(--info);border-radius:6px;background:var(--panel)}
+.grp.err{border-left-color:var(--err)}.grp.warn{border-left-color:var(--warn)}
+.ghead{display:flex;align-items:center;gap:6px;padding-right:6px}
+.gtog{flex:1;min-width:0;display:flex;align-items:center;gap:10px;background:none;border:0;padding:9px 8px;text-align:left}
+.gt{flex:1;min-width:0;font-weight:600;font-size:14px}
+.cnt{font-family:var(--f-mono);font-size:12px;font-weight:600;background:var(--chip);border-radius:9px;padding:1px 8px;font-variant-numeric:tabular-nums}
+.chev{color:var(--muted);width:12px}
+.goff{border:1px solid var(--line);background:var(--bg);border-radius:5px;padding:3px 8px;font-size:12px;color:var(--muted);white-space:nowrap}
+.goff:hover{color:var(--ink);border-color:var(--muted)}
+.grp.err .sev{color:var(--err)}.grp.warn .sev{color:var(--warn)}.grp.info .sev{color:var(--info)}
+.gsample{padding:0 10px 9px 66px;font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gitems{list-style:none;margin:0;padding:0 4px 6px;display:flex;flex-direction:column}
+.gitems .issue{grid-template-columns:minmax(0,1fr);padding:6px 8px 6px 62px;border-left:0}
+.gitems .issue .src{grid-column:1}
+.gitems .more{padding:4px 8px 4px 62px;font-size:12px;color:var(--muted)}
+.offlist{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:12px;font-size:12px;color:var(--muted)}
+.offlist button{border:1px dashed var(--line);background:none;border-radius:12px;padding:3px 10px;font-size:12px;color:var(--muted)}
+.offlist button:hover{color:var(--ink);border-color:var(--muted)}
+.offlist b{font-weight:600;margin-left:2px}
+.issue{display:grid;grid-template-columns:auto minmax(0,1fr);gap:3px 10px;padding:8px;border-radius:6px;cursor:pointer;border-left:3px solid transparent}
+.issue:hover{background:var(--bg)}
+.issue.err{border-left-color:var(--err)} .issue.warn{border-left-color:var(--warn)} .issue.info{border-left-color:var(--info)}
+.sev{font-family:var(--f-disp);font-weight:700;font-size:12px;letter-spacing:.08em;text-transform:uppercase;padding-top:1px;width:46px}
+.err .sev{color:var(--err)} .warn .sev{color:var(--warn)} .info .sev{color:var(--info)}
+.issue .msg{font-size:14px}
+.issue .src{grid-column:2;font-family:var(--f-mono);font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.empty{color:var(--muted);font-size:14px;padding:8px 0}
+h3{font-family:var(--f-disp);font-weight:600;font-size:14px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:16px 0 6px}
+h3:first-child{margin-top:0}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+td,th{text-align:left;padding:7px 6px;border-bottom:1px solid var(--line);font-size:14px;vertical-align:top}
+th{font-family:var(--f-disp);font-weight:600;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+td.n{font-family:var(--f-mono);font-size:13px;text-align:right}
+.tl tbody tr{cursor:pointer} .tl tbody tr:hover{background:var(--bg)}
+.tnum{font-family:var(--f-disp);font-weight:700;font-size:17px}
+.sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:0}
+.tcm{font-size:12px;color:var(--muted)}
+.tblwrap{overflow-x:auto}
+.field{display:grid;grid-template-columns:minmax(0,1fr) 150px;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
+.field input{width:100%;min-width:0;border:1px solid var(--line);background:var(--bg);border-radius:6px;padding:6px 8px;font-family:var(--f-mono);font-size:14px;text-align:right}
+.field small{display:block;color:var(--muted);font-size:12px}
+.field select{width:100%;padding:5px 4px}
+.tri{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px}.tri input{padding:6px 4px!important;font-size:13px!important}
+.revs{display:flex;gap:10px;justify-content:flex-end;font-size:14px}.revs label{display:flex;gap:4px;align-items:center}.revs input{width:auto!important;accent-color:var(--accent)}
+#p-setup h3{margin-top:14px}
+.note{font-size:13px;color:var(--muted);margin-top:12px;line-height:1.5}
+
+@media (min-width:900px){
+  html,body{overflow:hidden}
+  .app{height:100%}
+  .main{flex:1;min-height:0;grid-template-columns:minmax(0,1fr) clamp(400px,40vw,720px)}
+  .stage{min-height:0}
+  .vpwrap{flex:1;height:auto;min-height:0}
+  .side{border-left:1px solid var(--line);min-height:0}
+  .pp{flex:1 1 auto}
+  .code{flex:1;height:auto}
+  .info{flex:0 0 36%}
+  .info.collapsed{flex:0 0 auto}
+  .tabbody{flex:1;overflow:auto;min-height:0}
+}
+
+.overlay{position:fixed;inset:0;background:rgba(5,8,9,.55);display:flex;align-items:center;justify-content:center;padding:16px;z-index:10}
+.sheet{background:var(--panel);border:1px solid var(--line);border-radius:10px;width:min(900px,100%);height:min(86vh,800px);display:flex;flex-direction:column;overflow:hidden}
+.sheet header{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.sheet header h2{font-family:var(--f-disp);font-size:18px;text-transform:uppercase;letter-spacing:.04em;margin:0 auto 0 0}
+.sheet textarea{flex:1;border:0;resize:none;padding:12px 14px;font-family:var(--f-mono);font-size:13px;line-height:1.5;background:var(--bg);color:var(--ink);outline:none;white-space:pre;overflow:auto}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="app">
+<div class="top">
+  <div class="brand"><h1>G-Code Backplot</h1><span class="prog" id="progName">—</span></div>
+  <div class="actions">
+    <button class="btn" id="btnEdit">Paste program</button>
+    <button class="btn primary" id="btnLoad">Open file</button>
+    <input type="file" id="file" accept=".nc,.tap,.txt,.gcode,.ngc,.cnc,.eia,.min,.mpf,.prg,.h,*/*" hidden>
+  </div>
+</div>
+
+<div class="main">
+  <div class="stage">
+    <div class="vpwrap" id="vpwrap">
+      <canvas id="gl"></canvas>
+      <canvas id="cv" aria-label="3D toolpath backplot"></canvas>
+      <div class="dro" id="dro" aria-live="off">
+        <div class="ax"><b>X</b><span id="dX">0.0000</span></div>
+        <div class="ax"><b>Y</b><span id="dY">0.0000</span></div>
+        <div class="ax"><b>Z</b><span id="dZ">0.0000</span></div>
+        <div class="ax rot" id="rowA" hidden><b>A</b><span id="dA">0.000</span></div>
+        <div class="ax rot" id="rowB" hidden><b>B</b><span id="dB">0.000</span></div>
+        <div class="ax rot" id="rowC" hidden><b>C</b><span id="dC">0.000</span></div>
+        <div class="meta"><span class="mode rapid" id="dMode">RAPID</span><span id="dT">T—</span><span id="dF"></span><span id="dS">S0</span></div>
+      </div>
+      <div class="views" id="views">
+        <button data-v="iso" class="on">Iso</button><button data-v="top">Top</button><button data-v="front">Front</button><button data-v="right">Right</button><button data-v="fit">Fit</button>
+      </div>
+      <div class="legend"><span><i style="border-color:#ff5a3c;border-top-style:dashed"></i>Rapid</span><span><i style="border-color:#4cc3ff"></i>Feed</span></div>
+      <div class="drop" id="drop" hidden>Drop program to load</div>
+    </div>
+    <div class="transport">
+      <div class="trow">
+        <button class="tb" id="bStart" title="Go to start" aria-label="Go to start"><svg viewBox="0 0 16 16"><path d="M3 2h2v12H3zM14 2v12L6 8z"/></svg></button>
+        <button class="tb" id="bPrevT" title="Previous tool" aria-label="Previous tool"><svg viewBox="0 0 16 16"><path d="M8 2v12L1 8zM15 2v12L8 8z"/></svg></button>
+        <button class="tb" id="bPrev" title="Back one move" aria-label="Back one move"><svg viewBox="0 0 16 16"><path d="M12 2v12L4 8z"/></svg></button>
+        <button class="tb play" id="bPlay" title="Play" aria-label="Play"><svg viewBox="0 0 16 16" id="playIco"><path d="M4 2l10 6-10 6z"/></svg></button>
+        <button class="tb" id="bNext" title="Forward one move" aria-label="Forward one move"><svg viewBox="0 0 16 16"><path d="M4 2v12l8-6z"/></svg></button>
+        <button class="tb" id="bNextT" title="Next tool" aria-label="Next tool"><svg viewBox="0 0 16 16"><path d="M1 2v12l7-6zM8 2v12l7-6z"/></svg></button>
+        <button class="tb" id="bEnd" title="Go to end" aria-label="Go to end"><svg viewBox="0 0 16 16"><path d="M11 2h2v12h-2zM2 2v12l8-6z"/></svg></button>
+        <input type="range" id="scrub" min="0" max="1" step="1" value="0" aria-label="Program position">
+      </div>
+      <div class="trow spd" title="1× is real machine speed, based on the F words and your rapid rate">
+        <span class="lbl">Speed</span>
+        <button class="tb sm" id="spDown" title="Slower" aria-label="Slower">−</button>
+        <input type="range" id="speed" min="0" max="1000" step="1" value="361" aria-label="Playback speed">
+        <button class="tb sm" id="spUp" title="Faster" aria-label="Faster">+</button>
+        <output id="spdOut" class="spdout" for="speed">10×</output>
+      </div>
+      <div class="toggles">
+        <label><input type="checkbox" id="tRapid" checked> Rapids</label>
+        <label><input type="checkbox" id="tGhost" checked> Show remaining path</label>
+        <label><input type="checkbox" id="tTool" checked> Color by tool</label>
+        <label><input type="checkbox" id="tGrid" checked> Grid at Z0</label>
+        <label>Show <select id="vis" class="sel"><option value="all">All tools</option><option value="tool">Current tool only</option><option value="face">Current face / index only</option></select></label>
+      </div>
+    </div>
+  </div>
+
+  <aside class="side">
+    <section class="pp">
+      <div class="pp-head"><span class="pp-title">Program</span><span class="tag" id="editedTag" hidden>Edited</span><span class="pp-pos" id="lineInfo"></span><label><input type="checkbox" id="tFollow" checked> Follow</label><button class="mini" id="btnRevert" title="Throw away your edits and go back to the loaded program">Revert</button><button class="mini" id="btnCopy" title="Copy the whole program">Copy</button></div>
+      <div class="code" id="code"><div id="hlLayer"><div class="hlbar" id="hlbar" hidden></div></div><div id="layer"><div id="rows"></div></div><textarea id="codeText" wrap="off" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" aria-label="Program — click to edit, arrow keys move line by line"></textarea></div>
+    </section>
+    <section class="info" id="info">
+      <div class="tabs" role="tablist">
+        <button data-t="check" class="on">Check<span class="badge" id="badge" hidden></span></button>
+        <button data-t="tools">Tools</button>
+        <button data-t="stats">Stats</button>
+        <button data-t="setup">Setup</button>
+        <button class="collapse" id="infoToggle" title="Hide panel" aria-label="Hide panel">▾</button>
+      </div>
+      <div class="tabbody" id="tabbody">
+        <section id="p-check"></section>
+        <section id="p-tools" hidden></section>
+        <section id="p-stats" hidden></section>
+        <section id="p-setup" hidden>
+          <div class="field"><label for="sRapid">Rapid rate<small id="sRapidU">in/min — used for cycle time</small></label><input id="sRapid" type="number" min="1" step="any"></div>
+          <div class="field"><label for="sRpm">Max spindle RPM<small>Flags S words above this</small></label><input id="sRpm" type="number" min="1" step="1"></div>
+          <div class="field"><label for="sZ">Stock top Z<small>Rapids below this are checked against what has already been cut</small></label><input id="sZ" type="number" step="any"></div>
+          <div class="field"><label for="sTol">Arc tolerance<small>Allowed start/end radius difference</small></label><input id="sTol" type="number" min="0" step="any"></div>
+          <h3>Machine and rotary axes</h3>
+          <div class="field"><label for="sMach">Machine<small>Horizontal shows Y up and the spindle pointing at you</small></label><select id="sMach" class="sel"><option value="vmc">Vertical</option><option value="hmc">Horizontal</option></select></div>
+          <div class="field"><label for="sRotView">A / B / C moves<small>Part view turns each indexed face onto the part. Machine shows raw X Y Z</small></label><select id="sRotView" class="sel"><option value="part">Part view</option><option value="machine">Machine X Y Z</option></select></div>
+          <div class="field"><label>Rotary center X / Y / Z<small>Where the rotary axes cross, in work coordinates. Usually 0 0 0</small></label><span class="tri"><input id="sRcx" type="number" step="any" aria-label="Rotary center X"><input id="sRcy" type="number" step="any" aria-label="Rotary center Y"><input id="sRcz" type="number" step="any" aria-label="Rotary center Z"></span></div>
+          <div class="field"><label>Reverse rotation<small>Tick an axis if its faces show up mirrored</small></label><span class="revs"><label><input type="checkbox" id="sRevA"> A</label><label><input type="checkbox" id="sRevB"> B</label><label><input type="checkbox" id="sRevC"> C</label></span></div>
+          <h3>Program checks</h3>
+          <div class="field"><label for="sCoolOn">Coolant on codes<small>Any of these counts as coolant on</small></label><input id="sCoolOn" type="text" spellcheck="false"></div>
+          <div class="field"><label for="sCoolOff">Coolant off codes</label><input id="sCoolOff" type="text" spellcheck="false"></div>
+          <label class="chk" for="sDpi"><input type="checkbox" id="sDpi"><span>Numbers without a decimal point are full units<small>Turn on if your control reads Z-1 as 1 inch/mm, not 0.0001 (calculator-type input, Fanuc parameter 3401 bit 0). Hides the decimal point warnings.</small></span></label>
+          <p class="note">Reads Fanuc-style milling code: G0–G3 (IJK or R, G17/18/19, helical), G90/G91, G20/G21, G28, G43/H, drill cycles G73/G81–G89 with G98/G99, A/B/C rotary moves, G68 / G68.2 tilted planes and G43.4 TCP. Tool comp (G41/G42) is shown on the programmed path, not the offset path. Macros (#, IF, WHILE) and subprograms are skipped and flagged. This is a programming check, not a material-removal simulation: it does not know your stock, fixtures or holder lengths.</p>
+        </section>
+      </div>
+    </section>
+  </aside>
+</div>
+</div>
+
+<div class="overlay" id="editor" hidden>
+  <div class="sheet" role="dialog" aria-label="Edit program">
+    <header>
+      <h2>Program</h2>
+      <button class="btn" id="eSample">Load sample</button>
+      <button class="btn" id="eClear">Clear</button>
+      <button class="btn" id="eCancel">Cancel</button>
+      <button class="btn primary" id="eRun">Plot it</button>
+    </header>
+    <textarea id="eText" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="Paste G-code here…"></textarea>
+  </div>
+</div>
+
+<script>
+const SAMPLE = `%
+O1001 (PLATE 4X3 - SAMPLE PROGRAM)
+(EXAMPLE ONLY - HAS 2 PLANTED MISTAKES)
+(MATERIAL - ALUMINUM 6061)
+( T1 | 2.0 FACE MILL | H1 )
+( T2 | 1/2 FLAT ENDMILL | H2 )
+( T3 | #7 DRILL | H3 )
+N100 G20
+N102 G0 G17 G40 G49 G80 G90
+(FACE - 2.0 FACE MILL)
+N104 T1 M6
+N106 G0 G90 G54 X-1.25 Y.5 S3000 M3
+N108 G43 H1 Z1. M8
+N110 Z.1
+N112 G1 Z-.02 F20.
+N114 X5.25 F45.
+N116 Y1.75
+N118 X-1.25
+N120 Y3.
+N122 X5.25
+N124 G0 Z1.
+N126 M5
+N128 M9
+N130 G91 G28 Z0.
+N132 G90
+(CONTOUR - 1/2 FLAT ENDMILL)
+N134 T2 M6
+N136 G0 G90 G54 X-.25 Y-.75 S8000 M3
+N138 G43 H2 Z1. M8
+N140 Z.1
+N142 G1 Z-.5 F15.
+N144 Y3. F30.
+N146 G2 X0. Y3.25 I.25 J0.
+N148 G1 X4.
+N150 G2 X4.25 Y3. I0. J-.25
+N152 G1 Y0.
+N154 G2 X4. Y-.25 I-.25 J0.
+N156 G1 X0.
+N158 G2 X-.25 Y0. I0. J.25
+N160 G1 Y.5
+(EDITED AT MACHINE)
+N162 G0 X2.5 Y1.5
+N164 Z.1
+N166 G1 Z-.25 F10.
+N168 G3 X2.5 Y1.5 I-.5 J0. F25.
+N170 G1 X2.
+N172 G0 Z1.
+N174 M5
+N176 M9
+N178 G91 G28 Z0.
+N180 G90
+(DRILL - #7 DRILL)
+N182 T3 M6
+N184 G0 G90 G54 X.5 Y.5 S2500 M3
+N186 G43 H2 Z1. M8
+N188 G98 G83 Z-.6 R.1 Q.15 F8.
+N190 X3.5
+N192 Y2.5
+N194 X.5
+N196 G80
+N198 M5
+N200 M9
+N202 G91 G28 Z0.
+N204 G28 Y0.
+N206 M30
+%`;
+
+const TOOLCOL=['#4cc3ff','#8be36b','#ffd24c','#c48bff','#4ce0c8','#ff8fc8','#a7b4ff','#e8e8e8'];
+const RAPIDCOL='#ff5a3c';
+const $=id=>document.getElementById(id);
+const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+
+let cfg={rapid:400,rpm:12000,zfloor:0,tol:0.001,dpi:false,machine:'vmc',rotView:'part',rcx:0,rcy:0,rcz:0,revA:false,revB:false,revC:false,coolOn:'M7 M8 M88',coolOff:'M9 M89'};
+try{const c=JSON.parse(store.get('bp-cfg')||'null');if(c)cfg=Object.assign(cfg,c)}catch(e){}
+
+/* ---------------- Parser ---------------- */
+function parse(src){
+  const lines=src.replace(/\r/g,'').split('\n');
+  const pts=[],moves=[],issues=[],tools=[];
+  const lineToMove=new Int32Array(lines.length).fill(-1);
+  const S={x:0,y:0,z:0,kx:false,ky:false,kz:false,abs:true,units:null,plane:17,motion:null,F:0,S:0,spin:false,
+    T:null,nextT:null,len:false,lenWarned:false,r98:true,cyc:null,feedMode:94,tool:null,
+    planeSeen:false,planeLine:-1,planeTool:-1,comp:40,compLine:-1,D:null,cool:false,wo:null,absLine:-1,absG28:false,dir:0,sLine:-1,fLine:-1};
+  const keyCount={},toolDesc={};let sawEnd=false,progName='',lastComment='',lastCommentLine=-9,compNoted=false;
+  const add=(sev,line,msg,key,cat)=>{key=key||msg;keyCount[key]=(keyCount[key]||0)+1;if(keyCount[key]>3000)return;issues.push({sev,line,msg,cat});};
+  const onceSet=new Set(),once=(k,sev,line,msg,cat)=>{if(onceSet.has(k))return;onceSet.add(k);add(sev,line,msg,k,cat)};
+  const codes=v=>new Set((String(v||'').match(/\d+/g)||[]).map(Number));
+  const CON=codes(cfg.coolOn),COFF=codes(cfg.coolOff),coolName=[...CON].map(n=>'M'+n).join('/')||'coolant';
+  const ti=()=>S.tool?S.tool.idx:-1;let sawArc=false,sawCut=false;
+  /* Rotary axes and tilted planes. Points are stored in part coordinates so each indexed face lands where it is on the part.
+     Table kinematics: C sits on B sits on A, all through one rotary center. part = Rc*Rb*Ra*(machine - center) + center */
+  const RT={a:0,b:0,c:0,seen:{A:false,B:false,C:false},any:false,tcp:false,frame:null,frameId:0,ever:false};
+  const rawPts=[],wrapOn=cfg.rotView!=='machine',ctr=[+cfg.rcx||0,+cfg.rcy||0,+cfg.rcz||0],faceMap=new Map();
+  const sg=[cfg.revA?-1:1,cfg.revB?-1:1,cfg.revC?-1:1];
+  const rotMat=ang=>{let M=null;if(ang[0])M=rot3('x',sg[0]*ang[0]);if(ang[1]){const B=rot3('y',sg[1]*ang[1]);M=M?mm3(B,M):B}if(ang[2]){const C=rot3('z',sg[2]*ang[2]);M=M?mm3(C,M):C}return M};
+  const toPart=(p,ang)=>{
+    if(RT.frame){const q=mv3(RT.frame.m,p);return [q[0]+RT.frame.o[0],q[1]+RT.frame.o[1],q[2]+RT.frame.o[2]]}
+    if(!wrapOn||RT.tcp)return p;const M=rotMat(ang);if(!M)return p;
+    const q=mv3(M,[p[0]-ctr[0],p[1]-ctr[1],p[2]-ctr[2]]);return [q[0]+ctr[0],q[1]+ctr[1],q[2]+ctr[2]]};
+  const toolAxis=ang=>{if(RT.frame)return [RT.frame.m[2],RT.frame.m[5],RT.frame.m[8]];if(!wrapOn&&!RT.tcp)return null;const M=rotMat(ang);return M?[M[2],M[5],M[8]]:null};
+  const unitTol=()=>S.units===21?cfg.tol*25.4:cfg.tol;
+
+  function pushMove(type,poly,li,len,angs){
+    const a0=[RT.a,RT.b,RT.c],rot=!!(angs||RT.a||RT.b||RT.c);let part=poly;
+    if(RT.frame||(wrapOn&&!RT.tcp&&rot)){part=poly.map((p,i)=>toPart(p,angs?angs[i]:a0));
+      if(angs){let L=0;for(let i=1;i<part.length;i++)L+=Math.hypot(part[i][0]-part[i-1][0],part[i][1]-part[i-1][1],part[i][2]-part[i-1][2]);if(!(L>1e-9))return;if(!(len>1e-9))type=0;len=Math.max(len,L)}}
+    else if(!(len>1e-9))return;
+    if(RT.frame||rot)RT.ever=true;
+    if(S.wo===null)once('wo0','warn',li,'Moving before any work offset (G54–G59) is set. The control uses whatever offset was last active','wo');
+    if(S.units===null)once('u0','warn',li,'Moving before G20/G21 is set. The control uses whatever units were last active','units');
+    if(S.tool&&S.tool.wo==null)S.tool.wo=S.wo;
+    if(type===1){
+      const k=ti();sawCut=true;
+      if(!(S.F>0))once('nof'+k,'err',li,'Feed move with no feedrate (F) set','feed');
+      if(!S.spin)once('nospin'+k,'err',li,`Cutting with the spindle off — no M3/M4${S.tool?` after T${S.T} M6`:''}`,'spin');
+      else if(S.dir===4&&!(S.cyc&&S.cyc.code===74&&S.motion===74))once('m4'+k,'warn',li,`Spindle in reverse (M4) while cutting — right-hand tools need M3`,'spin');
+      if(S.tool&&!S.len&&!S.lenWarned){add('warn',li,`T${S.T} cuts without G43 tool length comp active`,null,'tlo');S.lenWarned=true;}
+      if(S.tool&&!S.tool.fChecked){S.tool.fChecked=true;if(S.F>0&&S.fLine<S.tool.line)add('warn',li,`First cut of T${S.T} uses F${S.F} left over from an earlier tool — this tool's block has no F`,null,'feed')}
+      if(!S.tool||!S.tool.coolChecked){if(S.tool)S.tool.coolChecked=true;
+        if(!S.cool)once('cool'+k,'warn',li,`${S.tool?`T${S.T} cuts`:'Cutting'} with coolant off — no ${coolName} before this cut`,'cool');
+        else if(S.tool&&!S.tool.sawCool)add('info',li,`T${S.T} has no coolant code of its own. Coolant is only on because the previous tool left it on`,null,'cool')}
+    }
+    const p0=pts.length/3;for(const p of part)pts.push(p[0],p[1],p[2]);for(const p of poly)rawPts.push(p[0],p[1],p[2]);
+    const m={type,line:li,p0,n:poly.length,len,f:S.F,s:S.S,t:S.T,tool:S.tool?S.tool.idx:-1,inv:S.feedMode===93};
+    const a1=angs?angs[angs.length-1]:a0;if(RT.any){m.r0=angs?angs[0]:a0;m.r1=a1}
+    const ax=toolAxis(a1);if(ax)m.ax=ax;
+    const fkey=RT.frame?'F'+RT.frameId:a1.map(v=>Math.round(v*1000)).join(',');let fk=faceMap.get(fkey);if(fk===undefined){fk=faceMap.size;faceMap.set(fkey,fk)}m.fk=fk;
+    if(lineToMove[li]<0)lineToMove[li]=moves.length;
+    moves.push(m);
+    if(S.tool){const t=S.tool;if(t.first<0)t.first=moves.length-1;
+      if(type===1){t.cut+=len;t.time+=S.F>0?(S.feedMode===93?1/S.F:len/S.F):0;for(const p of poly)if(p[2]<t.minZ)t.minZ=p[2];}
+      else t.time+=len/(S.units===21?cfg.rapid*25.4:cfg.rapid);}
+  }
+  function lineTo(type,tx,ty,tz,li,ta,tb,tc){
+    const known=S.kx&&S.ky&&S.kz;if(ta===undefined){ta=RT.a;tb=RT.b;tc=RT.c}
+    const a=[S.x,S.y,S.z],b=[tx,ty,tz],len=Math.hypot(b[0]-a[0],b[1]-a[1],b[2]-a[2]);
+    if(!known){if(type===1&&len>1e-9)add('warn',li,'Feed move from an unknown position (after G28 or at program start) — not plotted','unk');return}
+    const da=ta-RT.a,db=tb-RT.b,dc=tc-RT.c;
+    if(!da&&!db&&!dc){if(len>1e-9)pushMove(type,[a,b],li,len);return}
+    // rotary moves: sweep in small steps so the path wraps around the part
+    const n=(wrapOn&&!RT.tcp&&!RT.frame)?Math.max(1,Math.ceil(Math.max(Math.abs(da),Math.abs(db),Math.abs(dc))/3)):1;const poly=[],angs=[];
+    for(let i=0;i<=n;i++){const t=i/n;poly.push([a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,a[2]+(b[2]-a[2])*t]);angs.push([RT.a+da*t,RT.b+db*t,RT.c+dc*t])}
+    pushMove(type,poly,li,len,angs);
+  }
+  function arc(cw,w,tx,ty,tz,li){
+    sawArc=true;
+    if(S.plane!==17&&S.tool&&S.planeTool!==S.tool.idx)once('plarc'+S.tool.idx,'err',li,`Arc runs in G${S.plane}, left over from line ${S.planeLine+1}${S.planeTool>=0?" in an earlier tool's block":' before the first tool'}. Add G17 (or the right plane) to T${S.T}'s block`,'plane');
+    if(!(S.kx&&S.ky&&S.kz)){add('warn',li,'Arc from an unknown position — not plotted');return}
+    // plane mapping: [a,b,h] axis indices and offset letters
+    const map=S.plane===18?{a:2,b:0,h:1,oa:'K',ob:'I'}:S.plane===19?{a:1,b:2,h:0,oa:'J',ob:'K'}:{a:0,b:1,h:2,oa:'I',ob:'J'};
+    const st=[S.x,S.y,S.z],en=[tx,ty,tz];
+    const sa=st[map.a],sb=st[map.b],ea=en[map.a],eb=en[map.b];
+    let ca,cb,full=false;
+    if(w.R!==undefined){
+      const r=w.R.v,d=Math.hypot(ea-sa,eb-sb);
+      if(d<1e-9){add('err',li,'R arc with same start and end point — use I/J for a full circle');return}
+      let h2=r*r-(d/2)*(d/2);if(h2<-unitTol()*Math.abs(r)*2)add('err',li,`Arc R${fmt(Math.abs(r))} is too small to reach the end point (chord ${fmt(d)})`);
+      const h=Math.sqrt(Math.max(0,h2));const ma=(sa+ea)/2,mb=(sb+eb)/2;const pa=-(eb-sb)/d,pb=(ea-sa)/d;
+      let sg=cw?-1:1;if(r<0)sg=-sg;ca=ma+sg*h*pa;cb=mb+sg*h*pb;
+    }else{
+      const oa=w[map.oa]?w[map.oa].v:0,ob=w[map.ob]?w[map.ob].v:0;
+      if(!w[map.oa]&&!w[map.ob]){add('err',li,`G${cw?2:3} with no ${map.oa}/${map.ob} or R — arc center missing`);return}
+      ca=sa+oa;cb=sb+ob;
+      const r0=Math.hypot(sa-ca,sb-cb),r1=Math.hypot(ea-ca,eb-cb);
+      if(Math.abs(r0-r1)>unitTol())add('err',li,`Arc end point is off the radius: start R${fmt(r0)} vs end R${fmt(r1)} (diff ${fmt(Math.abs(r0-r1))})`);
+      if(Math.hypot(ea-sa,eb-sb)<1e-7)full=true;
+    }
+    const r=Math.hypot(sa-ca,sb-cb);if(r<1e-9){add('err',li,'Arc radius is zero');return}
+    const a0=Math.atan2(sb-cb,sa-ca),a1=Math.atan2(eb-cb,ea-ca);
+    let sw=cw?a0-a1:a1-a0;const TAU=Math.PI*2;sw=((sw%TAU)+TAU)%TAU;if(full||sw<1e-9)sw=full?TAU:sw;
+    const n=Math.max(4,Math.ceil(sw/(Math.PI/36)));const poly=[];const dh=en[map.h]-st[map.h];
+    for(let i=0;i<=n;i++){const t=i/n,ang=a0+(cw?-1:1)*sw*t;const p=[0,0,0];p[map.a]=ca+r*Math.cos(ang);p[map.b]=cb+r*Math.sin(ang);p[map.h]=st[map.h]+dh*t;poly.push(p)}
+    poly[n]=en.slice();
+    pushMove(1,poly,li,Math.hypot(sw*r,dh));
+  }
+  function hole(li){
+    const c=S.cyc;if(!S.kz){add('warn',li,'Drill cycle with unknown starting Z — not plotted');return}
+    if(!(S.kx&&S.ky))return;
+    const init=c.init;
+    if(c.R<c.Z)add('err',li,`Cycle R plane (${fmt(c.R)}) is below the bottom Z (${fmt(c.Z)})`,'rz');
+    if(init<c.R-1e-9)add('warn',li,`Starting Z ${fmt(init)} is below the R plane ${fmt(c.R)}`,'ir');
+    if(c.code===84&&!S.spin)add('err',li,'Tapping cycle with spindle off','tapspin','spin');
+    if(S.plane!==17)once('pldr'+c.line,'err',c.line,`Drill cycle G${c.code} in G${S.plane} — the control drills along ${S.plane===18?'Y':'X'}, not Z (set at line ${S.planeLine+1})`,'plane');
+    if(c.code===84&&S.spin&&S.dir===4)once('tap4'+c.line,'err',c.line,'G84 right-hand tapping with the spindle in M4 — use M3','spin');
+    if(c.code===74&&S.spin&&S.dir===3)once('tap3'+c.line,'err',c.line,'G74 left-hand tapping with the spindle in M3 — use M4','spin');
+    const x=S.x,y=S.y;
+    if(Math.abs(S.z-c.R)>1e-9)pushMove(0,[[x,y,S.z],[x,y,c.R]],li,Math.abs(S.z-c.R));
+    pushMove(1,[[x,y,c.R],[x,y,c.Z]],li,Math.abs(c.R-c.Z));
+    const back=S.r98?init:c.R;pushMove(0,[[x,y,c.Z],[x,y,back]],li,Math.abs(back-c.Z));
+    S.z=back;
+  }
+
+  const wordRe=/([A-Z])\s*([-+]?(?:\d+\.?\d*|\.\d+)?)/g;
+  for(let li=0;li<lines.length;li++){
+    let t=lines[li];
+    t=t.replace(/\(([^)]*)\)?/g,(m,c)=>{lastComment=c.trim();lastCommentLine=li;const tm=c.match(/\bT(?:OOL)?\s*[-#:]?\s*(\d+)\b/i);if(tm)toolDesc[+tm[1]]=(toolDesc[+tm[1]]||'')+' '+c;return ' '});
+    t=t.replace(/;.*$/,'').trim().toUpperCase();
+    if(!t||t[0]==='%')continue;
+    if(t[0]==='/')t=t.slice(1);
+    if(/^[O:]\d+/.test(t)){if(!progName)progName=t.split(/\s/)[0]+(lastCommentLine===li?' '+lastComment:'');continue}
+    if(/[#\[\]]|\bIF\b|GOTO|WHILE|\bDO\s*\d|\bEND\s*\d/.test(t)){add('warn',li,'Macro / variable line skipped — plot may be wrong after this','macro');continue}
+    const G=[],M=[],w={};let bad=false;wordRe.lastIndex=0;let m;
+    const stripped=t.replace(/\s+/g,'');
+    while((m=wordRe.exec(stripped))){
+      const L=m[1],s=m[2];
+      if(s===''||s==='-'||s==='+'){bad=true;add('err',li,`Word "${L}" has no number`);continue}
+      const v=parseFloat(s);
+      if(L==='G')G.push(Math.round(v*10)/10);else if(L==='M')M.push(v);
+      else{if(w[L]&&L!=='N')add('warn',li,`${L} appears twice on one line — the last one wins`);w[L]={v,s}}
+    }
+    if(/[^A-Z0-9.+\-\s]/.test(t.replace(/[\s]/g,'')))add('warn',li,'Unrecognized characters on line','chars');
+    // decimal point check
+    if(!cfg.dpi)for(const L of ['X','Y','Z','A','B','C','I','J','K','R','Q']){if(w[L]&&!w[L].s.includes('.')&&w[L].v!==0)add('warn',li,`${L}${w[L].s} has no decimal point — on many Fanuc controls this reads as ${w[L].v} × 0.0001`,'dec')}
+
+    let nonModal=null,cycleSet=false;
+    for(const g of G){
+      if(g===0||g===1||g===2||g===3)S.motion=g;
+      else if(g===4||g===10||g===28||g===30||g===53||g===92||g===65)nonModal=g;
+      else if(g===17||g===18||g===19){
+        if(!S.planeSeen&&g!==17&&!sawCut)add('warn',li,`Program starts in G${g}. Most programs start in G17 — check the safe-start line`,null,'plane');
+        S.planeSeen=true;S.plane=g;S.planeLine=li;S.planeTool=ti();if(S.tool)S.tool.sawPlane=true}
+      else if(g===20||g===21){if(S.units&&S.units!==g)add('warn',li,'Units switch between G20 and G21 mid-program');S.units=g}
+      else if(g===40){S.comp=40}
+      else if(g===41||g===42){S.comp=g;S.compLine=li;if(!compNoted){add('info',li,'Cutter comp G41/G42 is on — plot shows the programmed path, not the offset path',null,'comp');compNoted=true}}
+      else if(g===43||g===44)S.len=true;
+      else if(g===43.4||g===43.5){S.len=true;RT.tcp=true}
+      else if(g===49){S.len=false;RT.tcp=false}
+      else if(g===68||g===68.2)nonModal=g;
+      else if(g===69)RT.frame=null;
+      else if(g===53.1||g===53.6){}
+      else if(g===93)S.feedMode=93;
+      else if((g>=54&&g<=59)||g===54.1){S.wo=g}
+      else if(g===80){S.cyc=null;if(S.motion>=73)S.motion=null}
+      else if(g===73||g===74||g===76||(g>=81&&g<=89)){S.motion=g;cycleSet=true}
+      else if(g===90){S.abs=true;S.absG28=false}else if(g===91){S.abs=false;S.absLine=li;S.absG28=G.includes(28)||G.includes(30)}
+      else if(g===90.1||g===91.1){}
+      else if(g===94)S.feedMode=94;else if(g===95){S.feedMode=95;add('info',li,'G95 feed per rev — cycle time estimate assumes per-minute feeds','g95')}
+      else if(g===98)S.r98=true;else if(g===99)S.r98=false;
+      else if(g===15||g===16||g===50||g===51||g===66||g===67)add('warn',li,`G${g} (rotation/scaling/polar/macro) is not simulated — plot may differ`,'g'+g);
+      else if(g===61||g===64||g===5.1||g===8||g===187||g===131||g===31)add('info',li,`G${g} noted, not simulated`,'g'+g);
+      else add('warn',li,`Unknown G-code G${g}`,'ug'+g);
+    }
+    if(w.F){S.F=w.F.v;S.fLine=li}
+    if(w.S){S.S=w.S.v;S.sLine=li;if(S.S>cfg.rpm)add('warn',li,`S${S.S} is above the ${cfg.rpm} RPM limit in Setup`,null,'rpm')}
+    if(w.T)S.nextT=w.T.v;
+    if(w.D)S.D=w.D.v;
+    for(const mm of M){
+      if(mm===6){
+        if(S.nextT===null){add('err',li,'M6 tool change with no T number',null,'thd');continue}
+        if(S.comp!==40)once('compm6'+S.compLine,'err',li,`Cutter comp G${S.comp} is still on at this tool change (from line ${S.compLine+1}) — add G40`,'comp');
+        if(S.cyc)add('warn',li,`Drill cycle G${S.cyc.code} is still active at this tool change — add G80`,null,'cycle');
+        if(S.plane!==17&&S.planeTool>=0)once('plm6'+S.planeLine,'warn',li,`G${S.plane} is still active at this tool change (set at line ${S.planeLine+1}). Add G17 at the end of that toolpath`,'plane');
+        S.T=S.nextT;S.len=false;S.lenWarned=false;S.spin=false;S.dir=0;
+        const cm=(li-lastCommentLine<=3)?lastComment:'';const cmT=[...cm.matchAll(/\bT(?:OOL)?\s*[-#:]?\s*(\d+)\b/gi)].map(m=>+m[1]);
+        const desc=((cmT.length&&!cmT.includes(S.T)?'':cm)+' '+(toolDesc[S.T]||'')).trim();
+        const near=(li-lastCommentLine<=1)?lastComment:'';const ct=[...new Set([...near.matchAll(/\bT(?:OOL)?\s*[-#:]?\s*(\d+)\b/gi)].map(m=>+m[1]))];
+        if(ct.length===1&&ct[0]!==S.T)add('err',li,`Tool comment says T${ct[0]} but this line loads T${S.T}`,null,'thd');
+        S.tool={idx:tools.length,t:S.T,line:li,comment:cm||(toolDesc[S.T]||'').trim(),dia:parseDia(cm)||parseDia(toolDesc[S.T]),cut:0,time:0,minZ:Infinity,first:-1,maxS:0,wo:null};tools.push(S.tool);
+      }
+      else if(mm===3||mm===4){if(!(S.S>0))add('err',li,'Spindle started with no S speed',null,'spin');
+        else if(S.tool&&S.sLine<S.tool.line)once('sold'+ti(),'warn',li,`M${mm} runs at S${S.S} left over from an earlier tool — this tool's block has no S`,'spin');
+        S.spin=true;S.dir=mm}
+      else if(mm===5)S.spin=false;
+      else if(CON.has(mm)){S.cool=true;if(S.tool)S.tool.sawCool=true}
+      else if(COFF.has(mm))S.cool=false;
+      else if(mm===30||mm===2){sawEnd=true;
+        if(S.plane!==17)add('warn',li,`Program ends in G${S.plane} (set at line ${S.planeLine+1}). Add G17 so the next program does not start in G${S.plane}`,null,'plane');
+        if(S.comp!==40)add('err',li,`Program ends with cutter comp G${S.comp} still on — add G40`,null,'comp');
+        if(S.cyc)add('warn',li,`Program ends with drill cycle G${S.cyc.code} still active — add G80`,null,'cycle');
+        if(!S.abs&&!S.absG28)add('warn',li,'Program ends in G91 incremental — add G90',null,'abs')}
+      else if(mm===98||mm===97)add('warn',li,'Subprogram call is not followed — that program is not plotted','sub');
+      else if(mm===99)add('info',li,'M99 return','m99');
+    }
+    // T, H and D must always be the same number as the tool in the spindle
+    const g43=G.some(g=>g===43||g===44);
+    if(g43&&!w.H)add('err',li,'G43 with no H offset number',null,'thd');
+    if(S.T!==null){
+      if(w.H&&w.H.v!==S.T)add('err',li,`H${w.H.v} does not match T${S.T} in the spindle — should be H${S.T}`,null,'thd');
+      if(w.D&&w.D.v!==S.T)add('err',li,`D${w.D.v} does not match T${S.T} in the spindle — should be D${S.T}`,null,'thd');
+    }
+    if(G.some(g=>g===41||g===42)){const gc=G.find(g=>g===41||g===42);
+      if(S.D===null)add('err',li,`G${gc} with no D offset number`,null,'thd');
+      else if(S.T!==null&&!w.D&&S.D!==S.T)add('err',li,`G${gc} uses D${S.D} left over from an earlier tool — should be D${S.T}`,null,'thd');
+      if(S.plane!==17)add('err',li,`Cutter comp G${gc} started in G${S.plane} — it will offset in the wrong plane`,null,'plane');
+      if((S.motion===2||S.motion===3)&&(w.X||w.Y||w.Z))add('err',li,`Cutter comp G${gc} starts on an arc — Fanuc alarms on this. Start it on a straight move`,null,'comp')}
+    if(S.tool&&S.S>S.tool.maxS&&S.spin)S.tool.maxS=S.S;
+
+    if(nonModal===4||nonModal===10||nonModal===65)continue;
+    if(nonModal===92){add('warn',li,'G92 coordinate shift is not simulated');continue}
+    if(nonModal===68.2){const o=[w.X?w.X.v:0,w.Y?w.Y.v:0,w.Z?w.Z.v:0];
+      RT.frame={o,m:mm3(mm3(rot3('z',w.I?w.I.v:0),rot3('x',w.J?w.J.v:0)),rot3('z',w.K?w.K.v:0))};RT.frameId++;continue}
+    if(nonModal===68){const c=[w.X?w.X.v:S.x,w.Y?w.Y.v:S.y,w.Z?w.Z.v:S.z],r=w.R?w.R.v:0;
+      const M=(w.I||w.J||w.K)?axisAngle([w.I?w.I.v:0,w.J?w.J.v:0,w.K?w.K.v:0],r):rot3(S.plane===18?'y':S.plane===19?'x':'z',r);const mc=mv3(M,c);
+      RT.frame={o:[c[0]-mc[0],c[1]-mc[1],c[2]-mc[2]],m:M};RT.frameId++;continue}
+    if(nonModal===28||nonModal===30||nonModal===53){
+      if(S.cyc&&nonModal!==53)once('cyc28'+li,'warn',li,`G${nonModal} with drill cycle G${S.cyc.code} still active — add G80 first`,'cycle');
+      if(w.X)S.kx=false;if(w.Y)S.ky=false;if(w.Z)S.kz=false;
+      for(const [L,k] of [['A','a'],['B','b'],['C','c']])if(w[L]){RT.seen[L]=RT.any=true;RT[k]=nonModal===53?w[L].v:0}
+      if(nonModal!==53&&S.abs&&(w.X&&w.X.v!==0||w.Y&&w.Y.v!==0||w.Z&&w.Z.v!==0))add('info',li,`G${nonModal} in G90 moves through an intermediate point first`,'g28abs');
+      continue;
+    }
+    const has=w.X||w.Y||w.Z||w.A||w.B||w.C;
+    const rv=(L,c)=>w[L]?(S.abs?w[L].v:c+w[L].v):c,ta=rv('A',RT.a),tb=rv('B',RT.b),tc=rv('C',RT.c);
+    for(const L of ['A','B','C'])if(w[L])RT.seen[L]=RT.any=true;
+    const setRot=()=>{RT.a=ta;RT.b=tb;RT.c=tc};
+    if((w.X||w.Y||w.Z)&&!S.abs){if(S.absG28)once('absg'+S.absLine,'err',li,`Moving in G91 incremental. The G91 on the G28 line ${S.absLine+1} was never cancelled with G90`,'abs');
+      else once('absi'+ti(),'warn',li,'Moving in G91 incremental mode — make sure this is meant','abs')}
+    const val=(L,cur)=>w[L]?(S.abs?w[L].v:cur+w[L].v):cur;
+    const tx=val('X',S.x),ty=val('Y',S.y),tz=val('Z',S.z);
+
+    if(S.motion!==null&&S.motion>=73){
+      if(cycleSet){
+        const init=S.z;const R=w.R?(S.abs?w.R.v:init+w.R.v):(S.cyc?S.cyc.R:null);
+        const Zb=w.Z?(S.abs?w.Z.v:(R??init)+w.Z.v):(S.cyc?S.cyc.Z:null);
+        if(R===null||Zb===null){add('err',li,`G${S.motion} cycle missing ${R===null?'R':'Z'}`);S.cyc=null;continue}
+        S.cyc={code:S.motion,R,Z:Zb,init:S.cyc&&!cycleSet?S.cyc.init:init,line:li};
+        if(!(S.F>0))add('err',li,'Drill cycle with no feedrate',null,'feed');
+        if(!S.spin&&S.motion!==84)add('err',li,'Drill cycle with spindle off',null,'spin');
+      }else if(!S.cyc)continue;
+      if(w.L&&w.L.v===0||w.K&&w.K.v===0)continue;
+      if(w.X||w.Y||cycleSet){
+        if((w.X||w.Y||w.A||w.B||w.C)&&S.kz)lineTo(0,tx,ty,S.z,li,ta,tb,tc);setRot();if(w.X){S.x=tx;S.kx=true}if(w.Y){S.y=ty;S.ky=true}
+        // rapid to XY at current Z
+        hole(li);
+      }
+      continue;
+    }
+    if(!has&&!(S.motion===2||S.motion===3)&&!(w.I||w.J||w.K||w.R))continue;
+    if(S.motion===null){if(has){add('warn',li,'Axis move with no motion mode (G0/G1) active — not plotted');}continue}
+    if(S.motion===0||S.motion===1){
+      if(has){lineTo(S.motion,tx,ty,tz,li,ta,tb,tc);setRot();if(w.X){S.x=tx;S.kx=true}if(w.Y){S.y=ty;S.ky=true}if(w.Z){S.z=tz;S.kz=true}}
+    }else if(S.motion===2||S.motion===3){
+      if(has||w.I||w.J||w.K||w.R){
+        if(!(S.F>0)&&!(S.kx&&S.ky&&S.kz)){}
+        arc(S.motion===2,w,tx,ty,tz,li);setRot();
+        if(w.X){S.x=tx;S.kx=true}if(w.Y){S.y=ty;S.ky=true}if(w.Z){S.z=tz;S.kz=true}
+      }
+    }
+  }
+  if(!sawEnd&&moves.length)add('info',lines.length-1,'Program never reaches M30 or M2',null,'end');
+  if(sawArc&&!S.planeSeen)add('info',0,'No G17/G18/G19 anywhere — arcs assume the control is already in G17',null,'plane');
+  {const ws=tools.filter(t=>t.wo!=null),cnt={};ws.forEach(t=>cnt[t.wo]=(cnt[t.wo]||0)+1);const keys=Object.keys(cnt);
+   if(keys.length>1){const main=+keys.sort((a,b)=>cnt[b]-cnt[a])[0];for(const t of ws)if(t.wo!==main)add('info',t.line,`T${t.t} runs in G${t.wo} while most tools use G${main}`,null,'wo')}}
+  if(!moves.length)add('err',0,'No toolpath found — check that this is milling G-code');
+  // summary extra counts
+  if(RT.ever)issues.push({sev:'info',line:-1,msg:'Rapid-through-material check is off for programs with rotary or tilted-plane moves',cat:'rapid'});
+  else rapidCheck(pts,moves,tools,add,issues,S.units);
+  const order={err:0,warn:1,info:2};issues.sort((a,b)=>order[a.sev]-order[b.sev]||a.line-b.line);
+
+  // stats
+  const P=new Float64Array(pts);const units=S.units===21?'mm':'in';
+  let feed=0,rapid=0,time=0;const bb=[Infinity,Infinity,Infinity,-Infinity,-Infinity,-Infinity],cb=bb.slice();
+  const rr=units==='mm'?cfg.rapid*25.4:cfg.rapid;
+  for(const mv of moves){
+    if(mv.type){feed+=mv.len;time+=mv.f>0?mv.len/mv.f:0}else{rapid+=mv.len;time+=mv.len/rr}
+    for(let k=0;k<mv.n;k++){const o=(mv.p0+k)*3;for(let a=0;a<3;a++){const v=P[o+a];if(v<bb[a])bb[a]=v;if(v>bb[a+3])bb[a+3]=v;if(mv.type){if(v<cb[a])cb[a]=v;if(v>cb[a+3])cb[a+3]=v}}}
+  }
+  return {lines,pts:P,raw:new Float64Array(rawPts),rot:RT.any?RT.seen:null,faces:faceMap.size,moves,issues,tools,lineToMove,units,progName,stats:{feed,rapid,time,bb,cb}};
+}
+function fmt(v,d){if(!isFinite(v))return '—';d=d??(cur&&cur.units==='mm'?3:4);let s=v.toFixed(d).replace(/0+$/,'').replace(/\.$/,'.');if(s==='-0.')s='0.';return s}
+function fmtTime(min){const s=Math.round(min*60);const h=Math.floor(s/3600),m=Math.floor(s%3600/60),ss=s%60;return (h?h+':'+String(m).padStart(2,'0'):m)+':'+String(ss).padStart(2,'0')}
+
+
+/* Tool diameter from comments: "1/2 FLAT ENDMILL", "2.0 FACE MILL", "DIA. - .5", "D=0.5", "Ø12" */
+function parseDia(s){if(!s)return 0;s=String(s).toUpperCase();let m;
+  const W='(?:IN(?:CH)?\\.?|"|MM)?\\s*(?:FLAT|BALL|BULL|END|E\\/M|EM\\b|FACE|DRILL|SPOT|CHAMF|SHELL|MILL|TAP|REAM|BORE|CENTER|CTR|ROUGH|FINISH)';
+  if((m=s.match(/DIA(?:METER)?\.?\s*[=:\-]?\s*(\d*\.\d+|\d+)(?!\s*\/)/)))return +m[1];
+  if((m=s.match(/(?:^|[^A-Z])D\s*=\s*(\d*\.\d+|\d+)/)))return +m[1];
+  if((m=s.match(/[Ø⌀]\s*(\d*\.\d+|\d+)/)))return +m[1];
+  if((m=s.match(new RegExp('(\\d+)\\s*\\/\\s*(\\d+)\\s*'+W))))return m[1]/m[2];
+  if((m=s.match(new RegExp('(?:^|[^\\d#.])(\\d*\\.\\d+|\\d+)\\s*'+W))))return +m[1];
+  return 0}
+
+/* Rapid check: a rapid below stock top is only a problem if it passes over material
+   that has not already been cut that deep. Cut depth is tracked on an XY grid, stamped
+   with each tool's radius as the program runs. */
+function rapidCheck(P,moves,tools,add,issues,units){
+  const floor=cfg.zfloor,mm=units===21,tolZ=mm?0.02:0.001,defR=mm?5:0.1875;
+  let need=false;
+  for(const m of moves){if(m.type)continue;const a=m.p0*3,b=(m.p0+m.n-1)*3;if(Math.min(P[a+2],P[b+2])<floor-1e-9){need=true;break}}
+  if(!need)return;
+  for(const t of tools){const d=t.dia,ok=d>0&&d<(mm?300:12);t.r=ok?d/2:defR;t.rGuess=!ok}
+  let maxR=defR;for(const t of tools)maxR=Math.max(maxR,t.r);
+  let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity,L=0;
+  for(let i=0;i<P.length;i+=3){const x=P[i],y=P[i+1];if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y}
+  for(const m of moves)if(m.type)L+=m.len;
+  const span=Math.max(x1-x0,y1-y0,1e-6)+2*maxR;
+  let cell=Math.max(span/400,Math.cbrt(Math.PI*L*maxR*maxR/2.5e7));
+  x0-=maxR+2*cell;y0-=maxR+2*cell;x1+=maxR+2*cell;y1+=maxR+2*cell;
+  let nx=Math.ceil((x1-x0)/cell)+1,ny=Math.ceil((y1-y0)/cell)+1;
+  if(nx*ny>4e6){cell*=Math.sqrt(nx*ny/4e6);nx=Math.ceil((x1-x0)/cell)+1;ny=Math.ceil((y1-y0)/cell)+1}
+  const G=new Float32Array(nx*ny).fill(Infinity);
+  const stamp=(x,y,z,rc)=>{const cx=(x-x0)/cell-.5,cy=(y-y0)/cell-.5,r2=rc*rc;
+    const ix0=Math.max(0,Math.floor(cx-rc)),ix1=Math.min(nx-1,Math.ceil(cx+rc)),iy0=Math.max(0,Math.floor(cy-rc)),iy1=Math.min(ny-1,Math.ceil(cy+rc));
+    for(let iy=iy0;iy<=iy1;iy++){const dy=iy-cy,row=iy*nx;for(let ix=ix0;ix<=ix1;ix++){const dx=ix-cx;if(dx*dx+dy*dy<=r2){const k=row+ix;if(z<G[k])G[k]=z}}}};
+  const cutAt=(x,y)=>{const ix=Math.floor((x-x0)/cell),iy=Math.floor((y-y0)/cell);let v=Infinity;
+    for(let j=Math.max(0,iy-1);j<=Math.min(ny-1,iy+1);j++)for(let i=Math.max(0,ix-1);i<=Math.min(nx-1,ix+1);i++){const g=G[j*nx+i];if(g<v)v=g}return v};
+  let safe=0;
+  for(const m of moves){
+    if(m.type){
+      const rc=(m.tool>=0&&tools[m.tool]?tools[m.tool].r:defR)/cell+.5;
+      for(let k=0;k<m.n-1;k++){const a=(m.p0+k)*3,b=a+3;if(P[a+2]>=floor&&P[b+2]>=floor)continue;
+        const d=Math.hypot(P[b]-P[a],P[b+1]-P[a+1]),ns=Math.max(1,Math.ceil(d/(cell*.7)));
+        for(let s=0;s<=ns;s++){const t=s/ns;stamp(P[a]+(P[b]-P[a])*t,P[a+1]+(P[b+1]-P[a+1])*t,P[a+2]+(P[b+2]-P[a+2])*t,rc)}}
+      continue;
+    }
+    const a=m.p0*3,b=(m.p0+m.n-1)*3,za=P[a+2],zb=P[b+2];
+    if(Math.min(za,zb)>=floor-1e-9)continue;
+    const d=Math.hypot(P[b]-P[a],P[b+1]-P[a+1]);
+    if(d<cell*.5){
+      if(zb<za&&zb<floor-1e-9){if(cutAt(P[b],P[b+1])>zb+tolZ)add('warn',m.line,`Rapid plunge to Z${fmt(zb)} where nothing has been cut that deep yet. Fine if this spot is outside the stock`,'rpl');else safe++}
+      continue;
+    }
+    const ns=Math.max(2,Math.ceil(d/(cell*.5)));let hit=null;
+    for(let s=0;s<=ns;s++){const t=s/ns,z=za+(zb-za)*t;if(z>=floor-1e-9)continue;const x=P[a]+(P[b]-P[a])*t,y=P[a+1]+(P[b+1]-P[a+1])*t;if(cutAt(x,y)>z+tolZ){hit=[x,y,z];break}}
+    if(hit)add('err',m.line,`Rapid at Z${fmt(hit[2])} crosses material that has not been cut that deep (near X${fmt(hit[0])} Y${fmt(hit[1])}). Possible crash`,'rx');else safe++;
+  }
+  if(safe)issues.push({sev:'info',line:-1,msg:`${safe} rapid move${safe>1?'s':''} below Z${fmt(floor)} stay inside areas already cut, so they were treated as safe`});
+}
+
+/* 3x3 rotation helpers (row-major) */
+function rot3(axis,deg){const r=deg*Math.PI/180,c=Math.cos(r),s=Math.sin(r);
+  if(axis==='x')return [1,0,0, 0,c,-s, 0,s,c];if(axis==='y')return [c,0,s, 0,1,0, -s,0,c];return [c,-s,0, s,c,0, 0,0,1]}
+function mm3(A,B){const R=new Array(9);for(let i=0;i<3;i++)for(let j=0;j<3;j++)R[i*3+j]=A[i*3]*B[j]+A[i*3+1]*B[3+j]+A[i*3+2]*B[6+j];return R}
+function mv3(M,v){return [M[0]*v[0]+M[1]*v[1]+M[2]*v[2],M[3]*v[0]+M[4]*v[1]+M[5]*v[2],M[6]*v[0]+M[7]*v[1]+M[8]*v[2]]}
+function axisAngle(u,deg){const l=Math.hypot(u[0],u[1],u[2])||1,x=u[0]/l,y=u[1]/l,z=u[2]/l,r=deg*Math.PI/180,c=Math.cos(r),s=Math.sin(r),t=1-c;
+  return [t*x*x+c,t*x*y-s*z,t*x*z+s*y, t*x*y+s*z,t*y*y+c,t*y*z-s*x, t*x*z-s*y,t*y*z+s*x,t*z*z+c]}
+/* ---------------- Viewer ---------------- */
+const vpwrap=$('vpwrap'),cv=$('cv'),ctx=cv.getContext('2d'),glc=$('gl');
+let W=0,H=0,DPR=1,GDPR=1,needFit=true,dataId=0;
+const cam={yaw:-Math.PI/4,pitch:0.62,scale:40,px:0,py:0,c:[0,0,0]};
+let cur=null,prog=0,playing=false,vpColor='#14191b';
+const opt={rapid:true,ghost:true,tool:true,grid:true};
+let fbDirty=true;
+function hexRgb(h){h=String(h).trim().replace('#','');if(h.length===3)h=h.split('').map(c=>c+c).join('');const n=parseInt(h,16)||0;return [(n>>16&255)/255,(n>>8&255)/255,(n&255)/255]}
+function readColors(){vpColor=getComputedStyle(document.documentElement).getPropertyValue('--vp').trim()||'#14191b';fbDirty=true;req()}
+
+const HZ=()=>cfg.machine==='hmc';
+function projRaw(x,y,z){const cy=Math.cos(cam.yaw),sy=Math.sin(cam.yaw),cp=Math.cos(cam.pitch),spp=Math.sin(cam.pitch);
+  x-=cam.c[0];y-=cam.c[1];z-=cam.c[2];if(HZ()){const t=y;y=-z;z=t}return [x*cy-y*sy,z*cp+(x*sy+y*cy)*spp]}
+function toScreen(x,y,z){const p=projRaw(x,y,z);return [W/2+cam.px+p[0]*cam.scale,H/2+cam.py-p[1]*cam.scale]}
+function fit(){
+  if(!W||!H){needFit=true;return}needFit=false;
+  if(!cur||!cur.moves.length){cam.c=[0,0,0];cam.scale=40;cam.px=cam.py=0;req();return}
+  const b=visBB()||cur.stats.bb;cam.c=[(b[0]+b[3])/2,(b[1]+b[4])/2,(b[2]+b[5])/2];cam.px=cam.py=0;
+  let mnx=Infinity,mny=Infinity,mxx=-Infinity,mxy=-Infinity;
+  for(let i=0;i<8;i++){const p=projRaw(i&1?b[3]:b[0],i&2?b[4]:b[1],i&4?b[5]:b[2]);mnx=Math.min(mnx,p[0]);mxx=Math.max(mxx,p[0]);mny=Math.min(mny,p[1]);mxy=Math.max(mxy,p[1])}
+  const leftPad=W>700?200:20,topPad=W>700?0:150;
+  const sx=(W-leftPad-40)/Math.max(1e-6,mxx-mnx),sy=(H-70-topPad)/Math.max(1e-6,mxy-mny);cam.scale=Math.max(1e-3,Math.min(sx,sy)*0.92);
+  cam.py=((mxy+mny)/2)*cam.scale+topPad/2-10; cam.px=-((mxx+mnx)/2)*cam.scale+leftPad/2;
+  req();
+}
+function niceStep(x){const p=Math.pow(10,Math.floor(Math.log10(x)));const f=x/p;return (f<1.5?1:f<3.5?2:f<7.5?5:10)*p}
+function gridSegs(){
+  const b=cur.stats.bb;const ext=Math.max(b[3]-b[0],b[4]-b[1],1e-3);const st=niceStep(ext/8);
+  const x0=Math.floor(Math.min(b[0],0)/st)*st,x1=Math.ceil(Math.max(b[3],0)/st)*st,y0=Math.floor(Math.min(b[1],0)/st)*st,y1=Math.ceil(Math.max(b[4],0)/st)*st;
+  const s=[];for(let x=x0;x<=x1+st/2;x+=st)s.push([x,y0,0,x,y1,0]);for(let y=y0;y<=y1+st/2;y+=st)s.push([x0,y,0,x1,y,0]);return s;
+}
+
+/* ---- GPU renderer (WebGL): the whole path lives on the graphics card; rotate/zoom/play only change uniforms ---- */
+let gl=null,G=null,softGL=false,glKey='',glDone=0,interactUntil=0,settleTimer=0;
+const VS=`attribute vec3 aPos;attribute vec3 aInfo;
+uniform vec3 uC;uniform vec4 uRot;uniform vec4 uView;uniform float uScale;uniform float uShowRapid;uniform vec3 uCols[8];uniform vec3 uRapidCol;uniform float uByTool;uniform float uHoriz;
+varying vec3 vCol;varying float vRapid;varying float vAlong;
+void main(){
+  vec3 p=aPos-uC;
+  if(uHoriz>0.5)p=vec3(p.x,-p.z,p.y);
+  float x1=p.x*uRot.x-p.y*uRot.y;
+  float y1=p.z*uRot.z+(p.x*uRot.y+p.y*uRot.x)*uRot.w;
+  float sx=uView.x*0.5+uView.z+x1*uScale;
+  float sy=uView.y*0.5+uView.w-y1*uScale;
+  gl_Position=vec4(sx/uView.x*2.0-1.0,1.0-sy/uView.y*2.0,0.0,1.0);
+  vRapid=aInfo.y;vAlong=aInfo.z*uScale;
+  int t=int(floor(mod(max(aInfo.x,0.0),8.0)+0.5));
+  vec3 c=uCols[0];
+  if(uByTool>0.5){for(int i=0;i<8;i++){if(i==t)c=uCols[i];}}
+  vCol=aInfo.y>0.5?uRapidCol:c;
+  if(aInfo.y>0.5&&uShowRapid<0.5)gl_Position=vec4(2.0,2.0,2.0,1.0);
+}`;
+const FS=`#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
+precision mediump float;
+#endif
+varying vec3 vCol;varying float vRapid;varying float vAlong;uniform vec4 uGhost;
+void main(){
+  if(vRapid>0.5&&mod(vAlong,9.0)>5.0)discard;
+  gl_FragColor=uGhost.a>0.0?uGhost:vec4(vCol,1.0);
+}`;
+function initGL(){
+  gl=null;G=null;
+  let soft=false;
+  try{const t=document.createElement('canvas').getContext('webgl');if(t){const ext=t.getExtension('WEBGL_debug_renderer_info');const rn=String(ext?t.getParameter(ext.UNMASKED_RENDERER_WEBGL):t.getParameter(t.RENDERER));soft=/swiftshader|llvmpipe|softpipe|software|basic render/i.test(rn);const l=t.getExtension('WEBGL_lose_context');if(l)l.loseContext()}}catch(e){}
+  softGL=soft;
+  try{gl=glc.getContext('webgl',{antialias:!soft,alpha:false,depth:false,preserveDrawingBuffer:true})||glc.getContext('experimental-webgl',{preserveDrawingBuffer:true})}catch(e){gl=null}
+  if(!gl)return;
+  try{
+    const sh=(t,s)=>{const o=gl.createShader(t);gl.shaderSource(o,s);gl.compileShader(o);if(!gl.getShaderParameter(o,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(o));return o};
+    const p=gl.createProgram();gl.attachShader(p,sh(gl.VERTEX_SHADER,VS));gl.attachShader(p,sh(gl.FRAGMENT_SHADER,FS));gl.linkProgram(p);
+    if(!gl.getProgramParameter(p,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(p));
+    G={p,aPos:gl.getAttribLocation(p,'aPos'),aInfo:gl.getAttribLocation(p,'aInfo'),u:{},
+       path:{pos:gl.createBuffer(),info:gl.createBuffer(),n:0},lod:{pos:gl.createBuffer(),info:gl.createBuffer(),n:0},grid:{pos:gl.createBuffer(),info:gl.createBuffer(),n:0}};
+    for(const n of ['uC','uRot','uView','uScale','uShowRapid','uCols','uRapidCol','uByTool','uGhost','uHoriz'])G.u[n]=gl.getUniformLocation(p,n);
+    gl.useProgram(p);
+    const cols=new Float32Array(24);TOOLCOL.forEach((c,i)=>cols.set(hexRgb(c),i*3));gl.uniform3fv(G.u.uCols,cols);
+    gl.uniform3fv(G.u.uRapidCol,new Float32Array(hexRgb(RAPIDCOL)));
+    gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
+  }catch(e){console.warn('WebGL unavailable, using 2D drawing',e);gl=null;G=null}
+}
+glc.addEventListener('webglcontextlost',e=>{e.preventDefault();G=null;glKey=''},false);
+glc.addEventListener('webglcontextrestored',()=>{initGL();uploadGL();req()},false);
+function bindSet(s){gl.bindBuffer(gl.ARRAY_BUFFER,s.pos);gl.enableVertexAttribArray(G.aPos);gl.vertexAttribPointer(G.aPos,3,gl.FLOAT,false,0,0);
+  gl.bindBuffer(gl.ARRAY_BUFFER,s.info);gl.enableVertexAttribArray(G.aInfo);gl.vertexAttribPointer(G.aInfo,3,gl.FLOAT,false,0,0)}
+function uploadGL(){
+  if(!cur)return;
+  const mv=cur.moves,P=cur.pts,c0=cur.c0;let nv=0;for(const m of mv)nv+=(m.n-1)*2;
+  const vs=new Uint32Array(mv.length+1);cur.vs=vs;
+  if(!gl||!G){let v=0;for(let i=0;i<mv.length;i++){vs[i]=v;v+=(mv[i].n-1)*2}vs[mv.length]=v;return}
+  const pos=new Float32Array(nv*3),inf=new Float32Array(nv*3);let v=0;
+  for(let i=0;i<mv.length;i++){const m=mv[i];vs[i]=v;let al=0;const r=m.type?0:1;
+    for(let k=0;k<m.n-1;k++){const a=(m.p0+k)*3,o=v*3;
+      const dx=P[a+3]-P[a],dy=P[a+4]-P[a+1],dz=P[a+5]-P[a+2],L=Math.sqrt(dx*dx+dy*dy+dz*dz);
+      pos[o]=P[a]-c0[0];pos[o+1]=P[a+1]-c0[1];pos[o+2]=P[a+2]-c0[2];pos[o+3]=P[a+3]-c0[0];pos[o+4]=P[a+4]-c0[1];pos[o+5]=P[a+5]-c0[2];
+      inf[o]=m.tool;inf[o+1]=r;inf[o+2]=al;inf[o+3]=m.tool;inf[o+4]=r;inf[o+5]=al+L;al+=L;v+=2}}
+  vs[mv.length]=v;
+  // lighter copy for use while rotating/zooming/scrubbing: skips points closer than ~1/1500 of the part size
+  const bb=cur.stats.bb,tol=Math.max(bb[3]-bb[0],bb[4]-bb[1],bb[5]-bb[2],1e-6)/1500,tol2=tol*tol;
+  const vsL=new Uint32Array(mv.length+1);cur.vsL=vsL;cur.lodWorth=v>60000;
+  let lp=[],li=[],lv=0;
+  if(cur.lodWorth){
+    let have=false,pk=0,ptool=0,prap=0,kx=0,ky=0,kz=0,kA=0,ex=0,ey=0,ez=0,eA=0,al=0;
+    const emit=(x,y,z,A)=>{lp.push(kx-c0[0],ky-c0[1],kz-c0[2],x-c0[0],y-c0[1],z-c0[2]);li.push(ptool,prap,kA,ptool,prap,A);kx=x;ky=y;kz=z;kA=A;lv+=2};
+    for(let i=0;i<mv.length;i++){const m=mv[i];vsL[i]=lv;const key=m.type?m.tool:-99;
+      if(have&&key!==pk){if(ex!==kx||ey!==ky||ez!==kz)emit(ex,ey,ez,eA);have=false}
+      if(!have){const o=m.p0*3;kx=ex=P[o];ky=ey=P[o+1];kz=ez=P[o+2];kA=eA=al=0;have=true;pk=key;ptool=m.tool;prap=m.type?0:1}
+      for(let k=1;k<m.n;k++){const o=(m.p0+k)*3,x=P[o],y=P[o+1],z=P[o+2];al+=Math.hypot(x-ex,y-ey,z-ez);ex=x;ey=y;ez=z;eA=al;
+        const dx=x-kx,dy=y-ky,dz=z-kz;if(dx*dx+dy*dy+dz*dz>tol2||(!m.type&&k===m.n-1))emit(x,y,z,al)}}
+    if(have&&(ex!==kx||ey!==ky||ez!==kz))emit(ex,ey,ez,eA);
+  }
+  vsL[mv.length]=lv;
+  gl.bindBuffer(gl.ARRAY_BUFFER,G.lod.pos);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(lp),gl.STATIC_DRAW);
+  gl.bindBuffer(gl.ARRAY_BUFFER,G.lod.info);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(li),gl.STATIC_DRAW);G.lod.n=lv;
+  glKey='';
+  gl.bindBuffer(gl.ARRAY_BUFFER,G.path.pos);gl.bufferData(gl.ARRAY_BUFFER,pos,gl.STATIC_DRAW);
+  gl.bindBuffer(gl.ARRAY_BUFFER,G.path.info);gl.bufferData(gl.ARRAY_BUFFER,inf,gl.STATIC_DRAW);G.path.n=v;
+  const gs=mv.length?gridSegs():[];const gp=new Float32Array(gs.length*6);
+  gs.forEach((s,i)=>{for(let k=0;k<6;k++)gp[i*6+k]=s[k]-c0[k%3]});
+  gl.bindBuffer(gl.ARRAY_BUFFER,G.grid.pos);gl.bufferData(gl.ARRAY_BUFFER,gp,gl.STATIC_DRAW);
+  gl.bindBuffer(gl.ARRAY_BUFFER,G.grid.info);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(gs.length*6),gl.STATIC_DRAW);G.grid.n=gs.length*2;
+}
+function drawGL(target){
+  if(!cur||!cur.vs||!G){gl.viewport(0,0,glc.width,glc.height);const bg=hexRgb(vpColor);gl.clearColor(bg[0],bg[1],bg[2],1);gl.clear(gl.COLOR_BUFFER_BIT);glKey='';return}
+  const lod=cur.lodWorth&&performance.now()<interactUntil;
+  const set=lod?G.lod:G.path,vs=lod?cur.vsL:cur.vs,u=G.u,c0=cur.c0;
+  const key=[cam.yaw,cam.pitch,cam.scale,cam.px,cam.py,cam.c.join(),W,H,glc.width,glc.height,opt.rapid,opt.tool,opt.ghost,opt.grid,dataId,vpColor,lod,cfg.machine,visKey].join('|');
+  gl.useProgram(G.p);
+  if(key!==glKey||target<glDone){
+    glKey=key;glDone=target;
+    gl.viewport(0,0,glc.width,glc.height);const bg=hexRgb(vpColor);gl.clearColor(bg[0],bg[1],bg[2],1);gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.uniform3f(u.uC,cam.c[0]-c0[0],cam.c[1]-c0[1],cam.c[2]-c0[2]);
+    gl.uniform4f(u.uRot,Math.cos(cam.yaw),Math.sin(cam.yaw),Math.cos(cam.pitch),Math.sin(cam.pitch));
+    gl.uniform4f(u.uView,W,H,cam.px,cam.py);gl.uniform1f(u.uScale,cam.scale);
+    gl.uniform1f(u.uShowRapid,opt.rapid?1:0);gl.uniform1f(u.uByTool,opt.tool?1:0);gl.uniform1f(u.uHoriz,HZ()?1:0);
+    if(opt.grid&&G.grid.n){bindSet(G.grid);gl.uniform4f(u.uGhost,.15,.19,.2,1);gl.drawArrays(gl.LINES,0,G.grid.n)}
+    bindSet(set);
+    const spans=visR||[[0,cur.moves.length]];
+    if(opt.ghost){gl.uniform4f(u.uGhost,.59,.67,.69,.22);for(const [a,b] of spans){const st=Math.max(a,target);if(b>st&&vs[b]>vs[st])gl.drawArrays(gl.LINES,vs[st],vs[b]-vs[st])}}
+    gl.uniform4f(u.uGhost,0,0,0,0);for(const [a,b] of spans){const e=Math.min(b,target);if(e>a&&vs[e]>vs[a])gl.drawArrays(gl.LINES,vs[a],vs[e]-vs[a])}
+  }else if(target>glDone){
+    // playback: only draw the moves cut since the last frame on top of what is already there
+    bindSet(set);gl.uniform4f(u.uGhost,0,0,0,0);for(const [a,b] of (visR||[[0,cur.moves.length]])){const st=Math.max(a,glDone),e=Math.min(b,target);if(e>st&&vs[e]>vs[st])gl.drawArrays(gl.LINES,vs[st],vs[e]-vs[st])}glDone=target;
+  }
+}
+function interacting(){interactUntil=performance.now()+160;clearTimeout(settleTimer);settleTimer=setTimeout(req,200)}
+
+/* ---- 2D fallback (only if WebGL is unavailable): cached layers ---- */
+const base=document.createElement('canvas'),bctx=base.getContext('2d'),done=document.createElement('canvas'),dctx=done.getContext('2d');
+let sp=new Float32Array(0),fbKey='',doneUpTo=0;
+function project(){
+  const pts=cur.pts,n=pts.length/3;if(sp.length<n*2)sp=new Float32Array(n*2);
+  const cy=Math.cos(cam.yaw),sy=Math.sin(cam.yaw),cp=Math.cos(cam.pitch),spp=Math.sin(cam.pitch),ox=W/2+cam.px,oy=H/2+cam.py,s=cam.scale,c0=cam.c[0],c1=cam.c[1],c2=cam.c[2];
+  const hz=HZ();for(let i=0,j=0;i<n;i++,j+=3){let x=pts[j]-c0,y=pts[j+1]-c1,z=pts[j+2]-c2;if(hz){const t=y;y=-z;z=t}sp[i*2]=ox+(x*cy-y*sy)*s;sp[i*2+1]=oy-(z*cp+(x*sy+y*cy)*spp)*s}
+}
+function mkPen(){return {p:new Path2D(),lx:-1e9,ly:-1e9,open:false}}
+function penPoly(pen,p0,n){
+  let i=p0*2,x=sp[i],y=sp[i+1];
+  if(!pen.open||Math.abs(x-pen.lx)>.5||Math.abs(y-pen.ly)>.5){pen.p.moveTo(x,y);pen.lx=x;pen.ly=y;pen.open=true}
+  for(let k=1;k<n;k++){i+=2;x=sp[i];y=sp[i+1];const dx=x-pen.lx,dy=y-pen.ly,d=dx*dx+dy*dy;if(d<.81&&k<n-1)continue;if(d<.01)continue;pen.p.lineTo(x,y);pen.lx=x;pen.ly=y}
+}
+function strokeMoves(c,a,b){
+  const pens=new Map(),rp=mkPen();const mv=cur.moves;
+  for(let i=a;i<b;i++){if(visMask&&!visMask[i])continue;const m=mv[i];if(!m.type){if(opt.rapid)penPoly(rp,m.p0,m.n);continue}
+    const k=opt.tool?m.tool:0;let p=pens.get(k);if(!p){p=mkPen();pens.set(k,p)}penPoly(p,m.p0,m.n)}
+  c.setTransform(DPR,0,0,DPR,0,0);c.lineWidth=1.4;c.lineJoin='miter';c.lineCap='butt';
+  for(const [k,p] of pens){c.strokeStyle=opt.tool?TOOLCOL[((k<0?0:k)%TOOLCOL.length)]:TOOLCOL[0];c.stroke(p.p)}
+  if(opt.rapid&&rp.open){c.setLineDash([5,4]);c.strokeStyle=RAPIDCOL;c.lineWidth=1.2;c.stroke(rp.p);c.setLineDash([])}
+}
+function draw2D(target){
+  const key=[cam.yaw,cam.pitch,cam.scale,cam.px,cam.py,cam.c.join(),W,H,DPR,opt.rapid,opt.tool,opt.ghost,opt.grid,dataId,vpColor,cfg.machine,visKey].join('|');
+  if(key!==fbKey){fbKey=key;fbDirty=true}
+  if(fbDirty){fbDirty=false;project();
+    const c=bctx;c.setTransform(1,0,0,1,0,0);c.fillStyle=vpColor;c.fillRect(0,0,base.width,base.height);c.setTransform(DPR,0,0,DPR,0,0);
+    if(opt.grid&&cur.moves.length){c.strokeStyle='#263033';c.lineWidth=1;c.beginPath();for(const s of gridSegs()){const a=toScreen(s[0],s[1],s[2]),d=toScreen(s[3],s[4],s[5]);c.moveTo(a[0],a[1]);c.lineTo(d[0],d[1])}c.stroke()}
+    if(opt.ghost){const g=mkPen();cur.moves.forEach((m,i)=>{if(visMask&&!visMask[i])return;if(!m.type&&!opt.rapid)return;penPoly(g,m.p0,m.n)});c.strokeStyle='rgba(150,170,175,.22)';c.lineWidth=1;c.stroke(g.p)}
+    dctx.setTransform(1,0,0,1,0,0);dctx.clearRect(0,0,done.width,done.height);doneUpTo=0}
+  if(target<doneUpTo){dctx.setTransform(1,0,0,1,0,0);dctx.clearRect(0,0,done.width,done.height);doneUpTo=0}
+  if(target>doneUpTo){strokeMoves(dctx,doneUpTo,target);doneUpTo=target}
+  ctx.setTransform(1,0,0,1,0,0);ctx.drawImage(base,0,0);ctx.drawImage(done,0,0);
+}
+
+/* ---- overlay: current move, axis triad, tool marker ---- */
+function partial(m,f,P){P=P||cur.pts;f=Math.max(0,Math.min(1,f));const idx=f*(m.n-1);const k=Math.min(m.n-2,Math.floor(idx)),fr=idx-k;const a=(m.p0+k)*3,b=a+3;return {k,pos:[P[a]+(P[b]-P[a])*fr,P[a+1]+(P[b+1]-P[a+1])*fr,P[a+2]+(P[b+2]-P[a+2])*fr]}}
+function drawOverlay(target){
+  const c=ctx,mv=cur.moves,P=cur.pts;c.setTransform(DPR,0,0,DPR,0,0);
+  let tp=null;
+  if(target<mv.length){const m=mv[target],f=prog-target,r=partial(m,f);tp=r.pos;
+    if(f>0&&(m.type||opt.rapid)){c.beginPath();let q=toScreen(P[m.p0*3],P[m.p0*3+1],P[m.p0*3+2]);c.moveTo(q[0],q[1]);
+      for(let k=1;k<=r.k;k++){const o=(m.p0+k)*3;q=toScreen(P[o],P[o+1],P[o+2]);c.lineTo(q[0],q[1])}
+      q=toScreen(tp[0],tp[1],tp[2]);c.lineTo(q[0],q[1]);
+      if(m.type){c.strokeStyle=opt.tool?TOOLCOL[Math.max(0,m.tool)%TOOLCOL.length]:TOOLCOL[0];c.lineWidth=2}else{c.strokeStyle=RAPIDCOL;c.lineWidth=1.4;c.setLineDash([5,4])}
+      c.stroke();c.setLineDash([])}}
+  else if(mv.length){const m=mv[mv.length-1],o=(m.p0+m.n-1)*3;tp=[P[o],P[o+1],P[o+2]]}
+  if(!mv.length)return;
+  const o=toScreen(0,0,0),z0=projRaw(cam.c[0],cam.c[1],cam.c[2]),L=36;
+  c.font='600 11px "IBM Plex Mono",monospace';c.lineWidth=2;
+  for(const [a,b,d,col,lab] of [[1,0,0,'#ff6b6b','X'],[0,1,0,'#7ee07e','Y'],[0,0,1,'#6fb0ff','Z']]){const u=projRaw(a+cam.c[0],b+cam.c[1],d+cam.c[2]);let vx=u[0]-z0[0],vy=-(u[1]-z0[1]);const m=Math.hypot(vx,vy);if(m<1e-3)continue;vx/=m;vy/=m;
+    c.strokeStyle=col;c.beginPath();c.moveTo(o[0],o[1]);c.lineTo(o[0]+vx*L*m*.6/Math.max(m,1e-9)*1,o[1]+vy*L*.6);c.stroke();c.fillStyle=col;c.fillText(lab,o[0]+vx*L*.6+3,o[1]+vy*L*.6+4)}
+  if(tp){const mm=mv[Math.min(target,mv.length-1)],ax=mm.ax||[0,0,1],a=toScreen(tp[0],tp[1],tp[2]),up=projRaw(cam.c[0]+ax[0],cam.c[1]+ax[1],cam.c[2]+ax[2]);let ux=up[0]-z0[0],uy=-(up[1]-z0[1]);const mg=Math.hypot(ux,uy);
+    c.strokeStyle='rgba(255,255,255,.9)';c.lineWidth=5;
+    if(mg>0.05){ux/=mg;uy/=mg;c.globalAlpha=.55;c.beginPath();c.moveTo(a[0],a[1]);c.lineTo(a[0]+ux*34,a[1]+uy*34);c.stroke();c.globalAlpha=1}
+    c.fillStyle='rgba(255,255,255,.95)';c.beginPath();c.arc(a[0],a[1],4.5,0,7);c.fill();c.strokeStyle='#14191b';c.lineWidth=1.5;c.stroke()}
+}
+
+/* Show filter: all tools / current tool / current face (same A-B-C index or tilted plane) */
+let visMode='all',visKey='all',visR=null,visMask=null;
+function computeVis(){
+  if(!cur||visMode==='all'||!cur.moves.length){if(visKey!=='all'){visKey='all';visR=null;visMask=null}return}
+  const mv=cur.moves,mi=curMoveIdx(),m=mv[Math.max(0,mi)];const key=visMode==='tool'?'t'+m.tool:'f'+m.fk;
+  if(key===visKey)return;visKey=key;const test=visMode==='tool'?(x=>x.tool===m.tool):(x=>x.fk===m.fk);
+  const R=[],mask=new Uint8Array(mv.length);let s=-1;for(let i=0;i<mv.length;i++){const ok=test(mv[i]);if(ok)mask[i]=1;if(ok&&s<0)s=i;else if(!ok&&s>=0){R.push([s,i]);s=-1}}if(s>=0)R.push([s,mv.length]);
+  visR=R;visMask=mask;fbDirty=true}
+function visBB(){if(!visMask)return null;const P=cur.pts,b=[Infinity,Infinity,Infinity,-Infinity,-Infinity,-Infinity];let any=false;
+  cur.moves.forEach((m,i)=>{if(!visMask[i])return;any=true;for(let k=0;k<m.n;k++){const o=(m.p0+k)*3;for(let a=0;a<3;a++){const v=P[o+a];if(v<b[a])b[a]=v;if(v>b[a+3])b[a+3]=v}}});return any?b:null}
+$('vis').addEventListener('change',e=>{visMode=e.target.value;visKey='';computeVis();fit();req()});
+function draw(){
+  computeVis();
+  const target=cur?Math.min(cur.moves.length,Math.floor(prog)):0;
+  if(gl&&G){drawGL(target);ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,cv.width,cv.height)}
+  else if(cur)draw2D(target);
+  else{ctx.setTransform(1,0,0,1,0,0);ctx.fillStyle=vpColor;ctx.fillRect(0,0,cv.width,cv.height)}
+  if(cur)drawOverlay(target);
+}
+let raf=0;function req(){if(!raf)raf=requestAnimationFrame(frame)}
+let lastT=0;
+function frame(t){raf=0;if(playing){const dt=Math.min(.05,(t-(lastT||t))/1000);lastT=t;advance(dt);if(playing)raf=requestAnimationFrame(frame)}else lastT=0;draw();syncUI()}
+function resize(){const r=vpwrap.getBoundingClientRect();W=r.width;H=r.height;if(!W||!H)return;
+  DPR=Math.min(2,window.devicePixelRatio||1);GDPR=softGL?1:Math.min(1.5,window.devicePixelRatio||1);
+  cv.width=Math.round(W*DPR);cv.height=Math.round(H*DPR);
+  if(gl){glc.width=Math.round(W*GDPR);glc.height=Math.round(H*GDPR)}
+  else{base.width=done.width=cv.width;base.height=done.height=cv.height;fbDirty=true;fbKey=''}
+  if(needFit)fit();req()}
+new ResizeObserver(resize).observe(vpwrap);
+
+// speed: 1x = real machine time (F words + rapid rate); slider is logarithmic 0.5x..2000x
+const SPMIN=0.5,SPMAX=2000;let speedMult=10;
+const s2m=v=>SPMIN*Math.pow(SPMAX/SPMIN,v/1000),m2s=m=>Math.round(1000*Math.log(m/SPMIN)/Math.log(SPMAX/SPMIN));
+function setSpeed(v){v=Math.max(0,Math.min(1000,Math.round(v)));$('speed').value=v;speedMult=s2m(v);$('spdOut').textContent=(speedMult<10?Math.round(speedMult*10)/10:Math.round(speedMult))+'×';store.set('bp-spd',String(v))}
+function advance(dt){if(!cur||!cur.moves.length){stop();return}
+  let budget=dt*speedMult;const mv=cur.moves,wt=cur.wt;
+  while(budget>0&&prog<mv.length){const i=Math.floor(prog),w=wt[i],rem=(1-(prog-i))*w;if(budget>=rem){budget-=rem;prog=i+1}else{prog+=budget/w;budget=0}}
+  if(prog>=mv.length){prog=mv.length;stop()}}
+function play(){if(!cur||!cur.moves.length)return;if(prog>=cur.moves.length)prog=0;playing=true;manualUntil=0;$('playIco').innerHTML='<path d="M3 2h4v12H3zM9 2h4v12H9z"/>';$('bPlay').title='Pause';req()}
+function stop(){playing=false;$('playIco').innerHTML='<path d="M4 2l10 6-10 6z"/>';$('bPlay').title='Play'}
+
+/* ---------------- Program listing (virtualized, highlight follows) ---------------- */
+const RH=22,codeBox=$('code'),layer=$('layer'),hlLayer=$('hlLayer'),rowsEl=$('rows'),hlbar=$('hlbar'),ed=$('codeText');
+let rFrom=0,rTo=0,lineSev=null,manualUntil=0,liveLines=[],lineStarts=new Uint32Array(1),origText='';
+function setLive(text){liveLines=text.split('\n');const ls=new Uint32Array(liveLines.length);let p=0;for(let i=0;i<liveLines.length;i++){ls[i]=p;p+=liveLines[i].length+1}lineStarts=ls;
+  codeBox.style.setProperty('--numw',(String(liveLines.length).length*10+26)+'px')}
+function lineOfPos(pos){let lo=0,hi=lineStarts.length-1;while(lo<hi){const mid=(lo+hi+1)>>1;if(lineStarts[mid]<=pos)lo=mid;else hi=mid-1}return lo}
+const esc=s=>s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function hl(s){let out='';let i=0;const re=/\([^)]*\)?|;.*$/g;let m;while((m=re.exec(s))){out+=hlw(s.slice(i,m.index))+`<span class="k-c">${esc(m[0])}</span>`;i=m.index+m[0].length}return out+hlw(s.slice(i))}
+function hlw(s){return esc(s).replace(/([A-Za-z])(\s*[-+]?[\d.]+)/g,(m,L,v)=>{const u=L.toUpperCase();const k=u==='G'?'g':u==='M'?'m':'THD'.includes(u)?'t':'FS'.includes(u)?'f':u==='N'?'n':'';return k?`<span class="k-${k}">${L}${v}</span>`:m})}
+function renderRows(force){
+  const n=liveLines.length,st=ed.scrollTop,h=ed.clientHeight||400;
+  const s=Math.max(0,Math.floor(st/RH)-4),e=Math.min(n,Math.ceil((st+h)/RH)+4);
+  if(!force&&s>=rFrom&&e<=rTo)return;
+  const s2=Math.max(0,s-60),e2=Math.min(n,e+60);let out='';
+  for(let i=s2;i<e2;i++){const sv=lineSev&&lineSev[i];out+=`<div class="row${sv===1?' bad':sv===2?' wn':''}" style="top:${i*RH}px"><span class="num">${i+1}</span>${hl(liveLines[i])}</div>`}
+  rowsEl.innerHTML=out;rFrom=s2;rTo=e2;
+}
+function syncLayer(){layer.style.transform=`translate(${-ed.scrollLeft}px,${-ed.scrollTop}px)`;hlLayer.style.transform=`translateY(${-ed.scrollTop}px)`}
+ed.addEventListener('scroll',()=>{syncLayer();renderRows(false)},{passive:true});
+for(const ev of ['wheel','touchstart'])ed.addEventListener(ev,()=>{manualUntil=performance.now()+2500},{passive:true});
+new ResizeObserver(()=>renderRows(false)).observe(codeBox);
+let navScroll=false;
+function showLine(ln){
+  hlbar.hidden=ln<0;if(ln<0)return;hlbar.style.transform=`translateY(${ln*RH}px)`;
+  if(navScroll){navScroll=false;  // keyboard/click: keep the line in view with as little scrolling as possible
+    const h=ed.clientHeight,top=ln*RH,m=RH*2;
+    if(top<ed.scrollTop+m)ed.scrollTop=Math.max(0,top-m);else if(top+RH>ed.scrollTop+h-m)ed.scrollTop=top+RH-h+m;return}
+  if($('tFollow').checked&&performance.now()>manualUntil){const h=ed.clientHeight;const want=Math.max(0,Math.round(ln*RH-h*0.4+RH/2));if(Math.abs(ed.scrollTop-want)>1)ed.scrollTop=want}
+}
+/* typing cursor in the program drives the plot, like CIMCO */
+let caretLine=-1;
+function caretMoved(){if(document.activeElement!==ed||!cur)return;const l=lineOfPos(ed.selectionStart);if(l===caretLine)return;caretLine=l;setCursorLine(l,true,true)}
+document.addEventListener('selectionchange',caretMoved);
+ed.addEventListener('keyup',caretMoved);ed.addEventListener('mouseup',caretMoved);
+let editTimer=0;
+function markEdited(){$('editedTag').hidden=ed.value===origText}
+ed.addEventListener('input',()=>{stop();setLive(ed.value);rFrom=rTo=0;renderRows(true);markEdited();clearTimeout(editTimer);editTimer=setTimeout(applyEdit,liveLines.length>30000?1500:500)});
+function applyEdit(){const camS=JSON.stringify(cam),cl=lineOfPos(ed.selectionStart),foc=document.activeElement===ed;
+  load(ed.value,null,{keep:true});Object.assign(cam,JSON.parse(camS));if(foc){caretLine=cl;setCursorLine(cl,true,true)}req()}
+$('btnCopy').onclick=()=>{const b=$('btnCopy'),ok=()=>{b.textContent='Copied';setTimeout(()=>b.textContent='Copy',1500)},fb=()=>{ed.focus();ed.select();b.textContent='Press Ctrl+C';setTimeout(()=>b.textContent='Copy',2500)};
+  try{navigator.clipboard.writeText(ed.value).then(ok,fb)}catch(e){fb()}};
+$('btnRevert').onclick=()=>{if(ed.value===origText)return;const camS=JSON.stringify(cam);const t=origText;ed.value=t;load(t,null,{keep:true});origText=t;markEdited();Object.assign(cam,JSON.parse(camS));req()};
+/* Line cursor (like CIMCO): highlight any line, plot shows everything up to and including it */
+let cursorLine=-1,cursorProg=-1;
+function setCursorLine(l,keepScroll,fromCaret){
+  if(!cur||!cur.lines.length)return;l=Math.max(0,Math.min(cur.lines.length-1,l));
+  if(!fromCaret&&document.activeElement!==ed){try{const p=lineStarts[l]||0;ed.setSelectionRange(p,p);caretLine=l}catch(e){}}
+  if(!cur.upto){const u=new Uint32Array(cur.lines.length),mv=cur.moves;let j=0;for(let i=0;i<u.length;i++){while(j<mv.length&&mv[j].line<=i)j++;u[i]=j}cur.upto=u}
+  stop();prog=cur.upto[l];cursorLine=l;cursorProg=prog;lastLine=-2;navScroll=true;if(!keepScroll)manualUntil=0;req();
+}
+function shownLine(){return cursorLine>=0&&cursorProg===prog?cursorLine:(lastLine>=0?lastLine:0)}
+function jumpLine(l){if(l>=0)setCursorLine(l)}
+function jumpLineOld(l){if(!cur||l<0)return;let i=l;while(i<cur.lines.length&&cur.lineToMove[i]<0)i++;if(i>=cur.lines.length){i=l;while(i>=0&&cur.lineToMove[i]<0)i--}if(i<0)return;stop();prog=cur.lineToMove[i]+1;
+  // land on the last move of that line so multi-move lines (drill cycles) show complete
+  let j=cur.lineToMove[i];while(j+1<cur.moves.length&&cur.moves[j+1].line===i)j++;prog=j+1;lastLine=-2;req()}
+
+/* ---------------- UI sync (every frame, writes only what changed) ---------------- */
+const dX=$('dX'),dY=$('dY'),dZ=$('dZ'),dT=$('dT'),dF=$('dF'),dS=$('dS'),dMode=$('dMode'),scrub=$('scrub'),lineInfo=$('lineInfo');
+let lastLine=-2,lastDro='',scrubbing=false;
+function curMoveIdx(){if(!cur||!cur.moves.length)return -1;return Math.max(0,Math.min(cur.moves.length-1,Math.ceil(prog)-1))}
+let droAng=null;
+function posAt(){const mv=cur.moves;droAng=null;if(!mv.length)return null;const t=Math.min(mv.length,Math.floor(prog));
+  const m=t<mv.length?mv[t]:mv[mv.length-1],f=t<mv.length?prog-t:1;
+  if(m.r0){const g=Math.max(0,Math.min(1,f));droAng=[0,1,2].map(i=>m.r0[i]+(m.r1[i]-m.r0[i])*g)}
+  return partial(m,f,cur.raw).pos}
+const fx=(v,d)=>(Math.abs(v)<0.5*Math.pow(10,-d)?0:v).toFixed(d);
+function syncUI(){
+  if(!cur)return;
+  if(+scrub.max!==cur.moves.length)scrub.max=cur.moves.length;
+  if(!scrubbing){const v=Math.round(prog);if(+scrub.value!==v)scrub.value=v}
+  const mi=curMoveIdx(),m=mi>=0?cur.moves[mi]:null,pos=posAt(),d=cur.units==='mm'?3:4;
+  const key=pos?fx(pos[0],d)+'|'+fx(pos[1],d)+'|'+fx(pos[2],d)+'|'+mi+'|'+(droAng?droAng.map(v=>v.toFixed(3)).join():''):'none';
+  if(key!==lastDro){lastDro=key;
+    if(pos&&m){dX.textContent=fx(pos[0],d);dY.textContent=fx(pos[1],d);dZ.textContent=fx(pos[2],d);
+      if(cur.rot){const g=droAng||[0,0,0];$('dA').textContent=fx(g[0],3);$('dB').textContent=fx(g[1],3);$('dC').textContent=fx(g[2],3)}
+      dT.textContent='T'+(m.t??'—');dS.textContent='S'+(m.s||0);dF.textContent=m.type?'F'+m.f:'';
+      dMode.textContent=m.type?'FEED':'RAPID';dMode.className='mode '+(m.type?'feed':'rapid')}
+    else{dX.textContent=dY.textContent=dZ.textContent='—';dT.textContent='T—';dF.textContent='';dS.textContent='S0';dMode.textContent=''}}
+  const ln=(cursorLine>=0&&cursorProg===prog)?cursorLine:(m?m.line:-1);
+  if(ln!==lastLine){lastLine=ln;showLine(ln);lineInfo.textContent=ln>=0?`Line ${ln+1} / ${cur.lines.length}`:`${cur.lines.length} lines`}
+}
+
+/* ---------------- Panels ---------------- */
+const CATS=[
+ ['rapid',/^Rapid at Z/,'Rapid through uncut material'],
+ ['plunge',/^Rapid plunge/,'Rapid plunge into uncut area'],
+ ['safe',/treated as safe/,'Rapids inside areas already cut'],
+ ['dec',/no decimal point/,'Missing decimal point'],
+ ['feed',/feedrate/i,'No feedrate'],
+ ['spin',/spindle off|Spindle started|spindle with/i,'Spindle not running'],
+ ['rpm',/RPM limit/,'Over max RPM'],
+ ['tlo',/G43|tool length/i,'Tool length offset (G43 / H)'],
+ ['comp',/Cutter comp/i,'Cutter compensation'],
+ ['arc',/arc|radius/i,'Arc problems'],
+ ['cycle',/cycle|R plane/i,'Drill cycles'],
+ ['unk',/unknown position|unknown starting/i,'Move from unknown position'],
+ ['macro',/Macro|Subprogram|M99/i,'Macros and subprograms'],
+ ['gcode',/G-code|not simulated|noted/i,'Codes not simulated'],
+ ['units',/Units switch|G95/i,'Units and feed mode'],
+ ['syntax',/twice|no number|Unrecognized|with no T number/i,'Program syntax'],
+ ['end',/never reaches M30/i,'Program end'],
+ ['empty',/No toolpath/,'No toolpath'],
+];
+const catOf=msg=>{for(const [id,re] of CATS)if(re.test(msg))return id;return 'other'};
+const TITLES={thd:'Wrong T, H or D number',plane:'Plane (G17 / G18 / G19)',cool:'Coolant',spin:'Spindle (M3 / M4 / S)',feed:'Feedrate',comp:'Cutter comp (G41 / G42 / G40)',
+  abs:'Incremental mode (G91)',cycle:'Drill cycles (G80)',wo:'Work offset (G54–G59)',units:'Units (G20 / G21)',tlo:'Tool length comp (G43)',rpm:'Over max RPM',end:'Program end'};
+const catTitle=id=>{if(TITLES[id])return TITLES[id];const c=CATS.find(c=>c[0]===id);return c?c[2]:'Other'};
+const SEVR={err:0,warn:1,info:2},SEVL={err:'Error',warn:'Warn',info:'Note'};
+const openCats=new Set();
+function renderCheck(){
+  const c=cur,off=cfg.off||{};const groups=new Map();
+  for(const i of c.issues){if(!i.cat)i.cat=catOf(i.msg);let g=groups.get(i.cat);if(!g){g={cat:i.cat,title:catTitle(i.cat),items:[],sev:'info'};groups.set(i.cat,g)}g.items.push(i);if(SEVR[i.sev]<SEVR[g.sev])g.sev=i.sev}
+  const all=[...groups.values()].sort((a,b)=>SEVR[a.sev]-SEVR[b.sev]||b.items.length-a.items.length);
+  const act=all.filter(g=>!off[g.cat]),hid=all.filter(g=>off[g.cat]);
+  let ne=0,nw=0;for(const g of act)for(const i of g.items){if(i.sev==='err')ne++;else if(i.sev==='warn')nw++}
+  const b=$('badge');b.hidden=false;b.className='badge'+(ne?'':nw?' w':' ok');b.textContent=ne||nw||'✓';
+  lineSev=new Uint8Array(c.lines.length);for(const g of act)for(const i of g.items){if(i.line>=0){if(i.sev==='err')lineSev[i.line]=1;else if(i.sev==='warn'&&!lineSev[i.line])lineSev[i.line]=2}}
+  const col=ne?'var(--err)':nw?'var(--warn)':'var(--ok)';
+  const head=ne?'Problems found':nw?'Check warnings':'No problems found';
+  const sub=[ne&&`${ne} error${ne>1?'s':''}`,nw&&`${nw} warning${nw>1?'s':''}`].filter(Boolean).join(' · ')||`${c.moves.length} moves checked`;
+  const item=i=>`<li class="issue" data-l="${i.line}" tabindex="0"><span class="msg">${esc(i.msg)}</span>${i.line>=0?`<span class="src">${i.line+1}: ${esc(c.lines[i.line].trim().slice(0,80))}</span>`:''}</li>`;
+  const grp=g=>{const n=g.items.length,open=n<=2||openCats.has(g.cat);const shown=g.items.slice(0,300);
+    return `<li class="grp ${g.sev}"><div class="ghead"><button class="gtog" data-tog="${g.cat}" aria-expanded="${open}"><span class="sev">${SEVL[g.sev]}</span><span class="gt">${esc(g.title)}</span><span class="cnt">${n}</span>${n>2?`<span class="chev">${open?'▾':'▸'}</span>`:''}</button><button class="goff" data-off="${g.cat}" title="Stop showing this check">Turn off</button></div>`+
+      (open?`<ul class="gitems">${shown.map(item).join('')}${n>shown.length?`<li class="more">+ ${n-shown.length} more</li>`:''}</ul>`:`<div class="gsample">${esc(g.items[0].msg)}</div>`)+`</li>`};
+  $('p-check').innerHTML=`<div class="verdict"><span class="dot" style="background:${col}"></span><div><div class="big">${head}</div><div class="sub">${sub}</div></div></div>`+
+    (act.length?`<ul class="groups">${act.map(grp).join('')}</ul>`:'<p class="empty">Nothing flagged. Still prove out the first part.</p>')+
+    (hid.length?`<div class="offlist"><span>Turned off:</span>${hid.map(g=>`<button data-on="${g.cat}" title="Turn this check back on">${esc(g.title)} · ${g.items.length} <b>↺</b></button>`).join('')}</div>`:'');
+}
+function renderPanels(){
+  const c=cur;renderCheck();
+  const u=c.units;
+  $('p-tools').innerHTML=c.tools.length?`<div class="tblwrap"><table class="tl"><thead><tr><th>Tool</th><th style="text-align:right">RPM</th><th style="text-align:right">Low Z</th><th style="text-align:right">Cut ${u}</th><th style="text-align:right">Time</th></tr></thead><tbody>${c.tools.map(t=>`<tr data-m="${t.first}"><td><span class="sw" style="background:${TOOLCOL[t.idx%TOOLCOL.length]}"></span><span class="tnum">T${t.t}</span><div class="tcm">${esc(t.comment||'')}${t.dia>0?` · Ø${fmt(t.dia)}`:''}</div></td><td class="n">${t.maxS||'—'}</td><td class="n">${fmt(t.minZ)}</td><td class="n">${t.cut.toFixed(1)}</td><td class="n">${fmtTime(t.time)}</td></tr>`).join('')}</tbody></table></div><p class="note">Tap a tool to jump to its first move. Low Z is the deepest cutting point.</p>`:'<p class="empty">No M6 tool changes found.</p>';
+  const s=c.stats,bb=s.bb,cb=s.cb;const row=(l,a,b)=>`<tr><td>${l}</td><td class="n">${fmt(a)}</td><td class="n">${fmt(b)}</td><td class="n">${fmt(b-a)}</td></tr>`;
+  $('p-stats').innerHTML=`<h3>Cycle time estimate</h3><table><tbody><tr><td>Total</td><td class="n">${fmtTime(s.time)}</td></tr><tr><td>Feed distance</td><td class="n">${s.feed.toFixed(2)} ${u}</td></tr><tr><td>Rapid distance</td><td class="n">${s.rapid.toFixed(2)} ${u}</td></tr><tr><td>Moves / lines</td><td class="n">${c.moves.length} / ${c.lines.length}</td></tr><tr><td>Units</td><td class="n">${u==='mm'?'Metric G21':'Inch G20'}</td></tr></tbody></table>
+  <h3>Cutting extents</h3><div class="tblwrap"><table><thead><tr><th></th><th style="text-align:right">Min</th><th style="text-align:right">Max</th><th style="text-align:right">Range</th></tr></thead><tbody>${row('X',cb[0],cb[3])}${row('Y',cb[1],cb[4])}${row('Z',cb[2],cb[5])}</tbody></table></div>
+  <h3>All moves incl. rapids</h3><div class="tblwrap"><table><tbody>${row('X',bb[0],bb[3])}${row('Y',bb[1],bb[4])}${row('Z',bb[2],bb[5])}</tbody></table></div>
+  <p class="note">Time ignores tool changes, acceleration and dwell, so real cycle time runs longer. Rapid rate is set in Setup.</p>`;
+  $('sRapidU').textContent=(u==='mm'?'in/min (converted for metric)':'in/min')+' — used for cycle time';
+}
+$('p-check').addEventListener('click',e=>{
+  const t=e.target.closest('[data-tog],[data-off],[data-on]');
+  if(t){const d=t.dataset;cfg.off=cfg.off||{};
+    if(d.tog){openCats.has(d.tog)?openCats.delete(d.tog):openCats.add(d.tog)}
+    else if(d.off)cfg.off[d.off]=true;else if(d.on)delete cfg.off[d.on];
+    if(d.off||d.on)store.set('bp-cfg',JSON.stringify(cfg));
+    renderCheck();renderRows(true);return}
+  const r=e.target.closest('.issue');if(r)jumpLine(+r.dataset.l)});
+$('p-check').addEventListener('keydown',e=>{if(e.key==='Enter'){const r=e.target.closest('.issue');if(r)jumpLine(+r.dataset.l)}});
+$('p-tools').addEventListener('click',e=>{const r=e.target.closest('tr[data-m]');if(r&&+r.dataset.m>=0){stop();prog=+r.dataset.m;manualUntil=0;req()}});
+
+let source='';
+function load(text,name,opts){opts=opts||{};
+  source=text;store.set('bp-src',text.length<1.5e6?text:'');stop();
+  cur=parse(text);dataId++;prog=cur.moves.length;lastLine=-2;lastDro='';cursorLine=-1;cursorProg=-1;
+  const b=cur.stats.bb;cur.c0=cur.moves.length?[(b[0]+b[3])/2,(b[1]+b[4])/2,(b[2]+b[5])/2]:[0,0,0];
+  {const mm=cur.units==='mm',rr=cfg.rapid*(mm?25.4:1),df=mm?500:20;cur.wt=new Float64Array(cur.moves.length);
+   cur.moves.forEach((m,i)=>{cur.wt[i]=Math.max(1e-4,m.type&&m.inv&&m.f>0?60/m.f:60*m.len/(m.type?(m.f>0?m.f:df):rr))})}
+  for(const L of ['A','B','C'])$('row'+L).hidden=!(cur.rot&&cur.rot[L]);visKey='';computeVis();
+  if(!opts.keep)$('progName').textContent=name||cur.progName||'Untitled program';
+  renderPanels();uploadGL();fbDirty=true;fbKey='';
+  if(!opts.keep){ed.value=text;ed.scrollTop=0;ed.scrollLeft=0;origText=text;caretLine=-1}
+  setLive(text);rFrom=rTo=0;syncLayer();renderRows(true);markEdited();
+  if(!opts.keep){needFit=true;fit()}
+  req();
+}
+
+/* ---------------- Events ---------------- */
+document.querySelectorAll('.tabs button[data-t]').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.tabs button[data-t]').forEach(x=>x.classList.toggle('on',x===b));['check','tools','stats','setup'].forEach(t=>$('p-'+t).hidden=t!==b.dataset.t);
+  if($('info').classList.contains('collapsed'))$('infoToggle').click()}));
+$('infoToggle').addEventListener('click',()=>{const c=$('info').classList.toggle('collapsed');$('tabbody').hidden=c;$('infoToggle').textContent=c?'▴':'▾';$('infoToggle').title=c?'Show panel':'Hide panel'});
+$('views').addEventListener('click',e=>{const v=e.target.dataset.v;if(!v)return;const V={iso:[-Math.PI/4,.62],top:[0,Math.PI/2],front:[0,0],right:[-Math.PI/2,0]};if(V[v]){[cam.yaw,cam.pitch]=V[v];document.querySelectorAll('#views button').forEach(b=>b.classList.toggle('on',b.dataset.v===v))}fit()});
+for(const [id,k] of [['tRapid','rapid'],['tGhost','ghost'],['tTool','tool'],['tGrid','grid']])$(id).addEventListener('change',e=>{opt[k]=e.target.checked;fbDirty=true;req()});
+$('tFollow').addEventListener('change',()=>{manualUntil=0;lastLine=-2;req()});
+$('bPlay').onclick=()=>playing?stop():play();
+$('bStart').onclick=()=>{stop();prog=0;manualUntil=0;req()};
+$('bEnd').onclick=()=>{stop();if(cur)prog=cur.moves.length;manualUntil=0;req()};
+$('bPrev').onclick=()=>{stop();prog=Math.max(0,Math.ceil(prog)-1);manualUntil=0;req()};
+$('bNext').onclick=()=>{stop();if(cur)prog=Math.min(cur.moves.length,Math.floor(prog)+1);manualUntil=0;req()};
+$('bNextT').onclick=()=>{stop();if(!cur)return;const f=Math.floor(prog);const t=cur.tools.find(t=>t.first>=0&&t.first>f);prog=t?t.first:cur.moves.length;manualUntil=0;req()};
+$('bPrevT').onclick=()=>{stop();if(!cur)return;const f=Math.floor(prog);const ts=cur.tools.filter(t=>t.first>=0&&t.first<f);prog=ts.length?ts[ts.length-1].first:0;manualUntil=0;req()};
+scrub.addEventListener('input',e=>{scrubbing=true;stop();prog=+e.target.value;manualUntil=0;interacting();req()});
+scrub.addEventListener('change',()=>{scrubbing=false});
+$('speed').addEventListener('input',e=>setSpeed(+e.target.value));
+$('spDown').onclick=()=>setSpeed(+$('speed').value-60);$('spUp').onclick=()=>setSpeed(+$('speed').value+60);
+{const sv=parseFloat(store.get('bp-spd'));setSpeed(isFinite(sv)?sv:m2s(10))}
+document.addEventListener('keydown',e=>{
+  const tg=e.target,isRange=tg.matches&&tg.matches('input[type=range]');
+  if(!$('editor').hidden||tg.closest('textarea,select')||(tg.closest('input')&&!isRange&&tg.type!=='checkbox'))return;
+  const step={ArrowDown:1,ArrowUp:-1,PageDown:20,PageUp:-20}[e.key];
+  if(step&&cur){e.preventDefault();const mi=curMoveIdx();const base=(cursorLine>=0&&cursorProg===prog)?cursorLine:(mi>=0?cur.moves[mi].line:0);setCursorLine(base+step);return}
+  if(e.ctrlKey&&(e.key==='Home'||e.key==='End')&&cur){e.preventDefault();setCursorLine(e.key==='Home'?0:cur.lines.length-1);return}
+  if(isRange)return;if(e.key==='+'||e.key==='='){$('spUp').click();return}if(e.key==='-'||e.key==='_'){$('spDown').click();return}if(e.key===' '){e.preventDefault();playing?stop():play()}else if(e.key==='ArrowRight')$('bNext').click();else if(e.key==='ArrowLeft')$('bPrev').click()});
+
+// camera input
+const ptrs=new Map();let pinch=null;
+cv.addEventListener('contextmenu',e=>e.preventDefault());
+// mouse: hold middle (or left) = rotate, right or Shift/Ctrl + drag = pan, wheel forward = zoom in
+cv.addEventListener('mousedown',e=>{if(e.button===1)e.preventDefault()});
+cv.addEventListener('auxclick',e=>{if(e.button===1)e.preventDefault()});
+cv.addEventListener('pointerdown',e=>{if(e.button===1)e.preventDefault();cv.setPointerCapture(e.pointerId);ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY,pan:e.button===2||e.shiftKey||e.ctrlKey});pinch=null});
+cv.addEventListener('pointermove',e=>{const p=ptrs.get(e.pointerId);if(!p)return;
+  if(ptrs.size===1){const dx=e.clientX-p.x,dy=e.clientY-p.y;if(p.pan){cam.px+=dx;cam.py+=dy}else{cam.yaw-=dx*.008;cam.pitch=Math.max(-Math.PI/2,Math.min(Math.PI/2,cam.pitch+dy*.008));document.querySelectorAll('#views button').forEach(b=>b.classList.remove('on'))}p.x=e.clientX;p.y=e.clientY;interacting();req()}
+  else if(ptrs.size===2){p.x=e.clientX;p.y=e.clientY;const [a,b]=[...ptrs.values()];const mx=(a.x+b.x)/2,my=(a.y+b.y)/2,d=Math.hypot(a.x-b.x,a.y-b.y);const r=cv.getBoundingClientRect();
+    if(pinch){zoomAt(mx-r.left,my-r.top,d/pinch.d);cam.px+=mx-pinch.mx;cam.py+=my-pinch.my}pinch={d,mx,my};interacting();req()}});
+const up=e=>{ptrs.delete(e.pointerId);pinch=null};cv.addEventListener('pointerup',up);cv.addEventListener('pointercancel',up);
+function zoomAt(mx,my,f){cam.px=mx-W/2-(mx-W/2-cam.px)*f;cam.py=my-H/2-(my-H/2-cam.py)*f;cam.scale*=f}
+cv.addEventListener('wheel',e=>{e.preventDefault();const r=cv.getBoundingClientRect();
+  let dy=e.deltaY*(e.deltaMode===1?33:e.deltaMode===2?H:1);dy=Math.max(-300,Math.min(300,dy));
+  zoomAt(e.clientX-r.left,e.clientY-r.top,Math.exp(-dy*.0015));interacting();req()},{passive:false});
+cv.addEventListener('dblclick',fit);
+
+// files
+$('btnLoad').onclick=()=>$('file').click();
+$('file').onchange=e=>{const f=e.target.files[0];if(!f)return;f.text().then(t=>load(t,f.name));e.target.value=''};
+let dc=0;
+document.addEventListener('dragenter',e=>{if(e.dataTransfer&&[...e.dataTransfer.types].includes('Files')){dc++;$('drop').hidden=false}});
+document.addEventListener('dragleave',()=>{dc=Math.max(0,dc-1);if(!dc)$('drop').hidden=true});
+document.addEventListener('dragover',e=>e.preventDefault());
+document.addEventListener('drop',e=>{e.preventDefault();dc=0;$('drop').hidden=true;const f=e.dataTransfer.files[0];if(f)f.text().then(t=>load(t,f.name))});
+
+// editor
+$('btnEdit').onclick=()=>{$('eText').value=source;$('editor').hidden=false;$('eText').focus()};
+$('eCancel').onclick=()=>$('editor').hidden=true;
+$('eClear').onclick=()=>{$('eText').value='';$('eText').focus()};
+$('eSample').onclick=()=>{$('eText').value=SAMPLE};
+$('eRun').onclick=()=>{$('editor').hidden=true;load($('eText').value,null)};
+$('editor').addEventListener('click',e=>{if(e.target===$('editor'))$('editor').hidden=true});
+document.addEventListener('paste',e=>{if(e.target.closest('textarea,input'))return;const t=e.clipboardData&&e.clipboardData.getData('text');if(t&&/[GgMm]\d/.test(t))load(t,null)});
+
+// setup
+const sMap={sRapid:'rapid',sRpm:'rpm',sZ:'zfloor',sTol:'tol',sRcx:'rcx',sRcy:'rcy',sRcz:'rcz'};
+const reparseKeep=()=>{store.set('bp-cfg',JSON.stringify(cfg));const p=prog;const cam0=JSON.stringify(cam);load(source,null,{keep:true});Object.assign(cam,JSON.parse(cam0));prog=Math.min(p,cur.moves.length);req()};
+$('sMach').value=cfg.machine||'vmc';$('sMach').addEventListener('change',e=>{cfg.machine=e.target.value;store.set('bp-cfg',JSON.stringify(cfg));fbDirty=true;fit();req()});
+$('sRotView').value=cfg.rotView||'part';$('sRotView').addEventListener('change',e=>{cfg.rotView=e.target.value;reparseKeep();fit()});
+for(const [id,k] of [['sRevA','revA'],['sRevB','revB'],['sRevC','revC']]){$(id).checked=!!cfg[k];$(id).addEventListener('change',e=>{cfg[k]=e.target.checked;reparseKeep()})}
+for(const [id,k] of [['sCoolOn','coolOn'],['sCoolOff','coolOff']]){$(id).value=cfg[k];$(id).addEventListener('change',e=>{cfg[k]=e.target.value;store.set('bp-cfg',JSON.stringify(cfg));const p=prog;const cam0=JSON.stringify(cam);load(source,null,{keep:true});Object.assign(cam,JSON.parse(cam0));prog=Math.min(p,cur.moves.length);req()})}
+$('sDpi').checked=!!cfg.dpi;$('sDpi').addEventListener('change',e=>{cfg.dpi=e.target.checked;store.set('bp-cfg',JSON.stringify(cfg));const p=prog;const cam0=JSON.stringify(cam);load(source,null,{keep:true});Object.assign(cam,JSON.parse(cam0));prog=Math.min(p,cur.moves.length);req()});
+for(const id in sMap){$(id).value=cfg[sMap[id]];$(id).addEventListener('change',e=>{const v=parseFloat(e.target.value);if(!isFinite(v))return;cfg[sMap[id]]=v;store.set('bp-cfg',JSON.stringify(cfg));const p=prog;const cam0=JSON.stringify(cam);load(source,null,{keep:true});Object.assign(cam,JSON.parse(cam0));prog=Math.min(p,cur.moves.length);req()})}
+
+// theme
+try{matchMedia('(prefers-color-scheme: dark)').addEventListener('change',readColors)}catch(e){}
+new MutationObserver(readColors).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+
+initGL();if(!gl)glc.hidden=true;
+readColors();
+const saved=store.get('bp-src');
+load(saved&&saved.trim()?saved:SAMPLE,saved&&saved.trim()?null:'O1001 · sample program');
+</script>
+</body>
+</html>
