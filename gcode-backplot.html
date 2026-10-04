@@ -296,6 +296,7 @@ td.n{font-family:var(--f-mono);font-size:13px;text-align:right}
           <div class="field"><label>Reverse rotation<small>Tick an axis if its faces show up mirrored</small></label><span class="revs"><label><input type="checkbox" id="sRevA"> A</label><label><input type="checkbox" id="sRevB"> B</label><label><input type="checkbox" id="sRevC"> C</label></span></div>
           <h3>3D mouse</h3>
           <div class="field"><label for="sSmSpeed">3D mouse speed<small>1 is normal. Try 0.5 for finer control</small></label><input id="sSmSpeed" type="number" min="0.1" max="5" step="0.1"></div>
+          <div class="field"><label for="sSmZoom">Zoom direction<small>Same choice as in Mastercam's 3Dconnexion settings</small></label><select id="sSmZoom" class="sel"><option value="fb">Forward / Backward</option><option value="ud">Up / Down</option></select></div>
           <div class="field"><label>Flip direction<small>Tick if spinning or zooming feels backwards</small></label><span class="revs"><label><input type="checkbox" id="sSmFlipR"> Rotate</label><label><input type="checkbox" id="sSmFlipZ"> Zoom</label></span></div>
           <h3>Program checks</h3>
           <div class="field"><label for="sCoolOn">Coolant on codes<small>Any of these counts as coolant on</small></label><input id="sCoolOn" type="text" spellcheck="false"></div>
@@ -1261,10 +1262,13 @@ const SM_DEAD=18;
 function smActive(){return !!sm.dev&&performance.now()-sm.last<400&&sm.ax.some(a=>Math.abs(a)>SM_DEAD)}
 function smApply(dt){
   const v=sm.ax.map(a=>Math.abs(a)<=SM_DEAD?0:Math.max(-1,Math.min(1,(a-Math.sign(a)*SM_DEAD)/330)));const [tx,ty,tz,rx,,rz]=v;
-  const k=(+cfg.smSpeed||1)*dt,fr=cfg.smFlipR?-1:1,fz=cfg.smFlipZ?-1:1;
-  cam.px+=tx*W*0.9*k;cam.py+=tz*H*0.9*k;                              // push sideways / press down = pan
-  if(ty)zoomAt(W/2,H/2,Math.exp(-ty*2.2*k*fz));                       // pull toward you = zoom in
-  cam.yaw+=rz*2.6*k*fr;cam.pitch=Math.max(-Math.PI/2,Math.min(Math.PI/2,cam.pitch-rx*2.0*k*fr));  // twist = spin, tilt = tip
+  // Same as Mastercam "object mode": the part follows the cap. Raw axes: x right, y toward you, z down.
+  const k=(+cfg.smSpeed||1)*dt,fr=cfg.smFlipR?-1:1,fz=cfg.smFlipZ?-1:1,ud=cfg.smZoomUD;
+  const zoomAx=ud?-tz:ty,vertAx=ud?-ty:tz;                            // Zoom direction: Forward/Backward (default) or Up/Down
+  cam.px+=tx*W*0.9*k;cam.py+=vertAx*H*0.9*k;                          // push sideways = pan, press down / lift = pan down / up
+  if(zoomAx)zoomAt(W/2,H/2,Math.exp(zoomAx*2.2*k*fz));                // push forward = zoom out, pull back = zoom in
+  cam.yaw-=rz*2.6*k*fr;                                               // twist clockwise = part spins clockwise
+  cam.pitch=Math.max(-Math.PI/2,Math.min(Math.PI/2,cam.pitch+rx*2.0*k*fr));  // tilt forward = part tips away
   if(rz||rx)document.querySelectorAll('#views button[data-v]').forEach(b=>b.classList.remove('on'));
   interacting()}
 const SM_VIEWS=['iso','top','front','right'];
@@ -1279,6 +1283,7 @@ if('hid' in navigator){
     navigator.hid.addEventListener('disconnect',e=>{if(e.device===sm.dev){sm.dev=null;sm.ax=[0,0,0,0,0,0];smUI()}})}catch(e){}}
 smUI();
 $('sSmSpeed').value=cfg.smSpeed||1;$('sSmSpeed').addEventListener('change',e=>{const v=parseFloat(e.target.value);if(isFinite(v)&&v>0){cfg.smSpeed=v;store.set('bp-cfg',JSON.stringify(cfg))}});
+$('sSmZoom').value=cfg.smZoomUD?'ud':'fb';$('sSmZoom').addEventListener('change',e=>{cfg.smZoomUD=e.target.value==='ud';store.set('bp-cfg',JSON.stringify(cfg))});
 for(const [id,k] of [['sSmFlipR','smFlipR'],['sSmFlipZ','smFlipZ']]){$(id).checked=!!cfg[k];$(id).addEventListener('change',e=>{cfg[k]=e.target.checked;store.set('bp-cfg',JSON.stringify(cfg))})}
 
 initGL();if(!gl)glc.hidden=true;
