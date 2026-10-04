@@ -66,6 +66,8 @@ button{cursor:pointer}
 .views{position:absolute;top:10px;right:10px;display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;max-width:calc(100% - 210px)}
 .views button{background:rgba(20,26,28,.82);color:#cfd9db;border:1px solid #2f3a3d;border-radius:5px;padding:4px 9px;font-family:var(--f-disp);font-weight:600;font-size:13px;letter-spacing:.06em;text-transform:uppercase}
 .views button.on{color:#14191b;background:#cfd9db}
+.views .sm3d.on{color:#0b1c10;background:#7ee0a0;border-color:#7ee0a0}
+.toast{position:absolute;left:50%;bottom:44px;transform:translateX(-50%);max-width:min(560px,calc(100% - 32px));background:rgba(9,13,14,.92);color:#e8f0f1;border:1px solid #2f3a3d;border-radius:8px;padding:9px 14px;font-size:13.5px;line-height:1.4;text-align:center;pointer-events:none;z-index:5}
 .legend{position:absolute;right:10px;bottom:10px;display:flex;gap:12px;font-family:var(--f-mono);font-size:11px;color:#9aa8ab;background:rgba(11,15,16,.7);padding:4px 8px;border-radius:4px;pointer-events:none}
 .legend i{display:inline-block;width:18px;height:0;border-top:2px solid;vertical-align:middle;margin-right:5px}
 .drop{position:absolute;inset:0;border:2px dashed var(--accent);background:rgba(12,116,128,.14);display:grid;place-items:center;color:#cfe;font-family:var(--f-disp);font-size:22px;text-transform:uppercase;letter-spacing:.06em;pointer-events:none}
@@ -231,10 +233,11 @@ td.n{font-family:var(--f-mono);font-size:13px;text-align:right}
         <div class="meta"><span class="mode rapid" id="dMode">RAPID</span><span id="dT">T—</span><span id="dF"></span><span id="dS">S0</span></div>
       </div>
       <div class="views" id="views">
-        <button data-v="iso" class="on">Iso</button><button data-v="top">Top</button><button data-v="front">Front</button><button data-v="right">Right</button><button data-v="fit">Fit</button>
+        <button data-v="iso" class="on">Iso</button><button data-v="top">Top</button><button data-v="front">Front</button><button data-v="right">Right</button><button data-v="fit">Fit</button><button id="smBtn" class="sm3d" type="button">3D mouse</button>
       </div>
       <div class="legend"><span><i style="border-color:#ff5a3c;border-top-style:dashed"></i>Rapid</span><span><i style="border-color:#4cc3ff"></i>Feed</span></div>
       <div class="drop" id="drop" hidden>Drop program to load</div>
+      <div class="toast" id="toast" role="status" hidden></div>
     </div>
     <div class="transport">
       <div class="trow">
@@ -291,6 +294,9 @@ td.n{font-family:var(--f-mono);font-size:13px;text-align:right}
           <div class="field"><label for="sRotView">A / B / C moves<small>Part view turns each indexed face onto the part. Machine shows raw X Y Z</small></label><select id="sRotView" class="sel"><option value="part">Part view</option><option value="machine">Machine X Y Z</option></select></div>
           <div class="field"><label>Rotary center X / Y / Z<small>Where the rotary axes cross, in work coordinates. Usually 0 0 0</small></label><span class="tri"><input id="sRcx" type="number" step="any" aria-label="Rotary center X"><input id="sRcy" type="number" step="any" aria-label="Rotary center Y"><input id="sRcz" type="number" step="any" aria-label="Rotary center Z"></span></div>
           <div class="field"><label>Reverse rotation<small>Tick an axis if its faces show up mirrored</small></label><span class="revs"><label><input type="checkbox" id="sRevA"> A</label><label><input type="checkbox" id="sRevB"> B</label><label><input type="checkbox" id="sRevC"> C</label></span></div>
+          <h3>3D mouse</h3>
+          <div class="field"><label for="sSmSpeed">3D mouse speed<small>1 is normal. Try 0.5 for finer control</small></label><input id="sSmSpeed" type="number" min="0.1" max="5" step="0.1"></div>
+          <div class="field"><label>Flip direction<small>Tick if spinning or zooming feels backwards</small></label><span class="revs"><label><input type="checkbox" id="sSmFlipR"> Rotate</label><label><input type="checkbox" id="sSmFlipZ"> Zoom</label></span></div>
           <h3>Program checks</h3>
           <div class="field"><label for="sCoolOn">Coolant on codes<small>Any of these counts as coolant on</small></label><input id="sCoolOn" type="text" spellcheck="false"></div>
           <div class="field"><label for="sCoolOff">Coolant off codes</label><input id="sCoolOff" type="text" spellcheck="false"></div>
@@ -971,7 +977,9 @@ function draw(){
 }
 let raf=0;function req(){if(!raf)raf=requestAnimationFrame(frame)}
 let lastT=0;
-function frame(t){raf=0;if(playing){const dt=Math.min(.05,(t-(lastT||t))/1000);lastT=t;advance(dt);if(playing)raf=requestAnimationFrame(frame)}else lastT=0;draw();syncUI()}
+function frame(t){raf=0;if(playing){const dt=Math.min(.05,(t-(lastT||t))/1000);lastT=t;advance(dt);if(playing)raf=requestAnimationFrame(frame)}else lastT=0;
+  if(smActive()){const dt=Math.min(.05,(t-(smT||t))/1000);smT=t;smApply(dt);if(!raf)raf=requestAnimationFrame(frame)}else smT=0;
+  draw();syncUI()}
 function resize(){const r=vpwrap.getBoundingClientRect();W=r.width;H=r.height;if(!W||!H)return;
   DPR=Math.min(2,window.devicePixelRatio||1);GDPR=softGL?1:Math.min(1.5,window.devicePixelRatio||1);
   cv.width=Math.round(W*DPR);cv.height=Math.round(H*DPR);
@@ -1233,6 +1241,45 @@ for(const id in sMap){$(id).value=cfg[sMap[id]];$(id).addEventListener('change',
 // theme
 try{matchMedia('(prefers-color-scheme: dark)').addEventListener('change',readColors)}catch(e){}
 new MutationObserver(readColors).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+
+/* ---- 3D mouse (3Dconnexion SpaceMouse) through WebHID: Chrome / Edge on a computer ---- */
+const sm={dev:null,ax:[0,0,0,0,0,0],last:0,btn:0};let smT=0;
+const SM_FILTERS=[{vendorId:0x256f,usagePage:0x01,usage:0x08},{vendorId:0x046d,usagePage:0x01,usage:0x08},{vendorId:0x256f},{vendorId:0x046d,productId:0xc626},{vendorId:0x046d,productId:0xc628},{vendorId:0x046d,productId:0xc627},{vendorId:0x046d,productId:0xc62b}];
+const smIs=d=>d.vendorId===0x256f||(d.vendorId===0x046d&&(d.collections||[]).some(c=>c.usagePage===1&&c.usage===8));
+let toastT=0;function toast(msg){const el=$('toast');el.textContent=msg;el.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>el.hidden=true,6000)}
+function smUI(){const b=$('smBtn');b.classList.toggle('on',!!sm.dev);b.textContent=sm.dev?'3D mouse ●':'3D mouse';b.title=sm.dev?`3D mouse connected (${sm.dev.productName||'SpaceMouse'}). Left button = Fit, right button = next view`:'Connect a 3Dconnexion SpaceMouse (Chrome or Edge)'}
+async function smConnect(dev){
+  try{if(!dev.opened)await dev.open()}catch(e){toast('Could not open the 3D mouse. Close other programs using it and try again.');return false}
+  if(sm.dev&&sm.dev!==dev)sm.dev.removeEventListener('inputreport',smReport);
+  sm.dev=dev;dev.addEventListener('inputreport',smReport);smUI();return true}
+function smReport(e){const d=e.data,id=e.reportId,g=i=>d.getInt16(i,true);
+  if(id===1){if(d.byteLength>=12)sm.ax=[g(0),g(2),g(4),g(6),g(8),g(10)];else if(d.byteLength>=6){sm.ax[0]=g(0);sm.ax[1]=g(2);sm.ax[2]=g(4)}}
+  else if(id===2&&d.byteLength>=6){sm.ax[3]=g(0);sm.ax[4]=g(2);sm.ax[5]=g(4)}
+  else if(id===3&&d.byteLength>=1){const b=d.getUint8(0)|(d.byteLength>1?d.getUint8(1)<<8:0),down=b&~sm.btn;sm.btn=b;if(down&1)fit();if(down&2)smNextView()}
+  sm.last=performance.now();req()}
+const SM_DEAD=18;
+function smActive(){return !!sm.dev&&performance.now()-sm.last<400&&sm.ax.some(a=>Math.abs(a)>SM_DEAD)}
+function smApply(dt){
+  const v=sm.ax.map(a=>Math.abs(a)<=SM_DEAD?0:Math.max(-1,Math.min(1,(a-Math.sign(a)*SM_DEAD)/330)));const [tx,ty,tz,rx,,rz]=v;
+  const k=(+cfg.smSpeed||1)*dt,fr=cfg.smFlipR?-1:1,fz=cfg.smFlipZ?-1:1;
+  cam.px+=tx*W*0.9*k;cam.py+=tz*H*0.9*k;                              // push sideways / press down = pan
+  if(ty)zoomAt(W/2,H/2,Math.exp(-ty*2.2*k*fz));                       // pull toward you = zoom in
+  cam.yaw+=rz*2.6*k*fr;cam.pitch=Math.max(-Math.PI/2,Math.min(Math.PI/2,cam.pitch-rx*2.0*k*fr));  // twist = spin, tilt = tip
+  if(rz||rx)document.querySelectorAll('#views button[data-v]').forEach(b=>b.classList.remove('on'));
+  interacting()}
+const SM_VIEWS=['iso','top','front','right'];
+function smNextView(){const on=document.querySelector('#views button.on[data-v]');const i=on?SM_VIEWS.indexOf(on.dataset.v):-1;document.querySelector(`#views button[data-v="${SM_VIEWS[(i+1)%4]}"]`).click()}
+$('smBtn').addEventListener('click',async()=>{
+  if(!('hid' in navigator)){toast('This browser can\'t talk to a 3D mouse. Open the backplot in Chrome or Edge on your computer.');return}
+  try{const ds=await navigator.hid.requestDevice({filters:SM_FILTERS});const d=ds.find(smIs)||ds[0];if(!d)return;if(await smConnect(d))toast('3D mouse connected. Twist to spin, tilt to tip, push to pan, pull to zoom. Left button fits the view.')}
+  catch(e){toast(e&&(e.name==='SecurityError'||e.name==='NotAllowedError')?'The 3D mouse is blocked in this preview window. Open the backplot on your website in Chrome or Edge.':'Could not connect the 3D mouse.')}});
+if('hid' in navigator){
+  try{navigator.hid.getDevices().then(ds=>{const d=ds.find(smIs);if(d)smConnect(d)}).catch(()=>{});
+    navigator.hid.addEventListener('connect',e=>{if(!sm.dev&&smIs(e.device))smConnect(e.device)});
+    navigator.hid.addEventListener('disconnect',e=>{if(e.device===sm.dev){sm.dev=null;sm.ax=[0,0,0,0,0,0];smUI()}})}catch(e){}}
+smUI();
+$('sSmSpeed').value=cfg.smSpeed||1;$('sSmSpeed').addEventListener('change',e=>{const v=parseFloat(e.target.value);if(isFinite(v)&&v>0){cfg.smSpeed=v;store.set('bp-cfg',JSON.stringify(cfg))}});
+for(const [id,k] of [['sSmFlipR','smFlipR'],['sSmFlipZ','smFlipZ']]){$(id).checked=!!cfg[k];$(id).addEventListener('change',e=>{cfg[k]=e.target.checked;store.set('bp-cfg',JSON.stringify(cfg))})}
 
 initGL();if(!gl)glc.hidden=true;
 readColors();
