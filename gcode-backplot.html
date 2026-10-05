@@ -67,14 +67,6 @@ button{cursor:pointer}
 .views button{background:rgba(20,26,28,.82);color:#cfd9db;border:1px solid #2f3a3d;border-radius:5px;padding:4px 9px;font-family:var(--f-disp);font-weight:600;font-size:13px;letter-spacing:.06em;text-transform:uppercase}
 .views button.on{color:#14191b;background:#cfd9db}
 .views .sm3d.on{color:#0b1c10;background:#7ee0a0;border-color:#7ee0a0}
-.perf{position:absolute;left:10px;bottom:10px;font-family:var(--f-mono);font-size:11.5px;color:#cfd9db;background:rgba(9,13,14,.85);border:1px solid #2f3a3d;border-radius:4px;padding:3px 7px;pointer-events:none}
-.smhead{font-size:12px;color:var(--muted);padding:8px 0 4px}
-.smaxes{display:flex;flex-direction:column;gap:2px;padding-bottom:6px;border-bottom:1px solid var(--line)}
-.smrow{display:grid;grid-template-columns:minmax(0,1fr) 90px auto auto;gap:8px;align-items:center;font-size:13px;padding:3px 0}
-.smrow label{display:flex;gap:4px;align-items:center;color:var(--muted);font-size:12px}.smrow input{accent-color:var(--accent)}
-.smbar{position:relative;height:8px;border-radius:4px;background:var(--chip);overflow:hidden}
-.smbar::after{content:"";position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--muted)}
-.smbar i{position:absolute;top:0;bottom:0;left:50%;width:0;background:var(--accent)}.smbar i.dead{background:var(--muted)}
 .toast{position:absolute;left:50%;bottom:44px;transform:translateX(-50%);max-width:min(560px,calc(100% - 32px));background:rgba(9,13,14,.92);color:#e8f0f1;border:1px solid #2f3a3d;border-radius:8px;padding:9px 14px;font-size:13.5px;line-height:1.4;text-align:center;pointer-events:none;z-index:5}
 .legend{position:absolute;right:10px;bottom:10px;display:flex;gap:12px;font-family:var(--f-mono);font-size:11px;color:#9aa8ab;background:rgba(11,15,16,.7);padding:4px 8px;border-radius:4px;pointer-events:none}
 .legend i{display:inline-block;width:18px;height:0;border-top:2px solid;vertical-align:middle;margin-right:5px}
@@ -246,7 +238,6 @@ td.n{font-family:var(--f-mono);font-size:13px;text-align:right}
       <div class="legend"><span><i style="border-color:#ff5a3c;border-top-style:dashed"></i>Rapid</span><span><i style="border-color:#4cc3ff"></i>Feed</span></div>
       <div class="drop" id="drop" hidden>Drop program to load</div>
       <div class="toast" id="toast" role="status" hidden></div>
-      <div class="perf" id="perf" hidden>Rotate the part to measure</div>
     </div>
     <div class="transport">
       <div class="trow">
@@ -306,15 +297,11 @@ td.n{font-family:var(--f-mono);font-size:13px;text-align:right}
           <h3>3D mouse</h3>
           <div class="field"><label for="sSmSpeed">3D mouse speed<small>1 is normal. Try 0.5 for finer control</small></label><input id="sSmSpeed" type="number" min="0.1" max="5" step="0.1"></div>
           <div class="field"><label for="sSmZoom">Zoom direction<small>Same choice as in Mastercam's 3Dconnexion settings</small></label><select id="sSmZoom" class="sel"><option value="fb">Forward / Backward</option><option value="ud">Up / Down</option></select></div>
-          <div class="smhead">Move the cap to test each direction. Untick On to turn one off, tick Reverse if it goes the wrong way.</div>
-          <div id="smAxes" class="smaxes"></div>
-          <label class="chk" for="sAA"><input type="checkbox" id="sAA"><span>Smooth lines<small>Untick for faster rotating on older computers. Lines look a little more jagged</small></span></label>
-          <label class="chk" for="sPerf"><input type="checkbox" id="sPerf"><span>Show drawing speed<small>Shows frames per second in the corner of the plot while you rotate</small></span></label>
+          <div class="field"><label>Flip direction<small>Tick if spinning or zooming feels backwards</small></label><span class="revs"><label><input type="checkbox" id="sSmFlipR"> Rotate</label><label><input type="checkbox" id="sSmFlipZ"> Zoom</label></span></div>
           <h3>Program checks</h3>
           <div class="field"><label for="sCoolOn">Coolant on codes<small>Any of these counts as coolant on</small></label><input id="sCoolOn" type="text" spellcheck="false"></div>
           <div class="field"><label for="sCoolOff">Coolant off codes</label><input id="sCoolOff" type="text" spellcheck="false"></div>
           <label class="chk" for="sDpi"><input type="checkbox" id="sDpi"><span>Numbers without a decimal point are full units<small>Turn on if your control reads Z-1 as 1 inch/mm, not 0.0001 (calculator-type input, Fanuc parameter 3401 bit 0). Hides the decimal point warnings.</small></span></label>
-          <p class="note" id="gfxInfo"></p>
           <p class="note">Reads Fanuc-style milling code: G0–G3 (IJK or R, G17/18/19, helical), G90/G91, G20/G21, G28, G43/H, drill cycles G73/G81–G89 with G98/G99, A/B/C rotary moves, G68 / G68.2 tilted planes and G43.4 TCP. Tool comp (G41/G42) is shown on the programmed path, not the offset path. Macros (#, IF, WHILE) and subprograms are skipped and flagged. This is a programming check, not a material-removal simulation: it does not know your stock, fixtures or holder lengths.</p>
         </section>
       </div>
@@ -507,7 +494,7 @@ function parse(src){
     const r=Math.hypot(sa-ca,sb-cb);if(r<1e-9){add('err',li,'Arc radius is zero');return}
     const a0=Math.atan2(sb-cb,sa-ca),a1=Math.atan2(eb-cb,ea-ca);
     let sw=cw?a0-a1:a1-a0;const TAU=Math.PI*2;sw=((sw%TAU)+TAU)%TAU;if(full||sw<1e-9)sw=full?TAU:sw;
-    const ce=S.units===21?0.0125:0.0005,stp=Math.max(Math.PI/36,r>ce?2*Math.acos(1-ce/r):Math.PI/4),n=Math.max(4,Math.ceil(sw/Math.min(stp,Math.PI/4)));const poly=[];const dh=en[map.h]-st[map.h];
+    const n=Math.max(4,Math.ceil(sw/(Math.PI/36)));const poly=[];const dh=en[map.h]-st[map.h];
     for(let i=0;i<=n;i++){const t=i/n,ang=a0+(cw?-1:1)*sw*t;const p=[0,0,0];p[map.a]=ca+r*Math.cos(ang);p[map.b]=cb+r*Math.sin(ang);p[map.h]=st[map.h]+dh*t;poly.push(p)}
     poly[n]=en.slice();
     pushMove(1,poly,li,Math.hypot(sw*r,dh));
@@ -765,7 +752,7 @@ function mv3(M,v){return [M[0]*v[0]+M[1]*v[1]+M[2]*v[2],M[3]*v[0]+M[4]*v[1]+M[5]
 function axisAngle(u,deg){const l=Math.hypot(u[0],u[1],u[2])||1,x=u[0]/l,y=u[1]/l,z=u[2]/l,r=deg*Math.PI/180,c=Math.cos(r),s=Math.sin(r),t=1-c;
   return [t*x*x+c,t*x*y-s*z,t*x*z+s*y, t*x*y+s*z,t*y*y+c,t*y*z-s*x, t*x*z-s*y,t*y*z+s*x,t*z*z+c]}
 /* ---------------- Viewer ---------------- */
-const vpwrap=$('vpwrap'),cv=$('cv'),ctx=cv.getContext('2d');let glc=$('gl');
+const vpwrap=$('vpwrap'),cv=$('cv'),ctx=cv.getContext('2d'),glc=$('gl');
 let W=0,H=0,DPR=1,GDPR=1,needFit=true,dataId=0;
 const cam={yaw:-Math.PI/4,pitch:0.62,scale:40,px:0,py:0,c:[0,0,0]};
 let cur=null,prog=0,playing=false,vpColor='#14191b';
@@ -797,7 +784,7 @@ function gridSegs(){
 }
 
 /* ---- GPU renderer (WebGL): the whole path lives on the graphics card; rotate/zoom/play only change uniforms ---- */
-let gl=null,G=null,softGL=false,glKey='',glDone=0,interactUntil=0,settleTimer=0,glName='',slowGL=false,frameEma=16,lastFrameT=0;
+let gl=null,G=null,softGL=false,glKey='',glDone=0,interactUntil=0,settleTimer=0;
 const VS=`attribute vec3 aPos;attribute vec3 aInfo;
 uniform vec3 uC;uniform vec4 uRot;uniform vec4 uView;uniform float uScale;uniform float uShowRapid;uniform vec3 uCols[8];uniform vec3 uRapidCol;uniform float uByTool;uniform float uHoriz;
 varying vec3 vCol;varying float vRapid;varying float vAlong;
@@ -810,9 +797,10 @@ void main(){
   float sy=uView.y*0.5+uView.w-y1*uScale;
   gl_Position=vec4(sx/uView.x*2.0-1.0,1.0-sy/uView.y*2.0,0.0,1.0);
   vRapid=aInfo.y;vAlong=aInfo.z*uScale;
-  // aInfo.x carries the tool colour packed as r*65536+g*256+b (no per-vertex loop)
-  float pk=aInfo.x;vec3 tc=vec3(floor(pk/65536.0),mod(floor(pk/256.0),256.0),mod(pk,256.0))/255.0;
-  vCol=aInfo.y>0.5?uRapidCol:(uByTool>0.5?tc:uCols[0]);
+  int t=int(floor(mod(max(aInfo.x,0.0),8.0)+0.5));
+  vec3 c=uCols[0];
+  if(uByTool>0.5){for(int i=0;i<8;i++){if(i==t)c=uCols[i];}}
+  vCol=aInfo.y>0.5?uRapidCol:c;
   if(aInfo.y>0.5&&uShowRapid<0.5)gl_Position=vec4(2.0,2.0,2.0,1.0);
 }`;
 const FS=`#ifdef GL_FRAGMENT_PRECISION_HIGH
@@ -828,9 +816,9 @@ void main(){
 function initGL(){
   gl=null;G=null;
   let soft=false;
-  try{const t=document.createElement('canvas').getContext('webgl');if(t){const ext=t.getExtension('WEBGL_debug_renderer_info');const rn=String(ext?t.getParameter(ext.UNMASKED_RENDERER_WEBGL):t.getParameter(t.RENDERER));glName=rn;soft=/swiftshader|llvmpipe|softpipe|software|basic render/i.test(rn);const l=t.getExtension('WEBGL_lose_context');if(l)l.loseContext()}}catch(e){}
+  try{const t=document.createElement('canvas').getContext('webgl');if(t){const ext=t.getExtension('WEBGL_debug_renderer_info');const rn=String(ext?t.getParameter(ext.UNMASKED_RENDERER_WEBGL):t.getParameter(t.RENDERER));soft=/swiftshader|llvmpipe|softpipe|software|basic render/i.test(rn);const l=t.getExtension('WEBGL_lose_context');if(l)l.loseContext()}}catch(e){}
   softGL=soft;
-  try{gl=glc.getContext('webgl',{antialias:!soft&&cfg.aa!==false,alpha:false,depth:false,preserveDrawingBuffer:soft,powerPreference:'high-performance'})||glc.getContext('experimental-webgl',{preserveDrawingBuffer:soft})}catch(e){gl=null}
+  try{gl=glc.getContext('webgl',{antialias:!soft,alpha:false,depth:false,preserveDrawingBuffer:true})||glc.getContext('experimental-webgl',{preserveDrawingBuffer:true})}catch(e){gl=null}
   if(!gl)return;
   try{
     const sh=(t,s)=>{const o=gl.createShader(t);gl.shaderSource(o,s);gl.compileShader(o);if(!gl.getShaderParameter(o,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(o));return o};
@@ -845,14 +833,8 @@ function initGL(){
     gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
   }catch(e){console.warn('WebGL unavailable, using 2D drawing',e);gl=null;G=null}
 }
-function hookGL(c){c.addEventListener('webglcontextlost',e=>{e.preventDefault();G=null;glKey=''},false);
-  c.addEventListener('webglcontextrestored',()=>{initGL();uploadGL();req()},false)}
-hookGL(glc);
-// smooth lines can only be switched with a fresh drawing surface
-function rebuildGL(){const n=glc.cloneNode(false);glc.replaceWith(n);glc=n;hookGL(glc);initGL();if(!gl){glc.hidden=true;return}
-  glc.width=Math.round(W*GDPR);glc.height=Math.round(H*GDPR);glKey='';uploadGL();req()}
-const PKCOL=TOOLCOL.map(h=>{const c=hexRgb(h).map(v=>Math.round(v*255));return c[0]*65536+c[1]*256+c[2]});
-const pkTool=t=>PKCOL[(t<0?0:t)%PKCOL.length];
+glc.addEventListener('webglcontextlost',e=>{e.preventDefault();G=null;glKey=''},false);
+glc.addEventListener('webglcontextrestored',()=>{initGL();uploadGL();req()},false);
 function bindSet(s){gl.bindBuffer(gl.ARRAY_BUFFER,s.pos);gl.enableVertexAttribArray(G.aPos);gl.vertexAttribPointer(G.aPos,3,gl.FLOAT,false,0,0);
   gl.bindBuffer(gl.ARRAY_BUFFER,s.info);gl.enableVertexAttribArray(G.aInfo);gl.vertexAttribPointer(G.aInfo,3,gl.FLOAT,false,0,0)}
 function uploadGL(){
@@ -865,15 +847,15 @@ function uploadGL(){
     for(let k=0;k<m.n-1;k++){const a=(m.p0+k)*3,o=v*3;
       const dx=P[a+3]-P[a],dy=P[a+4]-P[a+1],dz=P[a+5]-P[a+2],L=Math.sqrt(dx*dx+dy*dy+dz*dz);
       pos[o]=P[a]-c0[0];pos[o+1]=P[a+1]-c0[1];pos[o+2]=P[a+2]-c0[2];pos[o+3]=P[a+3]-c0[0];pos[o+4]=P[a+4]-c0[1];pos[o+5]=P[a+5]-c0[2];
-      const pc=pkTool(m.tool);inf[o]=pc;inf[o+1]=r;inf[o+2]=al;inf[o+3]=pc;inf[o+4]=r;inf[o+5]=al+L;al+=L;v+=2}}
+      inf[o]=m.tool;inf[o+1]=r;inf[o+2]=al;inf[o+3]=m.tool;inf[o+4]=r;inf[o+5]=al+L;al+=L;v+=2}}
   vs[mv.length]=v;
-  // lighter copy for use while rotating/zooming/scrubbing on slower graphics: skips points closer than ~1/1000 of the part size
-  const bb=cur.stats.bb,tol=Math.max(bb[3]-bb[0],bb[4]-bb[1],bb[5]-bb[2],1e-6)/400,tol2=tol*tol;
-  const vsL=new Uint32Array(mv.length+1);cur.vsL=vsL;cur.lodWorth=v>8000;
+  // lighter copy for use while rotating/zooming/scrubbing: skips points closer than ~1/1500 of the part size
+  const bb=cur.stats.bb,tol=Math.max(bb[3]-bb[0],bb[4]-bb[1],bb[5]-bb[2],1e-6)/1500,tol2=tol*tol;
+  const vsL=new Uint32Array(mv.length+1);cur.vsL=vsL;cur.lodWorth=v>60000;
   let lp=[],li=[],lv=0;
   if(cur.lodWorth){
     let have=false,pk=0,ptool=0,prap=0,kx=0,ky=0,kz=0,kA=0,ex=0,ey=0,ez=0,eA=0,al=0;
-    const emit=(x,y,z,A)=>{lp.push(kx-c0[0],ky-c0[1],kz-c0[2],x-c0[0],y-c0[1],z-c0[2]);const pc=pkTool(ptool);li.push(pc,prap,kA,pc,prap,A);kx=x;ky=y;kz=z;kA=A;lv+=2};
+    const emit=(x,y,z,A)=>{lp.push(kx-c0[0],ky-c0[1],kz-c0[2],x-c0[0],y-c0[1],z-c0[2]);li.push(ptool,prap,kA,ptool,prap,A);kx=x;ky=y;kz=z;kA=A;lv+=2};
     for(let i=0;i<mv.length;i++){const m=mv[i];vsL[i]=lv;const key=m.type?m.tool:-99;
       if(have&&key!==pk){if(ex!==kx||ey!==ky||ez!==kz)emit(ex,ey,ez,eA);have=false}
       if(!have){const o=m.p0*3;kx=ex=P[o];ky=ey=P[o+1];kz=ez=P[o+2];kA=eA=al=0;have=true;pk=key;ptool=m.tool;prap=m.type?0:1}
@@ -881,7 +863,7 @@ function uploadGL(){
         const dx=x-kx,dy=y-ky,dz=z-kz;if(dx*dx+dy*dy+dz*dz>tol2||(!m.type&&k===m.n-1))emit(x,y,z,al)}}
     if(have&&(ex!==kx||ey!==ky||ez!==kz))emit(ex,ey,ez,eA);
   }
-  vsL[mv.length]=lv;if(lv>v*0.8)cur.lodWorth=false;
+  vsL[mv.length]=lv;
   gl.bindBuffer(gl.ARRAY_BUFFER,G.lod.pos);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(lp),gl.STATIC_DRAW);
   gl.bindBuffer(gl.ARRAY_BUFFER,G.lod.info);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(li),gl.STATIC_DRAW);G.lod.n=lv;
   glKey='';
@@ -894,12 +876,11 @@ function uploadGL(){
 }
 function drawGL(target){
   if(!cur||!cur.vs||!G){gl.viewport(0,0,glc.width,glc.height);const bg=hexRgb(vpColor);gl.clearColor(bg[0],bg[1],bg[2],1);gl.clear(gl.COLOR_BUFFER_BIT);glKey='';return}
-  // on slow graphics, draw a lighter copy at half resolution while you rotate/zoom, then redraw sharp when you stop
-  const fast=(softGL||slowGL)&&performance.now()<interactUntil,lod=cur.lodWorth&&fast;
+  const lod=cur.lodWorth&&performance.now()<interactUntil;
   const set=lod?G.lod:G.path,vs=lod?cur.vsL:cur.vs,u=G.u,c0=cur.c0;
   const key=[cam.yaw,cam.pitch,cam.scale,cam.px,cam.py,cam.c.join(),W,H,glc.width,glc.height,opt.rapid,opt.tool,opt.ghost,opt.grid,dataId,vpColor,lod,cfg.machine,visKey].join('|');
   gl.useProgram(G.p);
-  if(key!==glKey||target<glDone||(!softGL&&target!==glDone)){
+  if(key!==glKey||target<glDone){
     glKey=key;glDone=target;
     gl.viewport(0,0,glc.width,glc.height);const bg=hexRgb(vpColor);gl.clearColor(bg[0],bg[1],bg[2],1);gl.clear(gl.COLOR_BUFFER_BIT);
     gl.uniform3f(u.uC,cam.c[0]-c0[0],cam.c[1]-c0[1],cam.c[2]-c0[2]);
@@ -997,19 +978,13 @@ function draw(){
 }
 let raf=0;function req(){if(!raf)raf=requestAnimationFrame(frame)}
 let lastT=0;
-let perfOn=false,perfFr=[],perfDraw=0,perfT=0;
-function perfShow(t,drawMs){if(!perfOn)return;perfFr.push(t);while(perfFr.length&&t-perfFr[0]>1000)perfFr.shift();perfDraw=perfDraw*.8+drawMs*.2;
-  if(t-perfT<250)return;perfT=t;const fps=perfFr.length>1?Math.round((perfFr.length-1)*1000/(perfFr[perfFr.length-1]-perfFr[0])):0;
-  $('perf').textContent=`${fps} fps · ${perfDraw.toFixed(1)} ms per frame · ${cur&&G?(G.path.n/2).toLocaleString()+' lines':'2D drawing'}${(softGL||slowGL)&&cur&&cur.lodWorth?' · light mode while moving':''}`}
-function frame(t){raf=0;
-  if(performance.now()<interactUntil&&lastFrameT&&t-lastFrameT<250){frameEma=frameEma*.85+(t-lastFrameT)*.15;if(frameEma>24)slowGL=true}lastFrameT=t;
-  if(playing){const dt=Math.min(.05,(t-(lastT||t))/1000);lastT=t;advance(dt);if(playing)raf=requestAnimationFrame(frame)}else lastT=0;
+function frame(t){raf=0;if(playing){const dt=Math.min(.05,(t-(lastT||t))/1000);lastT=t;advance(dt);if(playing)raf=requestAnimationFrame(frame)}else lastT=0;
   if(smActive()){const dt=Math.min(.05,(t-(smT||t))/1000);smT=t;smApply(dt);if(!raf)raf=requestAnimationFrame(frame)}else smT=0;
-  const d0=performance.now();draw();syncUI();perfShow(t,performance.now()-d0)}
+  draw();syncUI()}
 function resize(){const r=vpwrap.getBoundingClientRect();W=r.width;H=r.height;if(!W||!H)return;
   DPR=Math.min(2,window.devicePixelRatio||1);GDPR=softGL?1:Math.min(1.5,window.devicePixelRatio||1);
   cv.width=Math.round(W*DPR);cv.height=Math.round(H*DPR);
-  if(gl){glc.width=Math.round(W*GDPR);glc.height=Math.round(H*GDPR);glKey=''}
+  if(gl){glc.width=Math.round(W*GDPR);glc.height=Math.round(H*GDPR)}
   else{base.width=done.width=cv.width;base.height=done.height=cv.height;fbDirty=true;fbKey=''}
   if(needFit)fit();req()}
 new ResizeObserver(resize).observe(vpwrap);
@@ -1226,7 +1201,7 @@ cv.addEventListener('mousedown',e=>{if(e.button===1)e.preventDefault()});
 cv.addEventListener('auxclick',e=>{if(e.button===1)e.preventDefault()});
 cv.addEventListener('pointerdown',e=>{if(e.button===1)e.preventDefault();cv.setPointerCapture(e.pointerId);ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY,pan:e.button===2||e.shiftKey||e.ctrlKey});pinch=null});
 cv.addEventListener('pointermove',e=>{const p=ptrs.get(e.pointerId);if(!p)return;
-  if(ptrs.size===1){const dx=e.clientX-p.x,dy=e.clientY-p.y;if(p.pan){cam.px+=dx;cam.py+=dy}else{cam.yaw-=dx*.008;cam.pitch=Math.max(-Math.PI/2,Math.min(Math.PI/2,cam.pitch+dy*.008));for(const b of document.querySelectorAll('#views button.on'))b.classList.remove('on')}p.x=e.clientX;p.y=e.clientY;interacting();req()}
+  if(ptrs.size===1){const dx=e.clientX-p.x,dy=e.clientY-p.y;if(p.pan){cam.px+=dx;cam.py+=dy}else{cam.yaw-=dx*.008;cam.pitch=Math.max(-Math.PI/2,Math.min(Math.PI/2,cam.pitch+dy*.008));document.querySelectorAll('#views button').forEach(b=>b.classList.remove('on'))}p.x=e.clientX;p.y=e.clientY;interacting();req()}
   else if(ptrs.size===2){p.x=e.clientX;p.y=e.clientY;const [a,b]=[...ptrs.values()];const mx=(a.x+b.x)/2,my=(a.y+b.y)/2,d=Math.hypot(a.x-b.x,a.y-b.y);const r=cv.getBoundingClientRect();
     if(pinch){zoomAt(mx-r.left,my-r.top,d/pinch.d);cam.px+=mx-pinch.mx;cam.py+=my-pinch.my}pinch={d,mx,my};interacting();req()}});
 const up=e=>{ptrs.delete(e.pointerId);pinch=null};cv.addEventListener('pointerup',up);cv.addEventListener('pointercancel',up);
@@ -1282,22 +1257,19 @@ function smReport(e){const d=e.data,id=e.reportId,g=i=>d.getInt16(i,true);
   if(id===1){if(d.byteLength>=12)sm.ax=[g(0),g(2),g(4),g(6),g(8),g(10)];else if(d.byteLength>=6){sm.ax[0]=g(0);sm.ax[1]=g(2);sm.ax[2]=g(4)}}
   else if(id===2&&d.byteLength>=6){sm.ax[3]=g(0);sm.ax[4]=g(2);sm.ax[5]=g(4)}
   else if(id===3&&d.byteLength>=1){const b=d.getUint8(0)|(d.byteLength>1?d.getUint8(1)<<8:0),down=b&~sm.btn;sm.btn=b;if(down&1)fit();if(down&2)smNextView()}
-  sm.last=performance.now();smMeter();req()}
+  sm.last=performance.now();req()}
 const SM_DEAD=18;
 function smActive(){return !!sm.dev&&performance.now()-sm.last<400&&sm.ax.some(a=>Math.abs(a)>SM_DEAD)}
-const SM_AXES=[['px','Pan left / right',0],['py','Pan up / down',2],['zm','Zoom',1],['tl','Tilt',3],['sp','Spin',5]];
-function smAx(){const o={},off=cfg.smOff||{},rev=cfg.smRev||{};for(const [k] of SM_AXES)o[k]=off[k]?0:(rev[k]?-1:1);return o}
 function smApply(dt){
   const v=sm.ax.map(a=>Math.abs(a)<=SM_DEAD?0:Math.max(-1,Math.min(1,(a-Math.sign(a)*SM_DEAD)/330)));const [tx,ty,tz,rx,,rz]=v;
   // Same as Mastercam "object mode": the part follows the cap. Raw axes: x right, y toward you, z down.
-  const k=(+cfg.smSpeed||1)*dt,ud=cfg.smZoomUD,A=smAx();
+  const k=(+cfg.smSpeed||1)*dt,fr=cfg.smFlipR?-1:1,fz=cfg.smFlipZ?-1:1,ud=cfg.smZoomUD;
   const zoomAx=ud?-tz:ty,vertAx=ud?-ty:tz;                            // Zoom direction: Forward/Backward (default) or Up/Down
-  if(A.px)cam.px-=tx*W*0.9*k*A.px;                                    // push left / right = pan
-  if(A.py)cam.py+=vertAx*H*0.9*k*A.py;                                // lift / press = pan up / down
-  if(A.zm&&zoomAx)zoomAt(W/2,H/2,Math.exp(zoomAx*2.2*k*A.zm));        // push forward = zoom out, pull back = zoom in
-  if(A.sp)cam.yaw-=rz*2.6*k*A.sp;                                     // twist clockwise = part spins clockwise
-  if(A.tl)cam.pitch=Math.max(-Math.PI/2,Math.min(Math.PI/2,cam.pitch+rx*2.0*k*A.tl));  // tilt forward = part tips away
-  if(rz||rx)for(const b of document.querySelectorAll('#views button.on[data-v]'))b.classList.remove('on');
+  cam.px+=tx*W*0.9*k;cam.py+=vertAx*H*0.9*k;                          // push sideways = pan, press down / lift = pan down / up
+  if(zoomAx)zoomAt(W/2,H/2,Math.exp(zoomAx*2.2*k*fz));                // push forward = zoom out, pull back = zoom in
+  cam.yaw-=rz*2.6*k*fr;                                               // twist clockwise = part spins clockwise
+  cam.pitch=Math.max(-Math.PI/2,Math.min(Math.PI/2,cam.pitch+rx*2.0*k*fr));  // tilt forward = part tips away
+  if(rz||rx)document.querySelectorAll('#views button[data-v]').forEach(b=>b.classList.remove('on'));
   interacting()}
 const SM_VIEWS=['iso','top','front','right'];
 function smNextView(){const on=document.querySelector('#views button.on[data-v]');const i=on?SM_VIEWS.indexOf(on.dataset.v):-1;document.querySelector(`#views button[data-v="${SM_VIEWS[(i+1)%4]}"]`).click()}
@@ -1310,26 +1282,11 @@ if('hid' in navigator){
     navigator.hid.addEventListener('connect',e=>{if(!sm.dev&&smIs(e.device))smConnect(e.device)});
     navigator.hid.addEventListener('disconnect',e=>{if(e.device===sm.dev){sm.dev=null;sm.ax=[0,0,0,0,0,0];smUI()}})}catch(e){}}
 smUI();
-$('sAA').checked=cfg.aa!==false;$('sAA').addEventListener('change',e=>{cfg.aa=e.target.checked;store.set('bp-cfg',JSON.stringify(cfg));rebuildGL()});
-perfOn=!!cfg.perf;$('perf').hidden=!perfOn;$('sPerf').checked=perfOn;$('sPerf').addEventListener('change',e=>{perfOn=cfg.perf=e.target.checked;$('perf').hidden=!perfOn;$('perf').textContent='Rotate the part to measure';store.set('bp-cfg',JSON.stringify(cfg))});
 $('sSmSpeed').value=cfg.smSpeed||1;$('sSmSpeed').addEventListener('change',e=>{const v=parseFloat(e.target.value);if(isFinite(v)&&v>0){cfg.smSpeed=v;store.set('bp-cfg',JSON.stringify(cfg))}});
 $('sSmZoom').value=cfg.smZoomUD?'ud':'fb';$('sSmZoom').addEventListener('change',e=>{cfg.smZoomUD=e.target.value==='ud';store.set('bp-cfg',JSON.stringify(cfg))});
-// old "flip" settings carry over to the per-axis ones
-if(cfg.smFlipR||cfg.smFlipZ){cfg.smRev=cfg.smRev||{};if(cfg.smFlipR){cfg.smRev.tl=true;cfg.smRev.sp=true}if(cfg.smFlipZ)cfg.smRev.zm=true;delete cfg.smFlipR;delete cfg.smFlipZ;store.set('bp-cfg',JSON.stringify(cfg))}
-$('smAxes').innerHTML=SM_AXES.map(([k,label])=>`<div class="smrow"><span class="sml">${label}</span><span class="smbar"><i id="smb_${k}"></i></span><label><input type="checkbox" data-sm-on="${k}"> On</label><label><input type="checkbox" data-sm-rev="${k}"> Reverse</label></div>`).join('');
-for(const el of document.querySelectorAll('[data-sm-on]')){const k=el.dataset.smOn;el.checked=!(cfg.smOff||{})[k];el.addEventListener('change',()=>{cfg.smOff=cfg.smOff||{};cfg.smOff[k]=!el.checked;store.set('bp-cfg',JSON.stringify(cfg))})}
-for(const el of document.querySelectorAll('[data-sm-rev]')){const k=el.dataset.smRev;el.checked=!!(cfg.smRev||{})[k];el.addEventListener('change',()=>{cfg.smRev=cfg.smRev||{};cfg.smRev[k]=el.checked;store.set('bp-cfg',JSON.stringify(cfg))})}
-let smMeterRaf=0;function smMeter(){if(smMeterRaf||$('p-setup').hidden)return;smMeterRaf=requestAnimationFrame(()=>{smMeterRaf=0;const ud=cfg.smZoomUD;
-  for(const [k,,i] of SM_AXES){let v=sm.ax[i];if(ud&&k==='zm')v=-sm.ax[2];if(ud&&k==='py')v=-sm.ax[1];const el=$('smb_'+k);if(!el)continue;const f=Math.max(-1,Math.min(1,v/350));
-    el.style.left=f<0?(50+f*50)+'%':'50%';el.style.width=Math.abs(f*50)+'%';el.classList.toggle('dead',Math.abs(v)<=SM_DEAD)}})}
+for(const [id,k] of [['sSmFlipR','smFlipR'],['sSmFlipZ','smFlipZ']]){$(id).checked=!!cfg[k];$(id).addEventListener('change',e=>{cfg[k]=e.target.checked;store.set('bp-cfg',JSON.stringify(cfg))})}
 
 initGL();if(!gl)glc.hidden=true;
-{const el=$('gfxInfo'),hint='In Chrome or Edge: Settings → System → turn on “Use graphics acceleration when available”, then relaunch the browser.';
- if(!gl)el.textContent='Graphics: no WebGL, using basic drawing. Rotating will be slow. '+hint;
- else if(softGL){el.textContent='Graphics: software (the graphics card is not being used), so rotating big programs is slow. '+hint;
-   let seen=false;try{seen=sessionStorage.getItem('bp-soft')==='1';sessionStorage.setItem('bp-soft','1')}catch(e){}
-   if(!seen)setTimeout(()=>toast('Your browser is drawing without the graphics card, so rotating will lag. Turn on graphics acceleration in the browser settings (see Setup).'),1200)}
- else el.textContent='Graphics: '+(glName||'graphics card')+'.'}
 readColors();
 const saved=store.get('bp-src');
 load(saved&&saved.trim()?saved:SAMPLE,saved&&saved.trim()?null:'O1001 · sample program');
