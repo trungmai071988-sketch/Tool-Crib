@@ -875,7 +875,7 @@ function uploadGL(){
 }
 function drawGL(target){
   if(!cur||!cur.vs||!G){gl.viewport(0,0,glc.width,glc.height);const bg=hexRgb(vpColor);gl.clearColor(bg[0],bg[1],bg[2],1);gl.clear(gl.COLOR_BUFFER_BIT);glKey='';return}
-  const lod=cur.lodWorth&&performance.now()<interactUntil;
+  const lod=false;
   const set=lod?G.lod:G.path,vs=lod?cur.vsL:cur.vs,u=G.u,c0=cur.c0;
   const key=[cam.yaw,cam.pitch,cam.scale,cam.px,cam.py,cam.c.join(),W,H,glc.width,glc.height,opt.rapid,opt.tool,opt.ghost,opt.grid,dataId,vpColor,lod,cfg.machine,visKey].join('|');
   gl.useProgram(G.p);
@@ -981,7 +981,7 @@ function frame(t){raf=0;if(playing){const dt=Math.min(.05,(t-(lastT||t))/1000);l
   if(smActive()){const dt=Math.min(.05,(t-(smT||t))/1000);smT=t;smApply(dt);if(!raf)raf=requestAnimationFrame(frame)}else smT=0;
   draw();syncUI()}
 function resize(){const r=vpwrap.getBoundingClientRect();W=r.width;H=r.height;if(!W||!H)return;
-  DPR=Math.min(2,window.devicePixelRatio||1);GDPR=softGL?1:Math.min(1.5,window.devicePixelRatio||1);
+  DPR=Math.max(1,Math.min(2,window.devicePixelRatio||1));GDPR=Math.max(1,softGL?1:Math.min(1.5,window.devicePixelRatio||1));
   cv.width=Math.round(W*DPR);cv.height=Math.round(H*DPR);
   if(gl){glc.width=Math.round(W*GDPR);glc.height=Math.round(H*GDPR)}
   else{base.width=done.width=cv.width;base.height=done.height=cv.height;fbDirty=true;fbKey=''}

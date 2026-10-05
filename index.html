@@ -1442,7 +1442,7 @@ function sizeBackplot(){
   bpFrame.style.height = Math.max(420, window.innerHeight - top) + 'px';
 }
 function openBackplot(){
-  if(!bpFrame.getAttribute('src')) bpFrame.setAttribute('src', 'gcode-backplot.html');
+  if(!bpFrame.getAttribute('src')) bpFrame.setAttribute('src', 'gcode-backplot.html?v=' + Date.now()); // fresh copy every time, never an old cached one
   requestAnimationFrame(sizeBackplot);
 }
 bpFrame.addEventListener('load', ()=>{
