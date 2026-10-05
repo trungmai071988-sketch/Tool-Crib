@@ -794,13 +794,33 @@ function saveLocal(){
   }
 }
 
+// Helical part numbers carry the cutter size: H35AL-R-30750 = 3 flutes, .750".
+// If a row's diameter disagrees (a bad import gave some 0.03"), trust the part number.
+const HELICAL_PN = /\bH\d{2}[A-Z]*-[A-Z]{1,3}-\d(\d{4})/;
+function fixHelicalDia(t){
+  if(!t || t.brand !== 'Helical Solutions') return t;
+  const m = HELICAL_PN.exec((t.specs||'') + ' ' + (t.notes||''));
+  if(!m) return t;
+  let d = parseInt(m[1], 10) / 1000;
+  const f = Math.round(d * 64) / 64; if(Math.abs(f - d) <= 0.0008) d = f;   // 0312 -> .3125
+  const cur = parseFloat(t.diameter);
+  if(isNaN(cur) || Math.abs(cur - d) > 0.0015) t.diameter = String(+d.toFixed(4));
+  return t;
+}
+
 function rebuild(){
   const del = new Set(deleted);
   const catIds = new Set(catalog.map(t=>t.id));
+  const seenEdp = new Set();   // the same brand + EDP is shown once
   tools = [
     ...catalog.filter(t=>!del.has(t.id)),
     ...added.filter(t=>!catIds.has(t.id) && !del.has(t.id))
-  ];
+  ].map(fixHelicalDia).filter(t=>{
+    const k = t.brand + '|' + String(t.edp||'').trim();
+    if(!t.edp) return true;
+    if(seenEdp.has(k)) return false;
+    seenEdp.add(k); return true;
+  });
   refreshTypeList();
   refreshRadiusList();
   refreshFluteList();
