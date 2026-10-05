@@ -1699,6 +1699,8 @@ function renderResults(){
           let out = '';
           if(isMill && loc != null) out += pill('#0d3d5c','#7fd4ff',`LOC ${num(loc)}"`);
           if(r != null) out += pill('#0d3d5c','#7fd4ff',`R${num(r)}"`);
+          const fl = toolFlutes(t);
+          if(fl != null) out += pill('#0d3d5c','#7fd4ff',`${fl}FL`);
           if(c === 'Yes') out += pill('#0d3d5c','#7fd4ff','COOLANT-THRU');
           return out;
         })()}</div>
