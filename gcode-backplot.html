@@ -302,6 +302,7 @@ td.n{font-family:var(--f-mono);font-size:13px;text-align:right}
           <div class="field"><label for="sCoolOn">Coolant on codes<small>Any of these counts as coolant on</small></label><input id="sCoolOn" type="text" spellcheck="false"></div>
           <div class="field"><label for="sCoolOff">Coolant off codes</label><input id="sCoolOff" type="text" spellcheck="false"></div>
           <label class="chk" for="sDpi"><input type="checkbox" id="sDpi"><span>Numbers without a decimal point are full units<small>Turn on if your control reads Z-1 as 1 inch/mm, not 0.0001 (calculator-type input, Fanuc parameter 3401 bit 0). Hides the decimal point warnings.</small></span></label>
+          <p class="note" id="gfxInfo"></p>
           <p class="note">Reads Fanuc-style milling code: G0–G3 (IJK or R, G17/18/19, helical), G90/G91, G20/G21, G28, G43/H, drill cycles G73/G81–G89 with G98/G99, A/B/C rotary moves, G68 / G68.2 tilted planes and G43.4 TCP. Tool comp (G41/G42) is shown on the programmed path, not the offset path. Macros (#, IF, WHILE) and subprograms are skipped and flagged. This is a programming check, not a material-removal simulation: it does not know your stock, fixtures or holder lengths.</p>
         </section>
       </div>
@@ -494,7 +495,7 @@ function parse(src){
     const r=Math.hypot(sa-ca,sb-cb);if(r<1e-9){add('err',li,'Arc radius is zero');return}
     const a0=Math.atan2(sb-cb,sa-ca),a1=Math.atan2(eb-cb,ea-ca);
     let sw=cw?a0-a1:a1-a0;const TAU=Math.PI*2;sw=((sw%TAU)+TAU)%TAU;if(full||sw<1e-9)sw=full?TAU:sw;
-    const n=Math.max(4,Math.ceil(sw/(Math.PI/36)));const poly=[];const dh=en[map.h]-st[map.h];
+    const ce=S.units===21?0.0125:0.0005,stp=Math.max(Math.PI/36,r>ce?2*Math.acos(1-ce/r):Math.PI/4),n=Math.max(4,Math.ceil(sw/Math.min(stp,Math.PI/4)));const poly=[];const dh=en[map.h]-st[map.h];
     for(let i=0;i<=n;i++){const t=i/n,ang=a0+(cw?-1:1)*sw*t;const p=[0,0,0];p[map.a]=ca+r*Math.cos(ang);p[map.b]=cb+r*Math.sin(ang);p[map.h]=st[map.h]+dh*t;poly.push(p)}
     poly[n]=en.slice();
     pushMove(1,poly,li,Math.hypot(sw*r,dh));
@@ -784,7 +785,7 @@ function gridSegs(){
 }
 
 /* ---- GPU renderer (WebGL): the whole path lives on the graphics card; rotate/zoom/play only change uniforms ---- */
-let gl=null,G=null,softGL=false,glKey='',glDone=0,interactUntil=0,settleTimer=0;
+let gl=null,G=null,softGL=false,glKey='',glDone=0,interactUntil=0,settleTimer=0,glName='',slowGL=false,frameEma=16,lastFrameT=0;
 const VS=`attribute vec3 aPos;attribute vec3 aInfo;
 uniform vec3 uC;uniform vec4 uRot;uniform vec4 uView;uniform float uScale;uniform float uShowRapid;uniform vec3 uCols[8];uniform vec3 uRapidCol;uniform float uByTool;uniform float uHoriz;
 varying vec3 vCol;varying float vRapid;varying float vAlong;
@@ -797,10 +798,9 @@ void main(){
   float sy=uView.y*0.5+uView.w-y1*uScale;
   gl_Position=vec4(sx/uView.x*2.0-1.0,1.0-sy/uView.y*2.0,0.0,1.0);
   vRapid=aInfo.y;vAlong=aInfo.z*uScale;
-  int t=int(floor(mod(max(aInfo.x,0.0),8.0)+0.5));
-  vec3 c=uCols[0];
-  if(uByTool>0.5){for(int i=0;i<8;i++){if(i==t)c=uCols[i];}}
-  vCol=aInfo.y>0.5?uRapidCol:c;
+  // aInfo.x carries the tool colour packed as r*65536+g*256+b (no per-vertex loop)
+  float pk=aInfo.x;vec3 tc=vec3(floor(pk/65536.0),mod(floor(pk/256.0),256.0),mod(pk,256.0))/255.0;
+  vCol=aInfo.y>0.5?uRapidCol:(uByTool>0.5?tc:uCols[0]);
   if(aInfo.y>0.5&&uShowRapid<0.5)gl_Position=vec4(2.0,2.0,2.0,1.0);
 }`;
 const FS=`#ifdef GL_FRAGMENT_PRECISION_HIGH
@@ -816,9 +816,9 @@ void main(){
 function initGL(){
   gl=null;G=null;
   let soft=false;
-  try{const t=document.createElement('canvas').getContext('webgl');if(t){const ext=t.getExtension('WEBGL_debug_renderer_info');const rn=String(ext?t.getParameter(ext.UNMASKED_RENDERER_WEBGL):t.getParameter(t.RENDERER));soft=/swiftshader|llvmpipe|softpipe|software|basic render/i.test(rn);const l=t.getExtension('WEBGL_lose_context');if(l)l.loseContext()}}catch(e){}
+  try{const t=document.createElement('canvas').getContext('webgl');if(t){const ext=t.getExtension('WEBGL_debug_renderer_info');const rn=String(ext?t.getParameter(ext.UNMASKED_RENDERER_WEBGL):t.getParameter(t.RENDERER));glName=rn;soft=/swiftshader|llvmpipe|softpipe|software|basic render/i.test(rn);const l=t.getExtension('WEBGL_lose_context');if(l)l.loseContext()}}catch(e){}
   softGL=soft;
-  try{gl=glc.getContext('webgl',{antialias:!soft,alpha:false,depth:false,preserveDrawingBuffer:true})||glc.getContext('experimental-webgl',{preserveDrawingBuffer:true})}catch(e){gl=null}
+  try{gl=glc.getContext('webgl',{antialias:!soft,alpha:false,depth:false,preserveDrawingBuffer:soft,powerPreference:'high-performance'})||glc.getContext('experimental-webgl',{preserveDrawingBuffer:soft})}catch(e){gl=null}
   if(!gl)return;
   try{
     const sh=(t,s)=>{const o=gl.createShader(t);gl.shaderSource(o,s);gl.compileShader(o);if(!gl.getShaderParameter(o,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(o));return o};
@@ -835,6 +835,8 @@ function initGL(){
 }
 glc.addEventListener('webglcontextlost',e=>{e.preventDefault();G=null;glKey=''},false);
 glc.addEventListener('webglcontextrestored',()=>{initGL();uploadGL();req()},false);
+const PKCOL=TOOLCOL.map(h=>{const c=hexRgb(h).map(v=>Math.round(v*255));return c[0]*65536+c[1]*256+c[2]});
+const pkTool=t=>PKCOL[(t<0?0:t)%PKCOL.length];
 function bindSet(s){gl.bindBuffer(gl.ARRAY_BUFFER,s.pos);gl.enableVertexAttribArray(G.aPos);gl.vertexAttribPointer(G.aPos,3,gl.FLOAT,false,0,0);
   gl.bindBuffer(gl.ARRAY_BUFFER,s.info);gl.enableVertexAttribArray(G.aInfo);gl.vertexAttribPointer(G.aInfo,3,gl.FLOAT,false,0,0)}
 function uploadGL(){
@@ -847,15 +849,15 @@ function uploadGL(){
     for(let k=0;k<m.n-1;k++){const a=(m.p0+k)*3,o=v*3;
       const dx=P[a+3]-P[a],dy=P[a+4]-P[a+1],dz=P[a+5]-P[a+2],L=Math.sqrt(dx*dx+dy*dy+dz*dz);
       pos[o]=P[a]-c0[0];pos[o+1]=P[a+1]-c0[1];pos[o+2]=P[a+2]-c0[2];pos[o+3]=P[a+3]-c0[0];pos[o+4]=P[a+4]-c0[1];pos[o+5]=P[a+5]-c0[2];
-      inf[o]=m.tool;inf[o+1]=r;inf[o+2]=al;inf[o+3]=m.tool;inf[o+4]=r;inf[o+5]=al+L;al+=L;v+=2}}
+      const pc=pkTool(m.tool);inf[o]=pc;inf[o+1]=r;inf[o+2]=al;inf[o+3]=pc;inf[o+4]=r;inf[o+5]=al+L;al+=L;v+=2}}
   vs[mv.length]=v;
-  // lighter copy for use while rotating/zooming/scrubbing: skips points closer than ~1/1500 of the part size
-  const bb=cur.stats.bb,tol=Math.max(bb[3]-bb[0],bb[4]-bb[1],bb[5]-bb[2],1e-6)/1500,tol2=tol*tol;
-  const vsL=new Uint32Array(mv.length+1);cur.vsL=vsL;cur.lodWorth=v>60000;
+  // lighter copy for use while rotating/zooming/scrubbing on slower graphics: skips points closer than ~1/1000 of the part size
+  const bb=cur.stats.bb,tol=Math.max(bb[3]-bb[0],bb[4]-bb[1],bb[5]-bb[2],1e-6)/400,tol2=tol*tol;
+  const vsL=new Uint32Array(mv.length+1);cur.vsL=vsL;cur.lodWorth=v>8000;
   let lp=[],li=[],lv=0;
   if(cur.lodWorth){
     let have=false,pk=0,ptool=0,prap=0,kx=0,ky=0,kz=0,kA=0,ex=0,ey=0,ez=0,eA=0,al=0;
-    const emit=(x,y,z,A)=>{lp.push(kx-c0[0],ky-c0[1],kz-c0[2],x-c0[0],y-c0[1],z-c0[2]);li.push(ptool,prap,kA,ptool,prap,A);kx=x;ky=y;kz=z;kA=A;lv+=2};
+    const emit=(x,y,z,A)=>{lp.push(kx-c0[0],ky-c0[1],kz-c0[2],x-c0[0],y-c0[1],z-c0[2]);const pc=pkTool(ptool);li.push(pc,prap,kA,pc,prap,A);kx=x;ky=y;kz=z;kA=A;lv+=2};
     for(let i=0;i<mv.length;i++){const m=mv[i];vsL[i]=lv;const key=m.type?m.tool:-99;
       if(have&&key!==pk){if(ex!==kx||ey!==ky||ez!==kz)emit(ex,ey,ez,eA);have=false}
       if(!have){const o=m.p0*3;kx=ex=P[o];ky=ey=P[o+1];kz=ez=P[o+2];kA=eA=al=0;have=true;pk=key;ptool=m.tool;prap=m.type?0:1}
@@ -863,7 +865,7 @@ function uploadGL(){
         const dx=x-kx,dy=y-ky,dz=z-kz;if(dx*dx+dy*dy+dz*dz>tol2||(!m.type&&k===m.n-1))emit(x,y,z,al)}}
     if(have&&(ex!==kx||ey!==ky||ez!==kz))emit(ex,ey,ez,eA);
   }
-  vsL[mv.length]=lv;
+  vsL[mv.length]=lv;if(lv>v*0.8)cur.lodWorth=false;
   gl.bindBuffer(gl.ARRAY_BUFFER,G.lod.pos);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(lp),gl.STATIC_DRAW);
   gl.bindBuffer(gl.ARRAY_BUFFER,G.lod.info);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(li),gl.STATIC_DRAW);G.lod.n=lv;
   glKey='';
@@ -876,11 +878,13 @@ function uploadGL(){
 }
 function drawGL(target){
   if(!cur||!cur.vs||!G){gl.viewport(0,0,glc.width,glc.height);const bg=hexRgb(vpColor);gl.clearColor(bg[0],bg[1],bg[2],1);gl.clear(gl.COLOR_BUFFER_BIT);glKey='';return}
-  const lod=cur.lodWorth&&performance.now()<interactUntil;
+  // on slow graphics, draw a lighter copy at half resolution while you rotate/zoom, then redraw sharp when you stop
+  const fast=(softGL||slowGL)&&performance.now()<interactUntil,lod=cur.lodWorth&&fast;
+  {const f=fast?.5:1,ww=Math.max(1,Math.round(W*GDPR*f)),hh=Math.max(1,Math.round(H*GDPR*f));if(glc.width!==ww||glc.height!==hh){glc.width=ww;glc.height=hh;glKey=''}}
   const set=lod?G.lod:G.path,vs=lod?cur.vsL:cur.vs,u=G.u,c0=cur.c0;
   const key=[cam.yaw,cam.pitch,cam.scale,cam.px,cam.py,cam.c.join(),W,H,glc.width,glc.height,opt.rapid,opt.tool,opt.ghost,opt.grid,dataId,vpColor,lod,cfg.machine,visKey].join('|');
   gl.useProgram(G.p);
-  if(key!==glKey||target<glDone){
+  if(key!==glKey||target<glDone||(!softGL&&target!==glDone)){
     glKey=key;glDone=target;
     gl.viewport(0,0,glc.width,glc.height);const bg=hexRgb(vpColor);gl.clearColor(bg[0],bg[1],bg[2],1);gl.clear(gl.COLOR_BUFFER_BIT);
     gl.uniform3f(u.uC,cam.c[0]-c0[0],cam.c[1]-c0[1],cam.c[2]-c0[2]);
@@ -978,13 +982,15 @@ function draw(){
 }
 let raf=0;function req(){if(!raf)raf=requestAnimationFrame(frame)}
 let lastT=0;
-function frame(t){raf=0;if(playing){const dt=Math.min(.05,(t-(lastT||t))/1000);lastT=t;advance(dt);if(playing)raf=requestAnimationFrame(frame)}else lastT=0;
+function frame(t){raf=0;
+  if(performance.now()<interactUntil&&lastFrameT&&t-lastFrameT<250){frameEma=frameEma*.85+(t-lastFrameT)*.15;if(frameEma>24)slowGL=true}lastFrameT=t;
+  if(playing){const dt=Math.min(.05,(t-(lastT||t))/1000);lastT=t;advance(dt);if(playing)raf=requestAnimationFrame(frame)}else lastT=0;
   if(smActive()){const dt=Math.min(.05,(t-(smT||t))/1000);smT=t;smApply(dt);if(!raf)raf=requestAnimationFrame(frame)}else smT=0;
   draw();syncUI()}
 function resize(){const r=vpwrap.getBoundingClientRect();W=r.width;H=r.height;if(!W||!H)return;
   DPR=Math.min(2,window.devicePixelRatio||1);GDPR=softGL?1:Math.min(1.5,window.devicePixelRatio||1);
   cv.width=Math.round(W*DPR);cv.height=Math.round(H*DPR);
-  if(gl){glc.width=Math.round(W*GDPR);glc.height=Math.round(H*GDPR)}
+  if(gl){glc.width=Math.round(W*GDPR);glc.height=Math.round(H*GDPR);glKey=''}
   else{base.width=done.width=cv.width;base.height=done.height=cv.height;fbDirty=true;fbKey=''}
   if(needFit)fit();req()}
 new ResizeObserver(resize).observe(vpwrap);
@@ -1201,7 +1207,7 @@ cv.addEventListener('mousedown',e=>{if(e.button===1)e.preventDefault()});
 cv.addEventListener('auxclick',e=>{if(e.button===1)e.preventDefault()});
 cv.addEventListener('pointerdown',e=>{if(e.button===1)e.preventDefault();cv.setPointerCapture(e.pointerId);ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY,pan:e.button===2||e.shiftKey||e.ctrlKey});pinch=null});
 cv.addEventListener('pointermove',e=>{const p=ptrs.get(e.pointerId);if(!p)return;
-  if(ptrs.size===1){const dx=e.clientX-p.x,dy=e.clientY-p.y;if(p.pan){cam.px+=dx;cam.py+=dy}else{cam.yaw-=dx*.008;cam.pitch=Math.max(-Math.PI/2,Math.min(Math.PI/2,cam.pitch+dy*.008));document.querySelectorAll('#views button').forEach(b=>b.classList.remove('on'))}p.x=e.clientX;p.y=e.clientY;interacting();req()}
+  if(ptrs.size===1){const dx=e.clientX-p.x,dy=e.clientY-p.y;if(p.pan){cam.px+=dx;cam.py+=dy}else{cam.yaw-=dx*.008;cam.pitch=Math.max(-Math.PI/2,Math.min(Math.PI/2,cam.pitch+dy*.008));for(const b of document.querySelectorAll('#views button.on'))b.classList.remove('on')}p.x=e.clientX;p.y=e.clientY;interacting();req()}
   else if(ptrs.size===2){p.x=e.clientX;p.y=e.clientY;const [a,b]=[...ptrs.values()];const mx=(a.x+b.x)/2,my=(a.y+b.y)/2,d=Math.hypot(a.x-b.x,a.y-b.y);const r=cv.getBoundingClientRect();
     if(pinch){zoomAt(mx-r.left,my-r.top,d/pinch.d);cam.px+=mx-pinch.mx;cam.py+=my-pinch.my}pinch={d,mx,my};interacting();req()}});
 const up=e=>{ptrs.delete(e.pointerId);pinch=null};cv.addEventListener('pointerup',up);cv.addEventListener('pointercancel',up);
@@ -1269,7 +1275,7 @@ function smApply(dt){
   if(zoomAx)zoomAt(W/2,H/2,Math.exp(zoomAx*2.2*k*fz));                // push forward = zoom out, pull back = zoom in
   cam.yaw-=rz*2.6*k*fr;                                               // twist clockwise = part spins clockwise
   cam.pitch=Math.max(-Math.PI/2,Math.min(Math.PI/2,cam.pitch+rx*2.0*k*fr));  // tilt forward = part tips away
-  if(rz||rx)document.querySelectorAll('#views button[data-v]').forEach(b=>b.classList.remove('on'));
+  if(rz||rx)for(const b of document.querySelectorAll('#views button.on[data-v]'))b.classList.remove('on');
   interacting()}
 const SM_VIEWS=['iso','top','front','right'];
 function smNextView(){const on=document.querySelector('#views button.on[data-v]');const i=on?SM_VIEWS.indexOf(on.dataset.v):-1;document.querySelector(`#views button[data-v="${SM_VIEWS[(i+1)%4]}"]`).click()}
@@ -1287,6 +1293,12 @@ $('sSmZoom').value=cfg.smZoomUD?'ud':'fb';$('sSmZoom').addEventListener('change'
 for(const [id,k] of [['sSmFlipR','smFlipR'],['sSmFlipZ','smFlipZ']]){$(id).checked=!!cfg[k];$(id).addEventListener('change',e=>{cfg[k]=e.target.checked;store.set('bp-cfg',JSON.stringify(cfg))})}
 
 initGL();if(!gl)glc.hidden=true;
+{const el=$('gfxInfo'),hint='In Chrome or Edge: Settings → System → turn on “Use graphics acceleration when available”, then relaunch the browser.';
+ if(!gl)el.textContent='Graphics: no WebGL, using basic drawing. Rotating will be slow. '+hint;
+ else if(softGL){el.textContent='Graphics: software (the graphics card is not being used), so rotating big programs is slow. '+hint;
+   let seen=false;try{seen=sessionStorage.getItem('bp-soft')==='1';sessionStorage.setItem('bp-soft','1')}catch(e){}
+   if(!seen)setTimeout(()=>toast('Your browser is drawing without the graphics card, so rotating will lag. Turn on graphics acceleration in the browser settings (see Setup).'),1200)}
+ else el.textContent='Graphics: '+(glName||'graphics card')+'.'}
 readColors();
 const saved=store.get('bp-src');
 load(saved&&saved.trim()?saved:SAMPLE,saved&&saved.trim()?null:'O1001 · sample program');
