@@ -60,7 +60,8 @@ button{cursor:pointer}
 .dro .ax.rot b{color:#f0c36a}
 .dro .ax span{text-align:right}
 .dro .meta{display:flex;gap:10px;justify-content:space-between;margin-top:6px;padding-top:5px;border-top:1px solid #2a3437;font-size:12px;color:#a9b6b8}
-.dro .meta .dd{color:#6f7d80}.dro .meta .dd.on{color:#7fd3dc;font-weight:600}.dro .meta .dd.bad{color:#ff6b6b;font-weight:700}
+.dro .meta .dd{color:#6f7d80}
+.dro .dwarn{margin-top:6px;padding:4px 7px;border-radius:4px;background:#b3261e;color:#fff;font-family:var(--f-disp);font-weight:700;font-size:13.5px;letter-spacing:.04em;text-transform:uppercase;text-align:center;line-height:1.25;contain:inline-size;white-space:normal}.dro .meta .dd.on{color:#7fd3dc;font-weight:600}.dro .meta .dd.bad{color:#ff6b6b;font-weight:700}
 .dro .mode{font-family:var(--f-disp);font-weight:700;letter-spacing:.08em;font-size:13px}
 .dro .mode.rapid{color:#ff7a5e}.dro .mode.feed{color:#4cc3ff}
 
@@ -232,6 +233,7 @@ td.n{font-family:var(--f-mono);font-size:13px;text-align:right}
         <div class="ax rot" id="rowB" hidden><b>B</b><span id="dB">0.000</span></div>
         <div class="ax rot" id="rowC" hidden><b>C</b><span id="dC">0.000</span></div>
         <div class="meta"><span class="mode rapid" id="dMode">RAPID</span><span id="dT">T—</span><span id="dD" class="dd" hidden></span><span id="dF"></span><span id="dS">S0</span></div>
+        <div class="dwarn" id="dWarn" hidden></div>
       </div>
       <div class="views" id="views">
         <button data-v="iso" class="on">Iso</button><button data-v="top">Top</button><button data-v="front">Front</button><button data-v="right">Right</button><button data-v="fit">Fit</button><button id="smBtn" class="sm3d" type="button">3D mouse</button>
@@ -1096,9 +1098,11 @@ function syncUI(){
       dT.textContent='T'+(m.t??'—');dS.textContent='S'+(m.s||0);
       {const on=m.cc===41||m.cc===42,bad=on&&m.d!=null&&m.t!=null&&m.d!==m.t;   // D shows only while G41/G42 is on; G40 hides it
        dD.hidden=!on;dD.textContent=m.d!=null?'D'+m.d:'D?';dD.className='dd'+(bad||m.d==null?' bad':' on');
+       // big warning under the D so the operator can't miss it
+       const w=$('dWarn');w.hidden=!(on&&(bad||m.d==null));if(!w.hidden){w.innerHTML=m.d==null?'⚠ No D number':`⚠ Wrong D${+m.d}<br>Should be D${+m.t}`;w.title=m.d==null?`G${m.cc} is on with no D number`:`D${m.d} is active on T${m.t}. T, H and D should match: D${m.t}`}
        dD.title=m.d==null?`G${m.cc} on with no D number`:`Cutter comp G${m.cc} on with D${m.d}${bad?` — does not match T${m.t}`:''}`}dF.textContent=m.type?'F'+m.f:'';
       dMode.textContent=m.type?'FEED':'RAPID';dMode.className='mode '+(m.type?'feed':'rapid')}
-    else{dX.textContent=dY.textContent=dZ.textContent='—';dT.textContent='T—';dD.hidden=true;dF.textContent='';dS.textContent='S0';dMode.textContent=''}}
+    else{dX.textContent=dY.textContent=dZ.textContent='—';dT.textContent='T—';dD.hidden=true;$('dWarn').hidden=true;dF.textContent='';dS.textContent='S0';dMode.textContent=''}}
   const ln=(cursorLine>=0&&cursorProg===prog)?cursorLine:(m?m.line:-1);
   if(ln!==lastLine){lastLine=ln;showLine(ln);lineInfo.textContent=ln>=0?`Line ${ln+1} / ${cur.lines.length}`:`${cur.lines.length} lines`}
 }
