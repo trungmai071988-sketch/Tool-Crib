@@ -54,18 +54,18 @@ button{cursor:pointer}
 #cv:active{cursor:grabbing}
 
 /* DRO: stacked axis readout, top-left */
-.dro{position:absolute;top:10px;left:10px;background:rgba(9,13,14,.84);border:1px solid #2a3437;border-radius:6px;padding:8px 12px 7px;font-family:var(--f-mono);color:#e8f0f1;font-variant-numeric:tabular-nums;min-width:178px;pointer-events:none}
+.dro{position:absolute;top:10px;left:10px;background:rgba(9,13,14,.84);border:1px solid #2a3437;border-radius:6px;padding:8px 12px 7px;font-family:var(--f-mono);color:#e8f0f1;font-variant-numeric:tabular-nums;min-width:190px;pointer-events:none;zoom:var(--droz,1.4)}
 .dro .ax{display:grid;grid-template-columns:22px 1fr;align-items:baseline;font-size:21px;font-weight:500;line-height:1.28}
 .dro .ax b{font-family:var(--f-disp);font-weight:700;font-size:18px;color:#7fd3dc}
 .dro .ax.rot b{color:#f0c36a}
 .dro .ax span{text-align:right}
-.dro .meta{display:flex;gap:10px;justify-content:space-between;margin-top:6px;padding-top:5px;border-top:1px solid #2a3437;font-size:12px;color:#a9b6b8}
+.dro .meta{display:flex;flex-wrap:wrap;gap:2px 12px;margin-top:6px;padding-top:5px;border-top:1px solid #2a3437;font-size:14px;color:#c3cfd1;contain:inline-size}
 .dro .meta .dd{color:#6f7d80}
 .dro .dwarn{margin-top:6px;padding:4px 7px;border-radius:4px;background:#b3261e;color:#fff;font-family:var(--f-disp);font-weight:700;font-size:13.5px;letter-spacing:.04em;text-transform:uppercase;text-align:center;line-height:1.25;contain:inline-size;white-space:normal}.dro .dwarn hr{border:0;border-top:1px solid rgba(255,255,255,.45);margin:4px -7px}.dro .meta .dd.on{color:#7fd3dc;font-weight:600}.dro .meta .dd.bad{color:#ff6b6b;font-weight:700}
-.dro .mode{font-family:var(--f-disp);font-weight:700;letter-spacing:.08em;font-size:13px}
+.dro .mode{font-family:var(--f-disp);font-weight:700;letter-spacing:.08em;font-size:15px}
 .dro .mode.rapid{color:#ff7a5e}.dro .mode.feed{color:#4cc3ff}
 
-.views{position:absolute;top:10px;right:10px;display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;max-width:calc(100% - 210px)}
+.views{position:absolute;top:10px;right:10px;display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;max-width:calc(100% - 190px*var(--droz,1.4) - 50px)}
 .views button{background:rgba(20,26,28,.82);color:#cfd9db;border:1px solid #2f3a3d;border-radius:5px;padding:4px 9px;font-family:var(--f-disp);font-weight:600;font-size:13px;letter-spacing:.06em;text-transform:uppercase}
 .views button.on{color:#14191b;background:#cfd9db}
 .views .sm3d.on{color:#0b1c10;background:#7ee0a0;border-color:#7ee0a0}
@@ -73,7 +73,7 @@ button{cursor:pointer}
 .legend{position:absolute;right:10px;bottom:10px;display:flex;gap:12px;font-family:var(--f-mono);font-size:11px;color:#9aa8ab;background:rgba(11,15,16,.7);padding:4px 8px;border-radius:4px;pointer-events:none}
 .legend i{display:inline-block;width:18px;height:0;border-top:2px solid;vertical-align:middle;margin-right:5px}
 .drop{position:absolute;inset:0;border:2px dashed var(--accent);background:rgba(12,116,128,.14);display:grid;place-items:center;color:#cfe;font-family:var(--f-disp);font-size:22px;text-transform:uppercase;letter-spacing:.06em;pointer-events:none}
-@media (max-width:600px){.views{flex-direction:column;max-width:none}.dro{min-width:150px}.dro .ax{font-size:17px}}
+@media (max-width:600px){.views{flex-direction:column;max-width:none}.dro{min-width:150px;zoom:1}.dro .ax{font-size:17px}}
 
 .transport{display:flex;flex-direction:column;gap:8px;padding-block:10px;padding-inline:16px;background:var(--panel);border-bottom:1px solid var(--line)}
 .trow{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
@@ -284,6 +284,7 @@ td.n{font-family:var(--f-mono);font-size:13px;text-align:right}
         <section id="p-tools" hidden></section>
         <section id="p-stats" hidden></section>
         <section id="p-setup" hidden>
+          <div class="field"><label for="sDro">Readout size<small>The X Y Z box at top left</small></label><select id="sDro" class="sel"><option value="1">Normal</option><option value="1.4">Large</option><option value="1.8">Extra large</option></select></div>
           <div class="field"><label for="sRapid">Rapid rate<small id="sRapidU">in/min — used for cycle time</small></label><input id="sRapid" type="number" min="1" step="any"></div>
           <div class="field"><label for="sRpm">Max spindle RPM<small>Flags S words above this</small></label><input id="sRpm" type="number" min="1" step="1"></div>
           <div class="field"><label for="sZ">Stock top Z<small>Rapids below this are checked against what has already been cut</small></label><input id="sZ" type="number" step="any"></div>
@@ -1287,6 +1288,8 @@ const sm={dev:null,ax:[0,0,0,0,0,0],last:0,btn:0};let smT=0;
 const SM_FILTERS=[{vendorId:0x256f,usagePage:0x01,usage:0x08},{vendorId:0x046d,usagePage:0x01,usage:0x08},{vendorId:0x256f},{vendorId:0x046d,productId:0xc626},{vendorId:0x046d,productId:0xc628},{vendorId:0x046d,productId:0xc627},{vendorId:0x046d,productId:0xc62b}];
 const smIs=d=>d.vendorId===0x256f||(d.vendorId===0x046d&&(d.collections||[]).some(c=>c.usagePage===1&&c.usage===8));
 function hookSettings2(){
+  {const d=$('sDro'),ap=()=>document.documentElement.style.setProperty('--droz',d.value);d.value=String(cfg.droz||1.4);if(!d.value)d.value='1.4';ap();
+   d.addEventListener('change',()=>{cfg.droz=+d.value;store.set('bp-cfg',JSON.stringify(cfg));ap()})}
   $('sRotAbout').value=cfg.rotAbout||'cursor';$('sRotAbout').addEventListener('change',e=>{cfg.rotAbout=e.target.value;store.set('bp-cfg',JSON.stringify(cfg))});
   $('sRotSpeed').value=cfg.rotSpeed||1;$('sRotSpeed').addEventListener('change',e=>{const v=parseFloat(e.target.value);if(isFinite(v)&&v>0){cfg.rotSpeed=v;store.set('bp-cfg',JSON.stringify(cfg))}});
   $('sAA').checked=cfg.aa!==false;$('sAA').addEventListener('change',e=>{cfg.aa=e.target.checked;store.set('bp-cfg',JSON.stringify(cfg));rebuildGL()})}
