@@ -297,6 +297,10 @@ td.n{font-family:var(--f-mono);font-size:13px;text-align:right}
           <h3>3D mouse</h3>
           <div class="field"><label for="sSmSpeed">3D mouse speed<small>1 is normal. Try 0.5 for finer control</small></label><input id="sSmSpeed" type="number" min="0.1" max="5" step="0.1"></div>
           <div class="field"><label>Flip direction<small>Tick if spinning or zooming feels backwards</small></label><span class="revs"><label><input type="checkbox" id="sSmFlipR"> Rotate</label><label><input type="checkbox" id="sSmFlipZ"> Zoom</label></span></div>
+          <h3>Mouse</h3>
+          <div class="field"><label for="sRotAbout">Rotate around<small>Where the part spins when you hold the middle button</small></label><select id="sRotAbout" class="sel"><option value="cursor">Spot you press on</option><option value="screen">Center of screen</option><option value="part">Center of part</option></select></div>
+          <div class="field"><label for="sRotSpeed">Rotate speed<small>1 is normal</small></label><input id="sRotSpeed" type="number" min="0.2" max="4" step="0.1"></div>
+          <label class="chk" for="sAA"><input type="checkbox" id="sAA"><span>Smooth lines<small>Untick for faster rotating on older computers. Lines look a little more jagged</small></span></label>
           <h3>Program checks</h3>
           <div class="field"><label for="sCoolOn">Coolant on codes<small>Any of these counts as coolant on</small></label><input id="sCoolOn" type="text" spellcheck="false"></div>
           <div class="field"><label for="sCoolOff">Coolant off codes</label><input id="sCoolOff" type="text" spellcheck="false"></div>
@@ -751,9 +755,24 @@ function mv3(M,v){return [M[0]*v[0]+M[1]*v[1]+M[2]*v[2],M[3]*v[0]+M[4]*v[1]+M[5]
 function axisAngle(u,deg){const l=Math.hypot(u[0],u[1],u[2])||1,x=u[0]/l,y=u[1]/l,z=u[2]/l,r=deg*Math.PI/180,c=Math.cos(r),s=Math.sin(r),t=1-c;
   return [t*x*x+c,t*x*y-s*z,t*x*z+s*y, t*x*y+s*z,t*y*y+c,t*y*z-s*x, t*x*z-s*y,t*y*z+s*x,t*z*z+c]}
 /* ---------------- Viewer ---------------- */
-const vpwrap=$('vpwrap'),cv=$('cv'),ctx=cv.getContext('2d'),glc=$('gl');
+const vpwrap=$('vpwrap'),cv=$('cv'),ctx=cv.getContext('2d');let glc=$('gl');
 let W=0,H=0,DPR=1,GDPR=1,needFit=true,dataId=0;
-const cam={yaw:-Math.PI/4,pitch:0.62,scale:40,px:0,py:0,c:[0,0,0]};
+// view orientation: rows = screen right, screen up, toward you (world -> view)
+function viewFromYP(yaw,pitch){const cy=Math.cos(yaw),sy=Math.sin(yaw),cp=Math.cos(pitch),sp=Math.sin(pitch);
+  const r0=[cy,-sy,0],r1=[sy*sp,cy*sp,cp],r2=[r0[1]*r1[2]-r0[2]*r1[1],r0[2]*r1[0]-r0[0]*r1[2],r0[0]*r1[1]-r0[1]*r1[0]];return [...r0,...r1,...r2]}
+const cam={R:viewFromYP(-Math.PI/4,0.62),scale:40,px:0,py:0,c:[0,0,0]};
+// turn the view about the screen's up axis (a) and right axis (b); the part follows the mouse
+function turnView(a,b){const R=cam.R;let ca=Math.cos(a),sa=Math.sin(a),cb=Math.cos(b),sb=Math.sin(b),M=new Array(9);
+  for(let j=0;j<3;j++){const x=R[j],y=R[3+j],z=R[6+j];const x1=x*ca+z*sa,z1=-x*sa+z*ca;const y2=y*cb-z1*sb,z2=y*sb+z1*cb;M[j]=x1;M[3+j]=y2;M[6+j]=z2}
+  // keep it a clean rotation (no drift after long spins)
+  const n=v=>{const l=Math.hypot(v[0],v[1],v[2])||1;return v.map(q=>q/l)},r0=n(M.slice(0,3));let r1=M.slice(3,6);const d=r0[0]*r1[0]+r0[1]*r1[1]+r0[2]*r1[2];r1=n(r1.map((q,i)=>q-d*r0[i]));
+  cam.R=[...r0,...r1,r0[1]*r1[2]-r0[2]*r1[1],r0[2]*r1[0]-r0[0]*r1[2],r0[0]*r1[1]-r0[1]*r1[0]]}
+// spin around the spot under the mouse (or screen / part centre): move the pivot there without moving the picture
+function setPivot(mx,my){const mode=cfg.rotAbout||'cursor',R=cam.R,s=cam.scale;let w;
+  if(mode==='part'&&cur&&cur.moves.length){const b=cur.stats.bb;w=[(b[0]+b[3])/2,(b[1]+b[4])/2,(b[2]+b[5])/2]}
+  else{if(mode==='screen'){mx=W/2;my=H/2}const vx=(mx-W/2-cam.px)/s,vy=-(my-H/2-cam.py)/s;
+    let d=[R[0]*vx+R[3]*vy,R[1]*vx+R[4]*vy,R[2]*vx+R[5]*vy];if(HZ()){d=[d[0],d[2],-d[1]]}w=[cam.c[0]+d[0],cam.c[1]+d[1],cam.c[2]+d[2]]}
+  const q=toScreen(w[0],w[1],w[2]);cam.c=w;cam.px=q[0]-W/2;cam.py=q[1]-H/2}
 let cur=null,prog=0,playing=false,vpColor='#14191b';
 const opt={rapid:true,ghost:true,tool:true,grid:true};
 let fbDirty=true;
@@ -761,8 +780,7 @@ function hexRgb(h){h=String(h).trim().replace('#','');if(h.length===3)h=h.split(
 function readColors(){vpColor=getComputedStyle(document.documentElement).getPropertyValue('--vp').trim()||'#14191b';fbDirty=true;req()}
 
 const HZ=()=>cfg.machine==='hmc';
-function projRaw(x,y,z){const cy=Math.cos(cam.yaw),sy=Math.sin(cam.yaw),cp=Math.cos(cam.pitch),spp=Math.sin(cam.pitch);
-  x-=cam.c[0];y-=cam.c[1];z-=cam.c[2];if(HZ()){const t=y;y=-z;z=t}return [x*cy-y*sy,z*cp+(x*sy+y*cy)*spp]}
+function projRaw(x,y,z){const R=cam.R;x-=cam.c[0];y-=cam.c[1];z-=cam.c[2];if(HZ()){const t=y;y=-z;z=t}return [R[0]*x+R[1]*y+R[2]*z,R[3]*x+R[4]*y+R[5]*z]}
 function toScreen(x,y,z){const p=projRaw(x,y,z);return [W/2+cam.px+p[0]*cam.scale,H/2+cam.py-p[1]*cam.scale]}
 function fit(){
   if(!W||!H){needFit=true;return}needFit=false;
@@ -785,21 +803,18 @@ function gridSegs(){
 /* ---- GPU renderer (WebGL): the whole path lives on the graphics card; rotate/zoom/play only change uniforms ---- */
 let gl=null,G=null,softGL=false,glKey='',glDone=0,interactUntil=0,settleTimer=0;
 const VS=`attribute vec3 aPos;attribute vec3 aInfo;
-uniform vec3 uC;uniform vec4 uRot;uniform vec4 uView;uniform float uScale;uniform float uShowRapid;uniform vec3 uCols[8];uniform vec3 uRapidCol;uniform float uByTool;uniform float uHoriz;
+uniform vec3 uC;uniform mat3 uM;uniform vec4 uView;uniform float uScale;uniform float uShowRapid;uniform vec3 uCols[8];uniform vec3 uRapidCol;uniform float uByTool;uniform float uHoriz;
 varying vec3 vCol;varying float vRapid;varying float vAlong;
 void main(){
   vec3 p=aPos-uC;
   if(uHoriz>0.5)p=vec3(p.x,-p.z,p.y);
-  float x1=p.x*uRot.x-p.y*uRot.y;
-  float y1=p.z*uRot.z+(p.x*uRot.y+p.y*uRot.x)*uRot.w;
+  vec3 v=uM*p;float x1=v.x;float y1=v.y;
   float sx=uView.x*0.5+uView.z+x1*uScale;
   float sy=uView.y*0.5+uView.w-y1*uScale;
   gl_Position=vec4(sx/uView.x*2.0-1.0,1.0-sy/uView.y*2.0,0.0,1.0);
   vRapid=aInfo.y;vAlong=aInfo.z*uScale;
-  int t=int(floor(mod(max(aInfo.x,0.0),8.0)+0.5));
-  vec3 c=uCols[0];
-  if(uByTool>0.5){for(int i=0;i<8;i++){if(i==t)c=uCols[i];}}
-  vCol=aInfo.y>0.5?uRapidCol:c;
+  float pk=aInfo.x;vec3 tc=vec3(floor(pk/65536.0),mod(floor(pk/256.0),256.0),mod(pk,256.0))/255.0;
+  vCol=aInfo.y>0.5?uRapidCol:(uByTool>0.5?tc:uCols[0]);
   if(aInfo.y>0.5&&uShowRapid<0.5)gl_Position=vec4(2.0,2.0,2.0,1.0);
 }`;
 const FS=`#ifdef GL_FRAGMENT_PRECISION_HIGH
@@ -817,7 +832,7 @@ function initGL(){
   let soft=false;
   try{const t=document.createElement('canvas').getContext('webgl');if(t){const ext=t.getExtension('WEBGL_debug_renderer_info');const rn=String(ext?t.getParameter(ext.UNMASKED_RENDERER_WEBGL):t.getParameter(t.RENDERER));soft=/swiftshader|llvmpipe|softpipe|software|basic render/i.test(rn);const l=t.getExtension('WEBGL_lose_context');if(l)l.loseContext()}}catch(e){}
   softGL=soft;
-  try{gl=glc.getContext('webgl',{antialias:!soft,alpha:false,depth:false,preserveDrawingBuffer:true})||glc.getContext('experimental-webgl',{preserveDrawingBuffer:true})}catch(e){gl=null}
+  try{gl=glc.getContext('webgl',{antialias:!soft&&cfg.aa!==false,alpha:false,depth:false,preserveDrawingBuffer:soft,powerPreference:'high-performance'})||glc.getContext('experimental-webgl',{preserveDrawingBuffer:soft})}catch(e){gl=null}
   if(!gl)return;
   try{
     const sh=(t,s)=>{const o=gl.createShader(t);gl.shaderSource(o,s);gl.compileShader(o);if(!gl.getShaderParameter(o,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(o));return o};
@@ -825,15 +840,18 @@ function initGL(){
     if(!gl.getProgramParameter(p,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(p));
     G={p,aPos:gl.getAttribLocation(p,'aPos'),aInfo:gl.getAttribLocation(p,'aInfo'),u:{},
        path:{pos:gl.createBuffer(),info:gl.createBuffer(),n:0},lod:{pos:gl.createBuffer(),info:gl.createBuffer(),n:0},grid:{pos:gl.createBuffer(),info:gl.createBuffer(),n:0}};
-    for(const n of ['uC','uRot','uView','uScale','uShowRapid','uCols','uRapidCol','uByTool','uGhost','uHoriz'])G.u[n]=gl.getUniformLocation(p,n);
+    for(const n of ['uC','uM','uView','uScale','uShowRapid','uCols','uRapidCol','uByTool','uGhost','uHoriz'])G.u[n]=gl.getUniformLocation(p,n);
     gl.useProgram(p);
     const cols=new Float32Array(24);TOOLCOL.forEach((c,i)=>cols.set(hexRgb(c),i*3));gl.uniform3fv(G.u.uCols,cols);
     gl.uniform3fv(G.u.uRapidCol,new Float32Array(hexRgb(RAPIDCOL)));
     gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
   }catch(e){console.warn('WebGL unavailable, using 2D drawing',e);gl=null;G=null}
 }
-glc.addEventListener('webglcontextlost',e=>{e.preventDefault();G=null;glKey=''},false);
-glc.addEventListener('webglcontextrestored',()=>{initGL();uploadGL();req()},false);
+function hookGL(c){c.addEventListener('webglcontextlost',e=>{e.preventDefault();G=null;glKey=''},false);
+  c.addEventListener('webglcontextrestored',()=>{initGL();uploadGL();req()},false)}
+hookGL(glc);
+const PKCOL=TOOLCOL.map(h=>{const c=hexRgb(h).map(v=>Math.round(v*255));return c[0]*65536+c[1]*256+c[2]});
+const pkTool=t=>PKCOL[(t<0?0:t)%PKCOL.length];
 function bindSet(s){gl.bindBuffer(gl.ARRAY_BUFFER,s.pos);gl.enableVertexAttribArray(G.aPos);gl.vertexAttribPointer(G.aPos,3,gl.FLOAT,false,0,0);
   gl.bindBuffer(gl.ARRAY_BUFFER,s.info);gl.enableVertexAttribArray(G.aInfo);gl.vertexAttribPointer(G.aInfo,3,gl.FLOAT,false,0,0)}
 function uploadGL(){
@@ -846,7 +864,7 @@ function uploadGL(){
     for(let k=0;k<m.n-1;k++){const a=(m.p0+k)*3,o=v*3;
       const dx=P[a+3]-P[a],dy=P[a+4]-P[a+1],dz=P[a+5]-P[a+2],L=Math.sqrt(dx*dx+dy*dy+dz*dz);
       pos[o]=P[a]-c0[0];pos[o+1]=P[a+1]-c0[1];pos[o+2]=P[a+2]-c0[2];pos[o+3]=P[a+3]-c0[0];pos[o+4]=P[a+4]-c0[1];pos[o+5]=P[a+5]-c0[2];
-      inf[o]=m.tool;inf[o+1]=r;inf[o+2]=al;inf[o+3]=m.tool;inf[o+4]=r;inf[o+5]=al+L;al+=L;v+=2}}
+      const pc=pkTool(m.tool);inf[o]=pc;inf[o+1]=r;inf[o+2]=al;inf[o+3]=pc;inf[o+4]=r;inf[o+5]=al+L;al+=L;v+=2}}
   vs[mv.length]=v;
   // lighter copy for use while rotating/zooming/scrubbing: skips points closer than ~1/1500 of the part size
   const bb=cur.stats.bb,tol=Math.max(bb[3]-bb[0],bb[4]-bb[1],bb[5]-bb[2],1e-6)/1500,tol2=tol*tol;
@@ -854,7 +872,7 @@ function uploadGL(){
   let lp=[],li=[],lv=0;
   if(cur.lodWorth){
     let have=false,pk=0,ptool=0,prap=0,kx=0,ky=0,kz=0,kA=0,ex=0,ey=0,ez=0,eA=0,al=0;
-    const emit=(x,y,z,A)=>{lp.push(kx-c0[0],ky-c0[1],kz-c0[2],x-c0[0],y-c0[1],z-c0[2]);li.push(ptool,prap,kA,ptool,prap,A);kx=x;ky=y;kz=z;kA=A;lv+=2};
+    const emit=(x,y,z,A)=>{lp.push(kx-c0[0],ky-c0[1],kz-c0[2],x-c0[0],y-c0[1],z-c0[2]);const pc=pkTool(ptool);li.push(pc,prap,kA,pc,prap,A);kx=x;ky=y;kz=z;kA=A;lv+=2};
     for(let i=0;i<mv.length;i++){const m=mv[i];vsL[i]=lv;const key=m.type?m.tool:-99;
       if(have&&key!==pk){if(ex!==kx||ey!==ky||ez!==kz)emit(ex,ey,ez,eA);have=false}
       if(!have){const o=m.p0*3;kx=ex=P[o];ky=ey=P[o+1];kz=ez=P[o+2];kA=eA=al=0;have=true;pk=key;ptool=m.tool;prap=m.type?0:1}
@@ -877,13 +895,13 @@ function drawGL(target){
   if(!cur||!cur.vs||!G){gl.viewport(0,0,glc.width,glc.height);const bg=hexRgb(vpColor);gl.clearColor(bg[0],bg[1],bg[2],1);gl.clear(gl.COLOR_BUFFER_BIT);glKey='';return}
   const lod=false;
   const set=lod?G.lod:G.path,vs=lod?cur.vsL:cur.vs,u=G.u,c0=cur.c0;
-  const key=[cam.yaw,cam.pitch,cam.scale,cam.px,cam.py,cam.c.join(),W,H,glc.width,glc.height,opt.rapid,opt.tool,opt.ghost,opt.grid,dataId,vpColor,lod,cfg.machine,visKey].join('|');
+  const key=[cam.R.join(),cam.scale,cam.px,cam.py,cam.c.join(),W,H,glc.width,glc.height,opt.rapid,opt.tool,opt.ghost,opt.grid,dataId,vpColor,lod,cfg.machine,visKey].join('|');
   gl.useProgram(G.p);
-  if(key!==glKey||target<glDone){
+  if(key!==glKey||target<glDone||(!softGL&&target!==glDone)){
     glKey=key;glDone=target;
     gl.viewport(0,0,glc.width,glc.height);const bg=hexRgb(vpColor);gl.clearColor(bg[0],bg[1],bg[2],1);gl.clear(gl.COLOR_BUFFER_BIT);
     gl.uniform3f(u.uC,cam.c[0]-c0[0],cam.c[1]-c0[1],cam.c[2]-c0[2]);
-    gl.uniform4f(u.uRot,Math.cos(cam.yaw),Math.sin(cam.yaw),Math.cos(cam.pitch),Math.sin(cam.pitch));
+    {const R=cam.R;gl.uniformMatrix3fv(u.uM,false,new Float32Array([R[0],R[3],R[6],R[1],R[4],R[7],R[2],R[5],R[8]]))}
     gl.uniform4f(u.uView,W,H,cam.px,cam.py);gl.uniform1f(u.uScale,cam.scale);
     gl.uniform1f(u.uShowRapid,opt.rapid?1:0);gl.uniform1f(u.uByTool,opt.tool?1:0);gl.uniform1f(u.uHoriz,HZ()?1:0);
     if(opt.grid&&G.grid.n){bindSet(G.grid);gl.uniform4f(u.uGhost,.15,.19,.2,1);gl.drawArrays(gl.LINES,0,G.grid.n)}
@@ -903,8 +921,8 @@ const base=document.createElement('canvas'),bctx=base.getContext('2d'),done=docu
 let sp=new Float32Array(0),fbKey='',doneUpTo=0;
 function project(){
   const pts=cur.pts,n=pts.length/3;if(sp.length<n*2)sp=new Float32Array(n*2);
-  const cy=Math.cos(cam.yaw),sy=Math.sin(cam.yaw),cp=Math.cos(cam.pitch),spp=Math.sin(cam.pitch),ox=W/2+cam.px,oy=H/2+cam.py,s=cam.scale,c0=cam.c[0],c1=cam.c[1],c2=cam.c[2];
-  const hz=HZ();for(let i=0,j=0;i<n;i++,j+=3){let x=pts[j]-c0,y=pts[j+1]-c1,z=pts[j+2]-c2;if(hz){const t=y;y=-z;z=t}sp[i*2]=ox+(x*cy-y*sy)*s;sp[i*2+1]=oy-(z*cp+(x*sy+y*cy)*spp)*s}
+  const R=cam.R,ox=W/2+cam.px,oy=H/2+cam.py,s=cam.scale,c0=cam.c[0],c1=cam.c[1],c2=cam.c[2];
+  const hz=HZ();for(let i=0,j=0;i<n;i++,j+=3){let x=pts[j]-c0,y=pts[j+1]-c1,z=pts[j+2]-c2;if(hz){const t=y;y=-z;z=t}sp[i*2]=ox+(R[0]*x+R[1]*y+R[2]*z)*s;sp[i*2+1]=oy-(R[3]*x+R[4]*y+R[5]*z)*s}
 }
 function mkPen(){return {p:new Path2D(),lx:-1e9,ly:-1e9,open:false}}
 function penPoly(pen,p0,n){
@@ -921,7 +939,7 @@ function strokeMoves(c,a,b){
   if(opt.rapid&&rp.open){c.setLineDash([5,4]);c.strokeStyle=RAPIDCOL;c.lineWidth=1.2;c.stroke(rp.p);c.setLineDash([])}
 }
 function draw2D(target){
-  const key=[cam.yaw,cam.pitch,cam.scale,cam.px,cam.py,cam.c.join(),W,H,DPR,opt.rapid,opt.tool,opt.ghost,opt.grid,dataId,vpColor,cfg.machine,visKey].join('|');
+  const key=[cam.R.join(),cam.scale,cam.px,cam.py,cam.c.join(),W,H,DPR,opt.rapid,opt.tool,opt.ghost,opt.grid,dataId,vpColor,cfg.machine,visKey].join('|');
   if(key!==fbKey){fbKey=key;fbDirty=true}
   if(fbDirty){fbDirty=false;project();
     const c=bctx;c.setTransform(1,0,0,1,0,0);c.fillStyle=vpColor;c.fillRect(0,0,base.width,base.height);c.setTransform(DPR,0,0,DPR,0,0);
@@ -1169,7 +1187,7 @@ function load(text,name,opts){opts=opts||{};
 document.querySelectorAll('.tabs button[data-t]').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.tabs button[data-t]').forEach(x=>x.classList.toggle('on',x===b));['check','tools','stats','setup'].forEach(t=>$('p-'+t).hidden=t!==b.dataset.t);
   if($('info').classList.contains('collapsed'))$('infoToggle').click()}));
 $('infoToggle').addEventListener('click',()=>{const c=$('info').classList.toggle('collapsed');$('tabbody').hidden=c;$('infoToggle').textContent=c?'▴':'▾';$('infoToggle').title=c?'Show panel':'Hide panel'});
-$('views').addEventListener('click',e=>{const v=e.target.dataset.v;if(!v)return;const V={iso:[-Math.PI/4,.62],top:[0,Math.PI/2],front:[0,0],right:[-Math.PI/2,0]};if(V[v]){[cam.yaw,cam.pitch]=V[v];document.querySelectorAll('#views button').forEach(b=>b.classList.toggle('on',b.dataset.v===v))}fit()});
+$('views').addEventListener('click',e=>{const v=e.target.dataset.v;if(!v)return;const V={iso:[-Math.PI/4,.62],top:[0,Math.PI/2],front:[0,0],right:[-Math.PI/2,0]};if(V[v]){cam.R=viewFromYP(V[v][0],V[v][1]);document.querySelectorAll('#views button').forEach(b=>b.classList.toggle('on',b.dataset.v===v))}fit()});
 for(const [id,k] of [['tRapid','rapid'],['tGhost','ghost'],['tTool','tool'],['tGrid','grid']])$(id).addEventListener('change',e=>{opt[k]=e.target.checked;fbDirty=true;req()});
 $('tFollow').addEventListener('change',()=>{manualUntil=0;lastLine=-2;req()});
 $('bPlay').onclick=()=>playing?stop():play();
@@ -1198,9 +1216,10 @@ cv.addEventListener('contextmenu',e=>e.preventDefault());
 // mouse: hold middle (or left) = rotate, right or Shift/Ctrl + drag = pan, wheel forward = zoom in
 cv.addEventListener('mousedown',e=>{if(e.button===1)e.preventDefault()});
 cv.addEventListener('auxclick',e=>{if(e.button===1)e.preventDefault()});
-cv.addEventListener('pointerdown',e=>{if(e.button===1)e.preventDefault();cv.setPointerCapture(e.pointerId);ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY,pan:e.button===2||e.shiftKey||e.ctrlKey});pinch=null});
+cv.addEventListener('pointerdown',e=>{if(e.button===1)e.preventDefault();cv.setPointerCapture(e.pointerId);const pan=e.button===2||e.shiftKey||e.ctrlKey;ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY,pan});pinch=null;
+  if(!pan&&ptrs.size===1){const r=cv.getBoundingClientRect();setPivot(e.clientX-r.left,e.clientY-r.top)}});
 cv.addEventListener('pointermove',e=>{const p=ptrs.get(e.pointerId);if(!p)return;
-  if(ptrs.size===1){const dx=e.clientX-p.x,dy=e.clientY-p.y;if(p.pan){cam.px+=dx;cam.py+=dy}else{cam.yaw-=dx*.008;cam.pitch=Math.max(-Math.PI/2,Math.min(Math.PI/2,cam.pitch+dy*.008));document.querySelectorAll('#views button').forEach(b=>b.classList.remove('on'))}p.x=e.clientX;p.y=e.clientY;interacting();req()}
+  if(ptrs.size===1){const dx=e.clientX-p.x,dy=e.clientY-p.y;if(p.pan){cam.px+=dx;cam.py+=dy}else{const k=.008*(+cfg.rotSpeed||1);turnView(dx*k,dy*k);for(const b of document.querySelectorAll('#views button.on'))b.classList.remove('on')}p.x=e.clientX;p.y=e.clientY;interacting();req()}
   else if(ptrs.size===2){p.x=e.clientX;p.y=e.clientY;const [a,b]=[...ptrs.values()];const mx=(a.x+b.x)/2,my=(a.y+b.y)/2,d=Math.hypot(a.x-b.x,a.y-b.y);const r=cv.getBoundingClientRect();
     if(pinch){zoomAt(mx-r.left,my-r.top,d/pinch.d);cam.px+=mx-pinch.mx;cam.py+=my-pinch.my}pinch={d,mx,my};interacting();req()}});
 const up=e=>{ptrs.delete(e.pointerId);pinch=null};cv.addEventListener('pointerup',up);cv.addEventListener('pointercancel',up);
@@ -1246,6 +1265,13 @@ new MutationObserver(readColors).observe(document.documentElement,{attributes:tr
 const sm={dev:null,ax:[0,0,0,0,0,0],last:0,btn:0};let smT=0;
 const SM_FILTERS=[{vendorId:0x256f,usagePage:0x01,usage:0x08},{vendorId:0x046d,usagePage:0x01,usage:0x08},{vendorId:0x256f},{vendorId:0x046d,productId:0xc626},{vendorId:0x046d,productId:0xc628},{vendorId:0x046d,productId:0xc627},{vendorId:0x046d,productId:0xc62b}];
 const smIs=d=>d.vendorId===0x256f||(d.vendorId===0x046d&&(d.collections||[]).some(c=>c.usagePage===1&&c.usage===8));
+function hookSettings2(){
+  $('sRotAbout').value=cfg.rotAbout||'cursor';$('sRotAbout').addEventListener('change',e=>{cfg.rotAbout=e.target.value;store.set('bp-cfg',JSON.stringify(cfg))});
+  $('sRotSpeed').value=cfg.rotSpeed||1;$('sRotSpeed').addEventListener('change',e=>{const v=parseFloat(e.target.value);if(isFinite(v)&&v>0){cfg.rotSpeed=v;store.set('bp-cfg',JSON.stringify(cfg))}});
+  $('sAA').checked=cfg.aa!==false;$('sAA').addEventListener('change',e=>{cfg.aa=e.target.checked;store.set('bp-cfg',JSON.stringify(cfg));rebuildGL()})}
+// smooth lines can only be switched with a fresh drawing surface
+function rebuildGL(){const n=glc.cloneNode(false);glc.replaceWith(n);glc=n;hookGL(glc);initGL();if(!gl){glc.hidden=true;return}
+  glc.width=Math.round(W*GDPR);glc.height=Math.round(H*GDPR);glKey='';uploadGL();req()}
 let toastT=0;function toast(msg){const el=$('toast');el.textContent=msg;el.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>el.hidden=true,6000)}
 function smUI(){const b=$('smBtn');b.classList.toggle('on',!!sm.dev);b.textContent=sm.dev?'3D mouse ●':'3D mouse';b.title=sm.dev?`3D mouse connected (${sm.dev.productName||'SpaceMouse'}). Left button = Fit, right button = next view`:'Connect a 3Dconnexion SpaceMouse (Chrome or Edge)'}
 async function smConnect(dev){
@@ -1264,8 +1290,7 @@ function smApply(dt){
   const k=(+cfg.smSpeed||1)*dt,fr=cfg.smFlipR?-1:1,fz=cfg.smFlipZ?-1:1;
   cam.px+=tx*W*0.9*k;cam.py+=tz*H*0.9*k;                              // push sideways / press down = pan
   if(ty)zoomAt(W/2,H/2,Math.exp(-ty*2.2*k*fz));                       // pull toward you = zoom in
-  cam.yaw+=rz*2.6*k*fr;cam.pitch=Math.max(-Math.PI/2,Math.min(Math.PI/2,cam.pitch-rx*2.0*k*fr));  // twist = spin, tilt = tip
-  if(rz||rx)document.querySelectorAll('#views button[data-v]').forEach(b=>b.classList.remove('on'));
+  if(rz||rx){turnView(rz*2.6*k*fr,-rx*2.0*k*fr);for(const b of document.querySelectorAll('#views button.on[data-v]'))b.classList.remove('on')}  // twist = spin, tilt = tip
   interacting()}
 const SM_VIEWS=['iso','top','front','right'];
 function smNextView(){const on=document.querySelector('#views button.on[data-v]');const i=on?SM_VIEWS.indexOf(on.dataset.v):-1;document.querySelector(`#views button[data-v="${SM_VIEWS[(i+1)%4]}"]`).click()}
@@ -1281,6 +1306,7 @@ smUI();
 $('sSmSpeed').value=cfg.smSpeed||1;$('sSmSpeed').addEventListener('change',e=>{const v=parseFloat(e.target.value);if(isFinite(v)&&v>0){cfg.smSpeed=v;store.set('bp-cfg',JSON.stringify(cfg))}});
 for(const [id,k] of [['sSmFlipR','smFlipR'],['sSmFlipZ','smFlipZ']]){$(id).checked=!!cfg[k];$(id).addEventListener('change',e=>{cfg[k]=e.target.checked;store.set('bp-cfg',JSON.stringify(cfg))})}
 
+hookSettings2();
 initGL();if(!gl)glc.hidden=true;
 readColors();
 const saved=store.get('bp-src');
