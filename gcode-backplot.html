@@ -60,6 +60,7 @@ button{cursor:pointer}
 .dro .ax.rot b{color:#f0c36a}
 .dro .ax span{text-align:right}
 .dro .meta{display:flex;gap:10px;justify-content:space-between;margin-top:6px;padding-top:5px;border-top:1px solid #2a3437;font-size:12px;color:#a9b6b8}
+.dro .meta .dd{color:#6f7d80}.dro .meta .dd.on{color:#7fd3dc;font-weight:600}.dro .meta .dd.bad{color:#ff6b6b;font-weight:700}
 .dro .mode{font-family:var(--f-disp);font-weight:700;letter-spacing:.08em;font-size:13px}
 .dro .mode.rapid{color:#ff7a5e}.dro .mode.feed{color:#4cc3ff}
 
@@ -230,7 +231,7 @@ td.n{font-family:var(--f-mono);font-size:13px;text-align:right}
         <div class="ax rot" id="rowA" hidden><b>A</b><span id="dA">0.000</span></div>
         <div class="ax rot" id="rowB" hidden><b>B</b><span id="dB">0.000</span></div>
         <div class="ax rot" id="rowC" hidden><b>C</b><span id="dC">0.000</span></div>
-        <div class="meta"><span class="mode rapid" id="dMode">RAPID</span><span id="dT">T—</span><span id="dF"></span><span id="dS">S0</span></div>
+        <div class="meta"><span class="mode rapid" id="dMode">RAPID</span><span id="dT">T—</span><span id="dD" class="dd">D—</span><span id="dF"></span><span id="dS">S0</span></div>
       </div>
       <div class="views" id="views">
         <button data-v="iso" class="on">Iso</button><button data-v="top">Top</button><button data-v="front">Front</button><button data-v="right">Right</button><button data-v="fit">Fit</button><button id="smBtn" class="sm3d" type="button">3D mouse</button>
@@ -450,7 +451,7 @@ function parse(src){
         else if(S.tool&&!S.tool.sawCool)add('info',li,`T${S.T} has no coolant code of its own. Coolant is only on because the previous tool left it on`,null,'cool')}
     }
     const p0=pts.length/3;for(const p of part)pts.push(p[0],p[1],p[2]);for(const p of poly)rawPts.push(p[0],p[1],p[2]);
-    const m={type,line:li,p0,n:poly.length,len,f:S.F,s:S.S,t:S.T,tool:S.tool?S.tool.idx:-1,inv:S.feedMode===93};
+    const m={type,line:li,p0,n:poly.length,len,f:S.F,s:S.S,t:S.T,d:S.D,cc:S.comp,tool:S.tool?S.tool.idx:-1,inv:S.feedMode===93};
     const a1=angs?angs[angs.length-1]:a0;if(RT.any){m.r0=angs?angs[0]:a0;m.r1=a1}
     const ax=toolAxis(a1);if(ax)m.ax=ax;
     const fkey=RT.frame?'F'+RT.frameId:a1.map(v=>Math.round(v*1000)).join(',');let fk=faceMap.get(fkey);if(fk===undefined){fk=faceMap.size;faceMap.set(fkey,fk)}m.fk=fk;
@@ -1074,7 +1075,7 @@ function jumpLineOld(l){if(!cur||l<0)return;let i=l;while(i<cur.lines.length&&cu
   let j=cur.lineToMove[i];while(j+1<cur.moves.length&&cur.moves[j+1].line===i)j++;prog=j+1;lastLine=-2;req()}
 
 /* ---------------- UI sync (every frame, writes only what changed) ---------------- */
-const dX=$('dX'),dY=$('dY'),dZ=$('dZ'),dT=$('dT'),dF=$('dF'),dS=$('dS'),dMode=$('dMode'),scrub=$('scrub'),lineInfo=$('lineInfo');
+const dX=$('dX'),dY=$('dY'),dZ=$('dZ'),dT=$('dT'),dD=$('dD'),dF=$('dF'),dS=$('dS'),dMode=$('dMode'),scrub=$('scrub'),lineInfo=$('lineInfo');
 let lastLine=-2,lastDro='',scrubbing=false;
 function curMoveIdx(){if(!cur||!cur.moves.length)return -1;return Math.max(0,Math.min(cur.moves.length-1,Math.ceil(prog)-1))}
 let droAng=null;
@@ -1092,9 +1093,11 @@ function syncUI(){
   if(key!==lastDro){lastDro=key;
     if(pos&&m){dX.textContent=fx(pos[0],d);dY.textContent=fx(pos[1],d);dZ.textContent=fx(pos[2],d);
       if(cur.rot){const g=droAng||[0,0,0];$('dA').textContent=fx(g[0],3);$('dB').textContent=fx(g[1],3);$('dC').textContent=fx(g[2],3)}
-      dT.textContent='T'+(m.t??'—');dS.textContent='S'+(m.s||0);dF.textContent=m.type?'F'+m.f:'';
+      dT.textContent='T'+(m.t??'—');dS.textContent='S'+(m.s||0);
+      {const on=m.cc===41||m.cc===42,bad=on&&m.d!=null&&m.t!=null&&m.d!==m.t;dD.textContent=m.d!=null?'D'+m.d:'D—';
+       dD.className='dd'+(bad?' bad':on?' on':'');dD.title=m.d==null?'No D number yet':`D${m.d} — cutter comp ${on?'G'+m.cc+' on':'off (G40)'}${bad?` — does not match T${m.t}`:''}`}dF.textContent=m.type?'F'+m.f:'';
       dMode.textContent=m.type?'FEED':'RAPID';dMode.className='mode '+(m.type?'feed':'rapid')}
-    else{dX.textContent=dY.textContent=dZ.textContent='—';dT.textContent='T—';dF.textContent='';dS.textContent='S0';dMode.textContent=''}}
+    else{dX.textContent=dY.textContent=dZ.textContent='—';dT.textContent='T—';dD.textContent='D—';dD.className='dd';dF.textContent='';dS.textContent='S0';dMode.textContent=''}}
   const ln=(cursorLine>=0&&cursorProg===prog)?cursorLine:(m?m.line:-1);
   if(ln!==lastLine){lastLine=ln;showLine(ln);lineInfo.textContent=ln>=0?`Line ${ln+1} / ${cur.lines.length}`:`${cur.lines.length} lines`}
 }
