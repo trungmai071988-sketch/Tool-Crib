@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <style>
-/* Layout: machine-control screen — dark backplot with a stacked DRO on the left, full-height program listing on the right, inspection tabs under the listing */
+/* Layout: machine-control screen — dark backplot with a stacked DRO on the left, tabbed right panel (Program / Check / Tools / Stats / Setup), each tab full height */
 :root{
   --bg:#e9ecea; --panel:#f6f7f6; --ink:#192022; --muted:#5a6567; --line:#cdd4d2;
   --accent:#0c7480; --accent-ink:#ffffff; --chip:#dfe5e3;
@@ -61,7 +61,7 @@ button{cursor:pointer}
 .dro .ax span{text-align:right}
 .dro .meta{display:flex;gap:10px;justify-content:space-between;margin-top:6px;padding-top:5px;border-top:1px solid #2a3437;font-size:12px;color:#a9b6b8}
 .dro .meta .dd{color:#6f7d80}
-.dro .dwarn{margin-top:6px;padding:4px 7px;border-radius:4px;background:#b3261e;color:#fff;font-family:var(--f-disp);font-weight:700;font-size:13.5px;letter-spacing:.04em;text-transform:uppercase;text-align:center;line-height:1.25;contain:inline-size;white-space:normal}.dro .meta .dd.on{color:#7fd3dc;font-weight:600}.dro .meta .dd.bad{color:#ff6b6b;font-weight:700}
+.dro .dwarn{margin-top:6px;padding:4px 7px;border-radius:4px;background:#b3261e;color:#fff;font-family:var(--f-disp);font-weight:700;font-size:13.5px;letter-spacing:.04em;text-transform:uppercase;text-align:center;line-height:1.25;contain:inline-size;white-space:normal}.dro .dwarn hr{border:0;border-top:1px solid rgba(255,255,255,.45);margin:4px -7px}.dro .meta .dd.on{color:#7fd3dc;font-weight:600}.dro .meta .dd.bad{color:#ff6b6b;font-weight:700}
 .dro .mode{font-family:var(--f-disp);font-weight:700;letter-spacing:.08em;font-size:13px}
 .dro .mode.rapid{color:#ff7a5e}.dro .mode.feed{color:#4cc3ff}
 
@@ -94,11 +94,11 @@ button{cursor:pointer}
 .toggles input{accent-color:var(--accent)}
 .sel{border:1px solid var(--line);background:var(--bg);border-radius:5px;padding:2px 4px;font-size:13px;color:var(--ink)}
 
-/* Right column: program listing + info tabs */
+/* Right column: one tab bar — Program | Check | Tools | Stats | Setup — each tab uses the full height */
 .side{background:var(--panel);min-width:0;display:flex;flex-direction:column}
 .pp{display:flex;flex-direction:column;min-height:0}
+.pp[hidden],.tabbody[hidden]{display:none}
 .pp-head{display:flex;align-items:center;gap:12px;padding-block:8px;padding-inline:14px;border-bottom:1px solid var(--line)}
-.pp-title{font-family:var(--f-disp);font-weight:700;font-size:16px;letter-spacing:.08em;text-transform:uppercase}
 .pp-pos{font-family:var(--f-mono);font-size:12px;color:var(--muted);margin-right:auto;white-space:nowrap;font-variant-numeric:tabular-nums}
 .pp-head label{display:flex;align-items:center;gap:5px;font-size:13px;color:var(--muted);cursor:pointer}
 .pp-head input{accent-color:var(--accent)}
@@ -124,15 +124,14 @@ button{cursor:pointer}
 .num{display:inline-block;width:var(--numw,58px);text-align:right;padding-right:14px;color:var(--muted);opacity:.7;user-select:none}
 .k-g{color:var(--accent);font-weight:600} .k-m{color:var(--mcode);font-weight:500} .k-t{color:var(--warn)} .k-f{color:var(--ok)} .k-n{color:var(--muted)} .k-c{color:var(--muted);font-style:italic}
 
-.info{display:flex;flex-direction:column;min-height:0;border-top:1px solid var(--line)}
-.tabs{display:flex;align-items:stretch;border-bottom:1px solid var(--line);overflow-x:auto}
-.tabs button{flex:1;background:none;border:0;border-bottom:3px solid transparent;padding:9px 8px 7px;font-family:var(--f-disp);font-weight:600;font-size:15px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+.tabs{display:flex;align-items:stretch;border-bottom:1px solid var(--line);overflow-x:auto;flex:none;scrollbar-width:none}
+.tabs button{flex:1 0 auto;background:none;border:0;border-bottom:3px solid transparent;padding:9px 6px 7px;font-family:var(--f-disp);font-weight:600;font-size:15px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
 .tabs button.on{color:var(--ink);border-bottom-color:var(--accent)}
-.tabs .collapse{flex:0 0 40px;font-family:var(--f-body);font-size:14px}
 .badge{display:inline-block;min-width:18px;padding:0 5px;margin-left:4px;border-radius:9px;font-family:var(--f-mono);font-size:11px;line-height:18px;background:var(--err);color:#fff;vertical-align:1px}
 .badge.w{background:var(--warn);color:#1b1400}
 .badge.ok{background:var(--ok)}
 .tabbody{padding-block:12px;padding-inline:14px}
+@media (max-width:899px){.tabbody{max-height:70vh;overflow:auto}}
 
 .verdict{display:flex;gap:12px;align-items:center;padding:10px 12px;border-radius:8px;background:var(--bg);border:1px solid var(--line);margin-bottom:10px}
 .verdict .big{font-family:var(--f-disp);font-weight:700;font-size:19px;text-transform:uppercase;letter-spacing:.03em}
@@ -196,8 +195,6 @@ td.n{font-family:var(--f-mono);font-size:13px;text-align:right}
   .side{border-left:1px solid var(--line);min-height:0}
   .pp{flex:1 1 auto}
   .code{flex:1;height:auto}
-  .info{flex:0 0 36%}
-  .info.collapsed{flex:0 0 auto}
   .tabbody{flex:1;overflow:auto;min-height:0}
 }
 
@@ -232,7 +229,7 @@ td.n{font-family:var(--f-mono);font-size:13px;text-align:right}
         <div class="ax rot" id="rowA" hidden><b>A</b><span id="dA">0.000</span></div>
         <div class="ax rot" id="rowB" hidden><b>B</b><span id="dB">0.000</span></div>
         <div class="ax rot" id="rowC" hidden><b>C</b><span id="dC">0.000</span></div>
-        <div class="meta"><span class="mode rapid" id="dMode">RAPID</span><span id="dT">T—</span><span id="dD" class="dd" hidden></span><span id="dF"></span><span id="dS">S0</span></div>
+        <div class="meta"><span class="mode rapid" id="dMode">RAPID</span><span id="dT">T—</span><span id="dH" class="dd" hidden></span><span id="dD" class="dd" hidden></span><span id="dF"></span><span id="dS">S0</span></div>
         <div class="dwarn" id="dWarn" hidden></div>
       </div>
       <div class="views" id="views">
@@ -271,20 +268,19 @@ td.n{font-family:var(--f-mono);font-size:13px;text-align:right}
   </div>
 
   <aside class="side">
-    <section class="pp">
-      <div class="pp-head"><span class="pp-title">Program</span><span class="tag" id="editedTag" hidden>Edited</span><span class="pp-pos" id="lineInfo"></span><label><input type="checkbox" id="tFollow" checked> Follow</label><button class="mini" id="btnRevert" title="Throw away your edits and go back to the loaded program">Revert</button><button class="mini" id="btnCopy" title="Copy the whole program">Copy</button></div>
+    <div class="tabs" role="tablist" aria-label="Side panel">
+      <button data-t="program" class="on" role="tab">Program</button>
+      <button data-t="check" role="tab">Check<span class="badge" id="badge" hidden></span></button>
+      <button data-t="tools" role="tab">Tools</button>
+      <button data-t="stats" role="tab">Stats</button>
+      <button data-t="setup" role="tab">Setup</button>
+    </div>
+    <section class="pp" id="p-program">
+      <div class="pp-head"><span class="tag" id="editedTag" hidden>Edited</span><span class="pp-pos" id="lineInfo"></span><label><input type="checkbox" id="tFollow" checked> Follow</label><button class="mini" id="btnRevert" title="Throw away your edits and go back to the loaded program">Revert</button><button class="mini" id="btnCopy" title="Copy the whole program">Copy</button></div>
       <div class="code" id="code"><div id="hlLayer"><div class="hlbar" id="hlbar" hidden></div></div><div id="layer"><div id="rows"></div></div><textarea id="codeText" wrap="off" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" aria-label="Program — click to edit, arrow keys move line by line"></textarea></div>
     </section>
-    <section class="info" id="info">
-      <div class="tabs" role="tablist">
-        <button data-t="check" class="on">Check<span class="badge" id="badge" hidden></span></button>
-        <button data-t="tools">Tools</button>
-        <button data-t="stats">Stats</button>
-        <button data-t="setup">Setup</button>
-        <button class="collapse" id="infoToggle" title="Hide panel" aria-label="Hide panel">▾</button>
-      </div>
-      <div class="tabbody" id="tabbody">
-        <section id="p-check"></section>
+      <div class="tabbody" id="tabbody" hidden>
+        <section id="p-check" hidden></section>
         <section id="p-tools" hidden></section>
         <section id="p-stats" hidden></section>
         <section id="p-setup" hidden>
@@ -311,7 +307,6 @@ td.n{font-family:var(--f-mono);font-size:13px;text-align:right}
           <p class="note">Reads Fanuc-style milling code: G0–G3 (IJK or R, G17/18/19, helical), G90/G91, G20/G21, G28, G43/H, drill cycles G73/G81–G89 with G98/G99, A/B/C rotary moves, G68 / G68.2 tilted planes and G43.4 TCP. Tool comp (G41/G42) is shown on the programmed path, not the offset path. Macros (#, IF, WHILE) and subprograms are skipped and flagged. This is a programming check, not a material-removal simulation: it does not know your stock, fixtures or holder lengths.</p>
         </section>
       </div>
-    </section>
   </aside>
 </div>
 </div>
@@ -412,7 +407,7 @@ function parse(src){
   const lineToMove=new Int32Array(lines.length).fill(-1);
   const S={x:0,y:0,z:0,kx:false,ky:false,kz:false,abs:true,units:null,plane:17,motion:null,F:0,S:0,spin:false,
     T:null,nextT:null,len:false,lenWarned:false,r98:true,cyc:null,feedMode:94,tool:null,
-    planeSeen:false,planeLine:-1,planeTool:-1,comp:40,compLine:-1,D:null,cool:false,wo:null,absLine:-1,absG28:false,dir:0,sLine:-1,fLine:-1};
+    planeSeen:false,planeLine:-1,planeTool:-1,comp:40,compLine:-1,D:null,H:null,cool:false,wo:null,absLine:-1,absG28:false,dir:0,sLine:-1,fLine:-1};
   const keyCount={},toolDesc={};let sawEnd=false,progName='',lastComment='',lastCommentLine=-9,compNoted=false;
   const add=(sev,line,msg,key,cat)=>{key=key||msg;keyCount[key]=(keyCount[key]||0)+1;if(keyCount[key]>3000)return;issues.push({sev,line,msg,cat});};
   const onceSet=new Set(),once=(k,sev,line,msg,cat)=>{if(onceSet.has(k))return;onceSet.add(k);add(sev,line,msg,k,cat)};
@@ -453,7 +448,7 @@ function parse(src){
         else if(S.tool&&!S.tool.sawCool)add('info',li,`T${S.T} has no coolant code of its own. Coolant is only on because the previous tool left it on`,null,'cool')}
     }
     const p0=pts.length/3;for(const p of part)pts.push(p[0],p[1],p[2]);for(const p of poly)rawPts.push(p[0],p[1],p[2]);
-    const m={type,line:li,p0,n:poly.length,len,f:S.F,s:S.S,t:S.T,d:S.D,cc:S.comp,tool:S.tool?S.tool.idx:-1,inv:S.feedMode===93};
+    const m={type,line:li,p0,n:poly.length,len,f:S.F,s:S.S,t:S.T,d:S.D,h:S.H,lc:S.len,cc:S.comp,tool:S.tool?S.tool.idx:-1,inv:S.feedMode===93};
     const a1=angs?angs[angs.length-1]:a0;if(RT.any){m.r0=angs?angs[0]:a0;m.r1=a1}
     const ax=toolAxis(a1);if(ax)m.ax=ax;
     const fkey=RT.frame?'F'+RT.frameId:a1.map(v=>Math.round(v*1000)).join(',');let fk=faceMap.get(fkey);if(fk===undefined){fk=faceMap.size;faceMap.set(fkey,fk)}m.fk=fk;
@@ -576,6 +571,7 @@ function parse(src){
     if(w.S){S.S=w.S.v;S.sLine=li;if(S.S>cfg.rpm)add('warn',li,`S${S.S} is above the ${cfg.rpm} RPM limit in Setup`,null,'rpm')}
     if(w.T)S.nextT=w.T.v;
     if(w.D)S.D=w.D.v;
+    if(w.H)S.H=w.H.v;
     for(const mm of M){
       if(mm===6){
         if(S.nextT===null){add('err',li,'M6 tool change with no T number',null,'thd');continue}
@@ -1077,7 +1073,7 @@ function jumpLineOld(l){if(!cur||l<0)return;let i=l;while(i<cur.lines.length&&cu
   let j=cur.lineToMove[i];while(j+1<cur.moves.length&&cur.moves[j+1].line===i)j++;prog=j+1;lastLine=-2;req()}
 
 /* ---------------- UI sync (every frame, writes only what changed) ---------------- */
-const dX=$('dX'),dY=$('dY'),dZ=$('dZ'),dT=$('dT'),dD=$('dD'),dF=$('dF'),dS=$('dS'),dMode=$('dMode'),scrub=$('scrub'),lineInfo=$('lineInfo');
+const dX=$('dX'),dY=$('dY'),dZ=$('dZ'),dT=$('dT'),dH=$('dH'),dD=$('dD'),dF=$('dF'),dS=$('dS'),dMode=$('dMode'),scrub=$('scrub'),lineInfo=$('lineInfo');
 let lastLine=-2,lastDro='',scrubbing=false;
 function curMoveIdx(){if(!cur||!cur.moves.length)return -1;return Math.max(0,Math.min(cur.moves.length-1,Math.ceil(prog)-1))}
 let droAng=null;
@@ -1096,13 +1092,23 @@ function syncUI(){
     if(pos&&m){dX.textContent=fx(pos[0],d);dY.textContent=fx(pos[1],d);dZ.textContent=fx(pos[2],d);
       if(cur.rot){const g=droAng||[0,0,0];$('dA').textContent=fx(g[0],3);$('dB').textContent=fx(g[1],3);$('dC').textContent=fx(g[2],3)}
       dT.textContent='T'+(m.t??'—');dS.textContent='S'+(m.s||0);
-      {const on=m.cc===41||m.cc===42,bad=on&&m.d!=null&&m.t!=null&&m.d!==m.t;   // D shows only while G41/G42 is on; G40 hides it
-       dD.hidden=!on;dD.textContent=m.d!=null?'D'+m.d:'D?';dD.className='dd'+(bad||m.d==null?' bad':' on');
-       // big warning under the D so the operator can't miss it
-       const w=$('dWarn');w.hidden=!(on&&(bad||m.d==null));if(!w.hidden){w.innerHTML=m.d==null?'⚠ No D number':`⚠ Wrong D${+m.d}<br>Should be D${+m.t}`;w.title=m.d==null?`G${m.cc} is on with no D number`:`D${m.d} is active on T${m.t}. T, H and D should match: D${m.t}`}
-       dD.title=m.d==null?`G${m.cc} on with no D number`:`Cutter comp G${m.cc} on with D${m.d}${bad?` — does not match T${m.t}`:''}`}dF.textContent=m.type?'F'+m.f:'';
+      {// H shows only while G43 is on (G49 hides it); D shows only while G41/G42 is on (G40 hides it)
+       const onH=!!m.lc,badH=onH&&m.h!=null&&m.t!=null&&m.h!==m.t,noH=onH&&m.h==null;
+       dH.hidden=!onH;dH.textContent=m.h!=null?'H'+m.h:'H?';dH.className='dd'+(badH||noH?' bad':' on');
+       dH.title=noH?'G43 on with no H number':`Tool length comp G43 on with H${m.h}${badH?` — does not match T${m.t}`:''}`;
+       const on=m.cc===41||m.cc===42,bad=on&&m.d!=null&&m.t!=null&&m.d!==m.t,noD=on&&m.d==null;
+       dD.hidden=!on;dD.textContent=m.d!=null?'D'+m.d:'D?';dD.className='dd'+(bad||noD?' bad':' on');
+       dD.title=noD?`G${m.cc} on with no D number`:`Cutter comp G${m.cc} on with D${m.d}${bad?` — does not match T${m.t}`:''}`;
+       // big warning under H / D so the operator can't miss it
+       const msg=[],tip=[];
+       if(noH){msg.push('⚠ No H number');tip.push('G43 is on with no H number')}
+       else if(badH){msg.push(`⚠ Wrong H${+m.h}<br>Should be H${+m.t}`);tip.push(`H${m.h} is active on T${m.t}. T, H and D should match: H${m.t}`)}
+       if(noD){msg.push('⚠ No D number');tip.push(`G${m.cc} is on with no D number`)}
+       else if(bad){msg.push(`⚠ Wrong D${+m.d}<br>Should be D${+m.t}`);tip.push(`D${m.d} is active on T${m.t}. T, H and D should match: D${m.t}`)}
+       const w=$('dWarn');w.hidden=!msg.length;if(msg.length){const html=msg.join('<hr>');if(w.innerHTML!==html)w.innerHTML=html;w.title=tip.join('\n')}}
+      dF.textContent=m.type?'F'+m.f:'';
       dMode.textContent=m.type?'FEED':'RAPID';dMode.className='mode '+(m.type?'feed':'rapid')}
-    else{dX.textContent=dY.textContent=dZ.textContent='—';dT.textContent='T—';dD.hidden=true;$('dWarn').hidden=true;dF.textContent='';dS.textContent='S0';dMode.textContent=''}}
+    else{dX.textContent=dY.textContent=dZ.textContent='—';dT.textContent='T—';dH.hidden=true;dD.hidden=true;$('dWarn').hidden=true;dF.textContent='';dS.textContent='S0';dMode.textContent=''}}
   const ln=(cursorLine>=0&&cursorProg===prog)?cursorLine:(m?m.line:-1);
   if(ln!==lastLine){lastLine=ln;showLine(ln);lineInfo.textContent=ln>=0?`Line ${ln+1} / ${cur.lines.length}`:`${cur.lines.length} lines`}
 }
@@ -1171,8 +1177,9 @@ $('p-check').addEventListener('click',e=>{
     else if(d.off)cfg.off[d.off]=true;else if(d.on)delete cfg.off[d.on];
     if(d.off||d.on)store.set('bp-cfg',JSON.stringify(cfg));
     renderCheck();renderRows(true);return}
-  const r=e.target.closest('.issue');if(r)jumpLine(+r.dataset.l)});
-$('p-check').addEventListener('keydown',e=>{if(e.key==='Enter'){const r=e.target.closest('.issue');if(r)jumpLine(+r.dataset.l)}});
+  const r=e.target.closest('.issue');if(r)openLine(+r.dataset.l)});
+$('p-check').addEventListener('keydown',e=>{if(e.key==='Enter'){const r=e.target.closest('.issue');if(r)openLine(+r.dataset.l)}});
+function openLine(l){if(l<0)return;showTab('program');manualUntil=0;jumpLine(l)}
 $('p-tools').addEventListener('click',e=>{const r=e.target.closest('tr[data-m]');if(r&&+r.dataset.m>=0){stop();prog=+r.dataset.m;manualUntil=0;req()}});
 
 let source='';
@@ -1192,9 +1199,15 @@ function load(text,name,opts){opts=opts||{};
 }
 
 /* ---------------- Events ---------------- */
-document.querySelectorAll('.tabs button[data-t]').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.tabs button[data-t]').forEach(x=>x.classList.toggle('on',x===b));['check','tools','stats','setup'].forEach(t=>$('p-'+t).hidden=t!==b.dataset.t);
-  if($('info').classList.contains('collapsed'))$('infoToggle').click()}));
-$('infoToggle').addEventListener('click',()=>{const c=$('info').classList.toggle('collapsed');$('tabbody').hidden=c;$('infoToggle').textContent=c?'▴':'▾';$('infoToggle').title=c?'Show panel':'Hide panel'});
+let tab='program',edTop=0,edLeft=0;
+function showTab(t){if(t===tab)return;
+  if(tab==='program'){edTop=ed.scrollTop;edLeft=ed.scrollLeft}   // remember where the listing was
+  tab=t;document.querySelectorAll('.tabs button[data-t]').forEach(x=>{x.classList.toggle('on',x.dataset.t===t);x.setAttribute('aria-selected',x.dataset.t===t)});
+  $('p-program').hidden=t!=='program';$('tabbody').hidden=t==='program';
+  ['check','tools','stats','setup'].forEach(k=>$('p-'+k).hidden=k!==t);
+  if(t==='program'){ed.scrollTop=edTop;ed.scrollLeft=edLeft;syncLayer();rFrom=rTo=0;renderRows(true);lastLine=-2;req()}
+  else $('tabbody').scrollTop=0}
+document.querySelectorAll('.tabs button[data-t]').forEach(b=>b.addEventListener('click',()=>showTab(b.dataset.t)));
 $('views').addEventListener('click',e=>{const v=e.target.dataset.v;if(!v)return;const V={iso:[-Math.PI/4,.62],top:[0,Math.PI/2],front:[0,0],right:[-Math.PI/2,0]};if(V[v]){cam.R=viewFromYP(V[v][0],V[v][1]);document.querySelectorAll('#views button').forEach(b=>b.classList.toggle('on',b.dataset.v===v))}fit()});
 for(const [id,k] of [['tRapid','rapid'],['tGhost','ghost'],['tTool','tool'],['tGrid','grid']])$(id).addEventListener('change',e=>{opt[k]=e.target.checked;fbDirty=true;req()});
 $('tFollow').addEventListener('change',()=>{manualUntil=0;lastLine=-2;req()});
