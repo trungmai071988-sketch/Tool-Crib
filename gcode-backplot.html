@@ -1018,33 +1018,35 @@ function play(){if(!cur||!cur.moves.length)return;if(prog>=cur.moves.length)prog
 function stop(){playing=false;$('playIco').innerHTML='<path d="M4 2l10 6-10 6z"/>';$('bPlay').title='Play'}
 
 /* ---------------- Program listing (virtualized, highlight follows) ---------------- */
+let LH=22;  // real line pitch of the editor; at 90% / 67% zoom it is not exactly 22, and 7000 lines later that adds up to a whole line
+function measureLH(){const n=liveLines.length,sh=ed.scrollHeight;const v=(n>0&&sh>ed.clientHeight+2)?sh/n:RH;if(Math.abs(v-LH)>1e-7){LH=v;return true}return false}
 const RH=22,codeBox=$('code'),layer=$('layer'),hlLayer=$('hlLayer'),rowsEl=$('rows'),hlbar=$('hlbar'),ed=$('codeText');
 let rFrom=0,rTo=0,lineSev=null,manualUntil=0,liveLines=[],lineStarts=new Uint32Array(1),origText='';
 function setLive(text){liveLines=text.split('\n');const ls=new Uint32Array(liveLines.length);let p=0;for(let i=0;i<liveLines.length;i++){ls[i]=p;p+=liveLines[i].length+1}lineStarts=ls;
-  codeBox.style.setProperty('--numw',(String(liveLines.length).length*10+26)+'px')}
+  codeBox.style.setProperty('--numw',(String(liveLines.length).length*10+26)+'px');measureLH()}
 function lineOfPos(pos){let lo=0,hi=lineStarts.length-1;while(lo<hi){const mid=(lo+hi+1)>>1;if(lineStarts[mid]<=pos)lo=mid;else hi=mid-1}return lo}
 const esc=s=>s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function hl(s){let out='';let i=0;const re=/\([^)]*\)?|;.*$/g;let m;while((m=re.exec(s))){out+=hlw(s.slice(i,m.index))+`<span class="k-c">${esc(m[0])}</span>`;i=m.index+m[0].length}return out+hlw(s.slice(i))}
 function hlw(s){return esc(s).replace(/([A-Za-z])(\s*[-+]?[\d.]+)/g,(m,L,v)=>{const u=L.toUpperCase();const k=u==='G'?'g':u==='M'?'m':'THD'.includes(u)?'t':'FS'.includes(u)?'f':u==='N'?'n':'';return k?`<span class="k-${k}">${L}${v}</span>`:m})}
 function renderRows(force){
   const n=liveLines.length,st=ed.scrollTop,h=ed.clientHeight||400;
-  const s=Math.max(0,Math.floor(st/RH)-4),e=Math.min(n,Math.ceil((st+h)/RH)+4);
+  const s=Math.max(0,Math.floor(st/LH)-4),e=Math.min(n,Math.ceil((st+h)/LH)+4);
   if(!force&&s>=rFrom&&e<=rTo)return;
   const s2=Math.max(0,s-60),e2=Math.min(n,e+60);let out='';
-  for(let i=s2;i<e2;i++){const sv=lineSev&&lineSev[i];out+=`<div class="row${sv===1?' bad':sv===2?' wn':''}" style="top:${i*RH}px"><span class="num">${i+1}</span>${hl(liveLines[i])}</div>`}
+  for(let i=s2;i<e2;i++){const sv=lineSev&&lineSev[i];out+=`<div class="row${sv===1?' bad':sv===2?' wn':''}" style="top:${(i*LH).toFixed(3)}px"><span class="num">${i+1}</span>${hl(liveLines[i])}</div>`}
   rowsEl.innerHTML=out;rFrom=s2;rTo=e2;
 }
 function syncLayer(){layer.style.transform=`translate(${-ed.scrollLeft}px,${-ed.scrollTop}px)`;hlLayer.style.transform=`translateY(${-ed.scrollTop}px)`}
 ed.addEventListener('scroll',()=>{syncLayer();renderRows(false)},{passive:true});
 for(const ev of ['wheel','touchstart'])ed.addEventListener(ev,()=>{manualUntil=performance.now()+2500},{passive:true});
-new ResizeObserver(()=>renderRows(false)).observe(codeBox);
+new ResizeObserver(()=>{if(measureLH()){rFrom=rTo=0;renderRows(true);lastLine=-2;req()}else renderRows(false)}).observe(codeBox);
 let navScroll=false;
 function showLine(ln){
-  hlbar.hidden=ln<0;if(ln<0)return;hlbar.style.transform=`translateY(${ln*RH}px)`;
+  hlbar.hidden=ln<0;if(ln<0)return;hlbar.style.transform=`translateY(${(ln*LH).toFixed(3)}px)`;
   if(navScroll){navScroll=false;  // keyboard/click: keep the line in view with as little scrolling as possible
-    const h=ed.clientHeight,top=ln*RH,m=RH*2;
+    const h=ed.clientHeight,top=ln*LH,m=RH*2;
     if(top<ed.scrollTop+m)ed.scrollTop=Math.max(0,top-m);else if(top+RH>ed.scrollTop+h-m)ed.scrollTop=top+RH-h+m;return}
-  if($('tFollow').checked&&performance.now()>manualUntil){const h=ed.clientHeight;const want=Math.max(0,Math.round(ln*RH-h*0.4+RH/2));if(Math.abs(ed.scrollTop-want)>1)ed.scrollTop=want}
+  if($('tFollow').checked&&performance.now()>manualUntil){const h=ed.clientHeight;const want=Math.max(0,Math.round(ln*LH-h*0.4+RH/2));if(Math.abs(ed.scrollTop-want)>1)ed.scrollTop=want}
 }
 /* typing cursor in the program drives the plot, like CIMCO */
 let caretLine=-1;
@@ -1184,7 +1186,7 @@ function openLine(l){if(l<0)return;showTab('program');manualUntil=0;jumpLine(l)}
 $('p-tools').addEventListener('click',e=>{const r=e.target.closest('tr[data-m]');if(r&&+r.dataset.m>=0){stop();prog=+r.dataset.m;manualUntil=0;req()}});
 
 let source='';
-function load(text,name,opts){opts=opts||{};
+function load(text,name,opts){opts=opts||{};text=String(text).replace(/\r\n?/g,'\n');
   source=text;store.set('bp-src',text.length<1.5e6?text:'');stop();
   cur=parse(text);dataId++;prog=cur.moves.length;lastLine=-2;lastDro='';cursorLine=-1;cursorProg=-1;
   const b=cur.stats.bb;cur.c0=cur.moves.length?[(b[0]+b[3])/2,(b[1]+b[4])/2,(b[2]+b[5])/2]:[0,0,0];
@@ -1206,7 +1208,7 @@ function showTab(t){if(t===tab)return;
   tab=t;document.querySelectorAll('.tabs button[data-t]').forEach(x=>{x.classList.toggle('on',x.dataset.t===t);x.setAttribute('aria-selected',x.dataset.t===t)});
   $('p-program').hidden=t!=='program';$('tabbody').hidden=t==='program';
   ['check','tools','stats','setup'].forEach(k=>$('p-'+k).hidden=k!==t);
-  if(t==='program'){ed.scrollTop=edTop;ed.scrollLeft=edLeft;syncLayer();rFrom=rTo=0;renderRows(true);lastLine=-2;req()}
+  if(t==='program'){measureLH();ed.scrollTop=edTop;ed.scrollLeft=edLeft;syncLayer();rFrom=rTo=0;renderRows(true);lastLine=-2;req()}
   else $('tabbody').scrollTop=0}
 document.querySelectorAll('.tabs button[data-t]').forEach(b=>b.addEventListener('click',()=>showTab(b.dataset.t)));
 $('views').addEventListener('click',e=>{const v=e.target.dataset.v;if(!v)return;const V={iso:[-Math.PI/4,.62],top:[0,Math.PI/2],front:[0,0],right:[-Math.PI/2,0]};if(V[v]){cam.R=viewFromYP(V[v][0],V[v][1]);document.querySelectorAll('#views button').forEach(b=>b.classList.toggle('on',b.dataset.v===v))}fit()});
