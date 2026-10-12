@@ -105,6 +105,7 @@ button{cursor:pointer}
 .code{position:relative;height:44vh;overflow:auto;font-family:var(--f-mono);font-size:14px;background:var(--bg);overscroll-behavior:contain}
 #layer,#hlLayer{position:absolute;top:0;left:0;right:0;will-change:transform;pointer-events:none}
 #rows{position:absolute;top:0;left:0;right:0}
+#edWrap{position:absolute;inset:0;z-index:2}
 #codeText{position:absolute;inset:0;width:100%;height:100%;margin:0;border:0;outline:none;resize:none;background:transparent;color:transparent;caret-color:var(--ink);
   font-family:var(--f-mono);font-size:inherit;font-weight:400;line-height:22px;letter-spacing:normal;tab-size:4;white-space:pre;overflow:auto;padding:0 14px 0 var(--numw,58px);z-index:2}
 #codeText::selection{background:color-mix(in srgb,var(--accent) 38%,transparent);color:transparent}
@@ -308,7 +309,7 @@ td.n{font-family:var(--f-mono);font-size:13px;text-align:right}
         <div class="frow"><input id="fFind" type="text" placeholder="Find" spellcheck="false" autocomplete="off" aria-label="Find"><button class="mini fnav" id="fPrev" title="Find previous (Shift+F3 or Shift+Enter)" aria-label="Find previous">▲</button><button class="mini fnav" id="fNext" title="Find next (F3 or Enter)" aria-label="Find next">▼</button><span class="fcount" id="fCount" role="status"></span><button class="mini fnav" id="fClose" title="Close (Esc)" aria-label="Close find">✕</button></div>
         <div class="frow"><input id="fRep" type="text" placeholder="Replace with" spellcheck="false" autocomplete="off" aria-label="Replace with"><button class="mini" id="fRepOne" title="Replace this one and go to the next (Enter in the Replace box)">Replace</button><button class="mini" id="fRepAll" title="Replace every match in the program">Replace all</button><button class="mini" id="fUndo" hidden title="Put back everything Replace all changed">Undo</button><label><input type="checkbox" id="fCase"> Match case</label><label title="T1 finds T1 but not T12. Z3 finds Z3 and Z3. but not Z3.5"><input type="checkbox" id="fWord"> Whole word</label></div>
       </div>
-      <div class="code" id="code"><div id="hlLayer"><div class="hlbar" id="hlbar" hidden></div></div><div id="layer"><div id="hits"></div><div id="rows"></div></div><textarea id="codeText" wrap="off" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" aria-label="Program — click to edit, arrow keys move line by line"></textarea></div>
+      <div class="code" id="code"><div id="hlLayer"><div class="hlbar" id="hlbar" hidden></div></div><div id="layer"><div id="hits"></div><div id="rows"></div></div><div id="edWrap"><textarea id="codeText" wrap="off" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" aria-label="Program — click to edit, arrow keys move line by line"></textarea></div></div>
     </section>
       <div class="tabbody" id="tabbody" hidden>
         <section id="p-check" hidden></section>
@@ -893,9 +894,9 @@ function initPic(){
   const vao=gl.createVertexArray();gl.bindVertexArray(vao);const b=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,b);
   gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,1,1]),gl.STATIC_DRAW);const loc=gl.getAttribLocation(p,'aP');
   gl.enableVertexAttribArray(loc);gl.vertexAttribPointer(loc,2,gl.FLOAT,false,0,0);gl.bindVertexArray(null);
-  G.pic={p,vao,uT:gl.getUniformLocation(p,'uT'),w:0,h:0,s:-1}}
+  G.pic={p,vao,uT:gl.getUniformLocation(p,'uT'),w:0,h:0,s:-1,maxS:gl.getParameter(gl.MAX_SAMPLES)||0}}
 function ensurePic(){
-  const P=G.pic,w=glc.width,h=glc.height,s=(softGL||cfg.aa===false)?0:Math.min(4,gl.getParameter(gl.MAX_SAMPLES)||0);   // no smoothing on software graphics (same as before)
+  const P=G.pic,w=glc.width,h=glc.height,s=(softGL||cfg.aa===false)?0:Math.min(4,P.maxS);   // no smoothing on software graphics (same as before)
   if(P.w===w&&P.h===h&&P.s===s)return;
   if(P.fbo){gl.deleteFramebuffer(P.fbo);gl.deleteFramebuffer(P.res);gl.deleteRenderbuffer(P.rb);gl.deleteTexture(P.tex);P.fbo=P.rb=null}
   P.tex=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,P.tex);gl.texStorage2D(gl.TEXTURE_2D,1,gl.RGBA8,w,h);
@@ -906,13 +907,13 @@ function ensurePic(){
   else P.fbo=P.res;
   if(gl.checkFramebufferStatus(gl.FRAMEBUFFER)!==gl.FRAMEBUFFER_COMPLETE)throw new Error('framebuffer incomplete');
   gl.bindFramebuffer(gl.FRAMEBUFFER,null);P.w=w;P.h=h;P.s=s;glKey=''}
-function showPic(){   // multisampled picture -> plain picture -> screen
+function showPic(src){   // multisampled picture -> plain picture -> screen
   const P=G.pic;
-  if(P.fbo!==P.res){gl.bindFramebuffer(gl.READ_FRAMEBUFFER,P.fbo);gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER,P.res);gl.blitFramebuffer(0,0,P.w,P.h,0,0,P.w,P.h,gl.COLOR_BUFFER_BIT,gl.NEAREST)}
+  if(src!==P.res){gl.bindFramebuffer(gl.READ_FRAMEBUFFER,P.fbo);gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER,P.res);gl.blitFramebuffer(0,0,P.w,P.h,0,0,P.w,P.h,gl.COLOR_BUFFER_BIT,gl.NEAREST)}
   gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.viewport(0,0,P.w,P.h);gl.disable(gl.BLEND);
   gl.useProgram(P.p);gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,P.tex);gl.uniform1i(P.uT,0);
   gl.bindVertexArray(P.vao);gl.drawArrays(gl.TRIANGLE_STRIP,0,4);gl.bindVertexArray(null);
-  gl.enable(gl.BLEND);gl.useProgram(G.p)}
+  gl.useProgram(G.p)}
 function hookGL(c){c.addEventListener('webglcontextlost',e=>{e.preventDefault();G=null;glKey=''},false);
   c.addEventListener('webglcontextrestored',()=>{initGL();uploadGL();req()},false)}
 hookGL(glc);
@@ -961,10 +962,12 @@ function drawGL(target){
   if(!cur||!cur.vs||!G){gl.viewport(0,0,glc.width,glc.height);const bg=hexRgb(vpColor);gl.clearColor(bg[0],bg[1],bg[2],1);gl.clear(gl.COLOR_BUFFER_BIT);glKey='';return}
   const lod=false;
   const set=lod?G.lod:G.path,vs=lod?cur.vsL:cur.vs,u=G.u,c0=cur.c0;
-  const key=[cam.R.join(),cam.scale,cam.px,cam.py,cam.c.join(),W,H,glc.width,glc.height,opt.rapid,opt.tool,opt.ghost,opt.grid,dataId,vpColor,lod,cfg.machine,visKey].join('|');
+  // while the view is turning/zooming, draw without edge smoothing (about 4x less work for the graphics card); redraw smooth once it stops
+  const fast=!!(gl2&&G.pic&&G.pic.s>0&&(performance.now()<interactUntil||smActive()));
+  const key=[cam.R.join(),cam.scale,cam.px,cam.py,cam.c.join(),W,H,glc.width,glc.height,opt.rapid,opt.tool,opt.ghost,opt.grid,dataId,vpColor,lod,cfg.machine,visKey,fast?'F':'Q'].join('|');
   gl.useProgram(G.p);
   if(gl2&&G.pic){try{ensurePic()}catch(e){console.warn(e);gl2=false;glKey=''}}
-  const pic=gl2&&G.pic&&G.pic.fbo;if(pic)gl.bindFramebuffer(gl.FRAMEBUFFER,G.pic.fbo);
+  const pic=gl2&&G.pic&&G.pic.fbo,dst=pic?(fast?G.pic.res:G.pic.fbo):null;if(pic)gl.bindFramebuffer(gl.FRAMEBUFFER,dst);
   let drew=true;
   if(key!==glKey||target<glDone||(!pic&&!softGL&&target!==glDone)){
     glKey=key;glDone=target;
@@ -973,16 +976,17 @@ function drawGL(target){
     {const R=cam.R;gl.uniformMatrix3fv(u.uM,false,new Float32Array([R[0],R[3],R[6],R[1],R[4],R[7],R[2],R[5],R[8]]))}
     gl.uniform4f(u.uView,W,H,cam.px,cam.py);gl.uniform1f(u.uScale,cam.scale);
     gl.uniform1f(u.uShowRapid,opt.rapid?1:0);gl.uniform1f(u.uByTool,opt.tool?1:0);gl.uniform1f(u.uHoriz,HZ()?1:0);
+    gl.disable(gl.BLEND);   // solid lines need no blending; only the faint remaining path does
     if(opt.grid&&G.grid.n){bindSet(G.grid);gl.uniform4f(u.uGhost,.15,.19,.2,1);gl.drawArrays(gl.LINES,0,G.grid.n)}
     bindSet(set);
     const spans=visR||[[0,cur.moves.length]];
-    if(opt.ghost){gl.uniform4f(u.uGhost,.59,.67,.69,.22);for(const [a,b] of spans){const st=Math.max(a,target);if(b>st&&vs[b]>vs[st])gl.drawArrays(gl.LINES,vs[st],vs[b]-vs[st])}}
+    if(opt.ghost){gl.enable(gl.BLEND);gl.uniform4f(u.uGhost,.59,.67,.69,.22);for(const [a,b] of spans){const st=Math.max(a,target);if(b>st&&vs[b]>vs[st])gl.drawArrays(gl.LINES,vs[st],vs[b]-vs[st])}gl.disable(gl.BLEND)}
     gl.uniform4f(u.uGhost,0,0,0,0);for(const [a,b] of spans){const e=Math.min(b,target);if(e>a&&vs[e]>vs[a])gl.drawArrays(gl.LINES,vs[a],vs[e]-vs[a])}
   }else if(target>glDone){
     // playback: only draw the moves cut since the last frame on top of what is already there
-    bindSet(set);gl.uniform4f(u.uGhost,0,0,0,0);for(const [a,b] of (visR||[[0,cur.moves.length]])){const st=Math.max(a,glDone),e=Math.min(b,target);if(e>st&&vs[e]>vs[st])gl.drawArrays(gl.LINES,vs[st],vs[e]-vs[st])}glDone=target;
+    gl.disable(gl.BLEND);bindSet(set);gl.uniform4f(u.uGhost,0,0,0,0);for(const [a,b] of (visR||[[0,cur.moves.length]])){const st=Math.max(a,glDone),e=Math.min(b,target);if(e>st&&vs[e]>vs[st])gl.drawArrays(gl.LINES,vs[st],vs[e]-vs[st])}glDone=target;
   }else drew=false;
-  if(pic){if(drew)showPic();else gl.bindFramebuffer(gl.FRAMEBUFFER,null)}
+  if(pic){if(drew)showPic(dst);else gl.bindFramebuffer(gl.FRAMEBUFFER,null)}
 }
 function interacting(){interactUntil=performance.now()+160;clearTimeout(settleTimer);settleTimer=setTimeout(req,200)}
 
@@ -1084,13 +1088,23 @@ function advance(dt){if(!cur||!cur.moves.length){stop();return}
   let budget=dt*speedMult;const mv=cur.moves,wt=cur.wt;
   while(budget>0&&prog<mv.length){const i=Math.floor(prog),w=wt[i],rem=(1-(prog-i))*w;if(budget>=rem){budget-=rem;prog=i+1}else{prog+=budget/w;budget=0}}
   if(prog>=mv.length){prog=mv.length;stop()}}
-function play(){if(!cur||!cur.moves.length)return;if(prog>=cur.moves.length)prog=0;playing=true;manualUntil=0;$('playIco').innerHTML='<path d="M3 2h4v12H3zM9 2h4v12H9z"/>';$('bPlay').title='Pause';req()}
-function stop(){playing=false;$('playIco').innerHTML='<path d="M4 2l10 6-10 6z"/>';$('bPlay').title='Play'}
+function play(){if(!cur||!cur.moves.length)return;if(prog>=cur.moves.length)prog=0;playing=true;manualUntil=0;hideEd();$('playIco').innerHTML='<path d="M3 2h4v12H3zM9 2h4v12H9z"/>';$('bPlay').title='Pause';req()}
+function stop(){playing=false;showEd();$('playIco').innerHTML='<path d="M4 2l10 6-10 6z"/>';$('bPlay').title='Play';req()}
 
 /* ---------------- Program listing (virtualized, highlight follows) ---------------- */
 const F={on:false,dirty:true,re:null,starts:new Int32Array(0),len:0,cur:-1,anchor:0};
 let LH=22;  // real line pitch of the editor; at 90% / 67% zoom it is not exactly 22, and 7000 lines later that adds up to a whole line
-function measureLH(){const n=liveLines.length,sh=ed.scrollHeight;const v=(n>0&&sh>ed.clientHeight+2)?sh/n:RH;CW=0;if(Math.abs(v-LH)>1e-7){LH=v;return true}return false}
+/* While playing, the edit box (a browser text box holding the whole program) is switched off with content-visibility:hidden.
+   With a big program, the browser does work for every line of that box whenever anything near it changes or it scrolls
+   (about 15-25 ms each time on an 88,000-line program). The coloured listing in front of it is what you see anyway, so while playing
+   it scrolls on its own; the edit box comes back (in a few ms, its layout is kept) when you pause, step, click or press a key. */
+let edHidden=false,vTop=0,vLeft=0,edH=400,edW=400;
+const edTopNow=()=>edHidden?vTop:ed.scrollTop,edLeftNow=()=>edHidden?vLeft:ed.scrollLeft;
+function hideEd(){if(edHidden||typeof tab==='undefined'||tab!=='program'||$('p-program').hidden)return;
+  edH=ed.clientHeight;edW=ed.clientWidth;vTop=ed.scrollTop;vLeft=ed.scrollLeft;if(document.activeElement===ed)ed.blur();
+  $('edWrap').style.contentVisibility='hidden';edHidden=true}
+function showEd(){if(!edHidden)return;$('edWrap').style.contentVisibility='';edHidden=false;ed.scrollTop=vTop;ed.scrollLeft=vLeft;syncLayer();renderRows(false)}
+function measureLH(){if(edHidden)return false;const n=liveLines.length,sh=ed.scrollHeight;const v=(n>0&&sh>ed.clientHeight+2)?sh/n:RH;CW=0;if(Math.abs(v-LH)>1e-7){LH=v;return true}return false}
 const RH=22,codeBox=$('code'),layer=$('layer'),hlLayer=$('hlLayer'),rowsEl=$('rows'),hlbar=$('hlbar'),ed=$('codeText');
 let rFrom=0,rTo=0,lineSev=null,manualUntil=0,liveLines=[],lineStarts=new Uint32Array(1),origText='';
 let numW=58;
@@ -1101,24 +1115,40 @@ const esc=s=>s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&qu
 function hl(s){let out='';let i=0;const re=/\([^)]*\)?|;.*$/g;let m;while((m=re.exec(s))){out+=hlw(s.slice(i,m.index))+`<span class="k-c">${esc(m[0])}</span>`;i=m.index+m[0].length}return out+hlw(s.slice(i))}
 function hlw(s){return esc(s).replace(/([A-Za-z])(\s*[-+]?[\d.]+)/g,(m,L,v)=>{const u=L.toUpperCase();const k=u==='G'?'g':u==='M'?'m':'THD'.includes(u)?'t':'FS'.includes(u)?'f':u==='N'?'n':'';return k?`<span class="k-${k}">${L}${v}</span>`:m})}
 function renderRows(force){
-  const n=liveLines.length,st=ed.scrollTop,h=ed.clientHeight||400;
+  const n=liveLines.length,st=edTopNow(),h=(edHidden?edH:ed.clientHeight)||400;
   const s=Math.max(0,Math.floor(st/LH)-4),e=Math.min(n,Math.ceil((st+h)/LH)+4);
   if(!force&&s>=rFrom&&e<=rTo)return;
   const s2=Math.max(0,s-60),e2=Math.min(n,e+60);let out='';
   for(let i=s2;i<e2;i++){const sv=lineSev&&lineSev[i];out+=`<div class="row${sv===1?' bad':sv===2?' wn':''}" style="top:${(i*LH).toFixed(3)}px"><span class="num">${i+1}</span>${hl(liveLines[i])}</div>`}
   rowsEl.innerHTML=out;rFrom=s2;rTo=e2;drawHits(s2,e2);
 }
-function syncLayer(){layer.style.transform=`translate(${-ed.scrollLeft}px,${-ed.scrollTop}px)`;hlLayer.style.transform=`translateY(${-ed.scrollTop}px)`}
+function syncLayer(){const t=edTopNow();layer.style.transform=`translate(${-edLeftNow()}px,${-t}px)`;hlLayer.style.transform=`translateY(${-t}px)`}
 ed.addEventListener('scroll',()=>{syncLayer();renderRows(false)},{passive:true});
 for(const ev of ['wheel','touchstart'])ed.addEventListener(ev,()=>{manualUntil=performance.now()+2500},{passive:true});
-new ResizeObserver(()=>{if(measureLH()){rFrom=rTo=0;renderRows(true);lastLine=-2;req()}else renderRows(false)}).observe(codeBox);
-let navScroll=false;
+new ResizeObserver(()=>{if(edHidden){showEd();hideEd()}if(measureLH()){rFrom=rTo=0;renderRows(true);lastLine=-2;req()}else renderRows(false)}).observe(codeBox);
+{const w=$('edWrap');
+ // wheel over the listing while playing: scroll the coloured listing (follow pauses for 2.5 s, like before)
+ w.addEventListener('wheel',e=>{if(!edHidden)return;e.preventDefault();manualUntil=performance.now()+2500;
+   vTop=Math.max(0,Math.min(liveLines.length*LH-edH,vTop+e.deltaY*(e.deltaMode===1?LH:e.deltaMode===2?edH:1)));syncLayer();renderRows(false)},{passive:false});
+ // click in the listing while playing: stop and put the typing cursor where you clicked
+ w.addEventListener('pointerdown',e=>{if(!edHidden||e.button!==0)return;e.preventDefault();
+   const r=codeBox.getBoundingClientRect(),ln=Math.max(0,Math.min(liveLines.length-1,Math.floor((e.clientY-r.top+vTop)/LH)));
+   const col=Math.max(0,Math.min(liveLines[ln].length,Math.round((e.clientX-r.left+vLeft-numW)/(charW()||8.4))));
+   stop();const p=lineStarts[ln]+col;ed.focus({preventScroll:true});try{ed.setSelectionRange(p,p)}catch(_){}caretLine=-1;caretMoved()})}
+let navScroll=false,followT=0;
 function showLine(ln){
   hlbar.hidden=ln<0;if(ln<0)return;hlbar.style.transform=`translateY(${(ln*LH).toFixed(3)}px)`;
+  if(edHidden){if($('tFollow').checked&&performance.now()>manualUntil){const want=Math.max(0,Math.min(liveLines.length*LH-edH,Math.round(ln*LH-edH*0.4+RH/2)));
+      if(Math.abs(vTop-want)>0.5){vTop=want;syncLayer();renderRows(false)}}return}
   if(navScroll){navScroll=false;  // keyboard/click: keep the line in view with as little scrolling as possible
     const h=ed.clientHeight,top=ln*LH,m=RH*2;
     if(top<ed.scrollTop+m)ed.scrollTop=Math.max(0,top-m);else if(top+RH>ed.scrollTop+h-m)ed.scrollTop=top+RH-h+m;return}
-  if($('tFollow').checked&&performance.now()>manualUntil){const h=ed.clientHeight;const want=Math.max(0,Math.round(ln*LH-h*0.4+RH/2));if(Math.abs(ed.scrollTop-want)>1)ed.scrollTop=want}
+  if($('tFollow').checked&&performance.now()>manualUntil){const h=ed.clientHeight,top=ln*LH,now=performance.now();
+    // while playing, scroll the listing about 8 times a second instead of every frame: repainting a huge program every frame
+    // is a big share of the work; the highlight bar still moves every frame, and the line never leaves the view
+    const inView=top>=ed.scrollTop+RH&&top+RH*2<=ed.scrollTop+h;
+    if(playing&&inView&&now-followT<120)return;
+    followT=now;const want=Math.max(0,Math.round(ln*LH-h*0.4+RH/2));if(Math.abs(ed.scrollTop-want)>1)ed.scrollTop=want}
 }
 /* typing cursor in the program drives the plot, like CIMCO */
 let caretLine=-1;
@@ -1156,6 +1186,7 @@ function drawHits(s2,e2){
     out+=`<div class="fhit${k===F.cur?' cur':''}" style="top:${(ln*LH).toFixed(3)}px;height:${LH.toFixed(3)}px;left:${(numW+c0*cw).toFixed(2)}px;width:${((c1-c0)*cw).toFixed(2)}px"></div>`}
   hitsEl.innerHTML=out}
 function fShow(i){
+  if(edHidden)stop();
   const s=F.starts[i],ln=lineOfPos(s),L=liveLines[ln]||'';F.cur=i;F.anchor=s;
   try{ed.setSelectionRange(s,s+F.len)}catch(e){}
   const h=ed.clientHeight,top=ln*LH;if(top<ed.scrollTop+LH*2||top+LH>ed.scrollTop+h-LH*2)ed.scrollTop=Math.max(0,top-h*0.4);
@@ -1180,6 +1211,7 @@ function openFind(rep){
   fBuild();fCount();rFrom=rTo=0;renderRows(true)}
 function closeFind(){F.on=false;fbar.hidden=true;F.undoText=null;$('fUndo').hidden=true;F.cur=-1;hitsEl.innerHTML='';fCount('')}
 function editRange(s,e,text){   // goes through the browser's edit history so Ctrl+Z undoes it
+  if(edHidden)stop();
   const back=document.activeElement;ed.focus({preventScroll:true});ed.setSelectionRange(s,e);let ok=false;
   try{ok=text?document.execCommand('insertText',false,text):document.execCommand('delete')}catch(err){}
   if(!ok){ed.setRangeText(text,s,e,'end');ed.dispatchEvent(new Event('input'))}
@@ -1191,6 +1223,7 @@ function fReplaceOne(){
   editRange(s,s+F.len,r);ed.scrollTop=st;ed.scrollLeft=sl;fBuild();
   if(F.starts.length)fGo(1,s+r.length);else{fCount('Done — no more');renderRows(true)}}
 function fReplaceAll(){
+  if(edHidden)stop();
   fFlush();if(F.dirty)fBuild();const n=F.starts.length;if(!n){fCount();return}
   const re=new RegExp(F.re.source,F.re.flags),r=fRep.value,v=ed.value,nv=v.replace(re,()=>r);
   const st=ed.scrollTop,sl=ed.scrollLeft,ln=shownLine();
@@ -1234,7 +1267,7 @@ function jumpLineOld(l){if(!cur||l<0)return;let i=l;while(i<cur.lines.length&&cu
 
 /* ---------------- UI sync (every frame, writes only what changed) ---------------- */
 const dX=$('dX'),dY=$('dY'),dZ=$('dZ'),dT=$('dT'),dH=$('dH'),dD=$('dD'),dF=$('dF'),dS=$('dS'),dMode=$('dMode'),scrub=$('scrub'),lineInfo=$('lineInfo');
-let lastLine=-2,lastDro='',scrubbing=false;
+let lastLine=-2,lastDro='',scrubbing=false,liNeed=false,liT=0;
 function curMoveIdx(){if(!cur||!cur.moves.length)return -1;return Math.max(0,Math.min(cur.moves.length-1,Math.ceil(prog)-1))}
 let droAng=null;
 function posAt(){const mv=cur.moves;droAng=null;if(!mv.length)return null;const t=Math.min(mv.length,Math.floor(prog));
@@ -1270,7 +1303,9 @@ function syncUI(){
       dMode.textContent=m.type?'FEED':'RAPID';dMode.className='mode '+(m.type?'feed':'rapid')}
     else{dX.textContent=dY.textContent=dZ.textContent='—';dT.textContent='T—';dH.hidden=true;dD.hidden=true;$('dWarn').hidden=true;dF.textContent='';dS.textContent='S0';dMode.textContent=''}}
   const ln=(cursorLine>=0&&cursorProg===prog)?cursorLine:(m?m.line:-1);
-  if(ln!==lastLine){lastLine=ln;showLine(ln);lineInfo.textContent=ln>=0?`Line ${ln+1} / ${cur.lines.length}`:`${cur.lines.length} lines`}
+  if(ln!==lastLine){lastLine=ln;showLine(ln);liNeed=true}
+  // the "Line 1234 / 88854" text makes the browser repaint the whole listing, so while playing it updates ~6 times a second
+  if(liNeed&&(!playing||performance.now()-liT>160)){liNeed=false;liT=performance.now();lineInfo.textContent=ln>=0?`Line ${ln+1} / ${cur.lines.length}`:`${cur.lines.length} lines`}
 }
 
 /* ---------------- Panels ---------------- */
@@ -1361,11 +1396,11 @@ function load(text,name,opts){opts=opts||{};text=String(text).replace(/\r\n?/g,'
 /* ---------------- Events ---------------- */
 let tab='program',edTop=0,edLeft=0;
 function showTab(t){if(t===tab)return;
-  if(tab==='program'){edTop=ed.scrollTop;edLeft=ed.scrollLeft}   // remember where the listing was
+  if(tab==='program'){showEd();edTop=ed.scrollTop;edLeft=ed.scrollLeft}   // remember where the listing was
   tab=t;document.querySelectorAll('.tabs button[data-t]').forEach(x=>{x.classList.toggle('on',x.dataset.t===t);x.setAttribute('aria-selected',x.dataset.t===t)});
   $('p-program').hidden=t!=='program';$('tabbody').hidden=t==='program';
   ['check','tools','stats','setup'].forEach(k=>$('p-'+k).hidden=k!==t);
-  if(t==='program'){measureLH();ed.scrollTop=edTop;ed.scrollLeft=edLeft;syncLayer();rFrom=rTo=0;renderRows(true);lastLine=-2;req()}
+  if(t==='program'){measureLH();ed.scrollTop=edTop;ed.scrollLeft=edLeft;syncLayer();rFrom=rTo=0;renderRows(true);lastLine=-2;if(playing)hideEd();req()}
   else $('tabbody').scrollTop=0}
 document.querySelectorAll('.tabs button[data-t]').forEach(b=>b.addEventListener('click',()=>showTab(b.dataset.t)));
 $('views').addEventListener('click',e=>{const v=e.target.dataset.v;if(!v)return;const V={iso:[-Math.PI/4,.62],top:[0,Math.PI/2],front:[0,0],right:[-Math.PI/2,0]};if(V[v]){cam.R=viewFromYP(V[v][0],V[v][1]);document.querySelectorAll('#views button').forEach(b=>b.classList.toggle('on',b.dataset.v===v))}fit()});
