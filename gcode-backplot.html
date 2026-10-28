@@ -1159,7 +1159,20 @@ function showLine(ln){
 let caretLine=-1;
 function caretMoved(){if(document.activeElement!==ed||!cur)return;const l=lineOfPos(ed.selectionStart);if(l===caretLine)return;caretLine=l;setCursorLine(l,true,true)}
 document.addEventListener('selectionchange',caretMoved);
-ed.addEventListener('keyup',caretMoved);ed.addEventListener('mouseup',caretMoved);
+ed.addEventListener('keyup',caretMoved);
+// Page Up / Page Down in the program: move the cursor one screen ourselves. The browser's own version can scroll the whole
+// outer page sideways when the backplot sits inside the SHM site (that page is wider than the window).
+ed.addEventListener('keydown',e=>{
+  if((e.key!=='PageDown'&&e.key!=='PageUp')||e.altKey||e.metaKey)return;e.preventDefault();
+  const dir=e.key==='PageDown'?1:-1,page=Math.max(1,Math.floor(ed.clientHeight/LH)-1),a=ed.selectionStart,b=ed.selectionEnd;
+  const pos=e.shiftKey?(dir>0?b:a):ed.selectionStart,ln=lineOfPos(pos),col=pos-lineStarts[ln];
+  const nl=Math.max(0,Math.min(liveLines.length-1,ln+dir*page)),np=lineStarts[nl]+Math.min(col,liveLines[nl].length);
+  ed.scrollTop=Math.max(0,ed.scrollTop+dir*page*LH);
+  try{if(e.shiftKey)ed.setSelectionRange(Math.min(a,np),Math.max(b,np));else ed.setSelectionRange(np,np)}catch(_){}
+  caretMoved()});
+// safety net: if a key press in here scrolls the outer SHM page sideways, put it back
+if(window.parent!==window){let keyT=0;document.addEventListener('keydown',()=>{keyT=performance.now()},true);
+  try{window.parent.addEventListener('scroll',()=>{const P=window.parent;if(P.scrollX&&performance.now()-keyT<600)P.scrollTo(0,P.scrollY)},{passive:true})}catch(_){}}ed.addEventListener('mouseup',caretMoved);
 let editTimer=0;
 function markEdited(){$('editedTag').hidden=ed.value===origText}
 ed.addEventListener('input',()=>{stop();setLive(ed.value);rFrom=rTo=0;renderRows(true);markEdited();clearTimeout(editTimer);editTimer=setTimeout(applyEdit,liveLines.length>30000?1500:500)});

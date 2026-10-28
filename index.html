@@ -312,6 +312,8 @@
     opacity:1;
     visibility:visible;
   }
+  /* closed: take it out of the layout, otherwise it sits past the right edge and makes the whole page scroll sideways */
+  .sct-reference:not(.open){display:none}
   .sct-reference-head{
     position:absolute;
     top:8px;
