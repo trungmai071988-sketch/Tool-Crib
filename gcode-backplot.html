@@ -127,6 +127,7 @@ button{cursor:pointer}
 .frow label{display:flex;align-items:center;gap:4px;font-size:13px;color:var(--muted);cursor:pointer;white-space:nowrap}
 .frow label input{accent-color:var(--accent)}
 #fClose{margin-left:auto}
+.opn{font-size:13px;color:var(--ink);margin-top:2px;line-height:1.25}
 .diain{display:flex;align-items:center;gap:4px;margin-top:4px;cursor:text}
 .diain input{width:64px;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:4px;padding:3px 6px;font-family:var(--f-mono);font-size:13px}
 .frow [hidden]{display:none}
@@ -446,7 +447,7 @@ function parse(src){
     T:null,nextT:null,len:false,lenWarned:false,r98:true,cyc:null,feedMode:94,tool:null,
     planeSeen:false,planeLine:-1,planeTool:-1,comp:40,compLine:-1,D:null,H:null,cool:false,wo:null,woFirst:null,absLine:-1,absG28:false,dir:0,sLine:-1,fLine:-1};
   const woExp=cfg.woExp==null||cfg.woExp==='G54'?'G54':cfg.woExp==='any'?null:cfg.woExp;   // work offset the job is expected to use
-  const keyCount={},toolDesc={};let sawEnd=false,progName='',lastComment='',lastCommentLine=-9,compNoted=false;
+  const keyCount={},toolDesc={},opNames={};let sawEnd=false,progName='',lastComment='',lastCommentLine=-9,compNoted=false;
   const add=(sev,line,msg,key,cat)=>{key=key||msg;keyCount[key]=(keyCount[key]||0)+1;if(keyCount[key]>3000)return;issues.push({sev,line,msg,cat});};
   const onceSet=new Set(),once=(k,sev,line,msg,cat)=>{if(onceSet.has(k))return;onceSet.add(k);add(sev,line,msg,k,cat)};
   const codes=v=>new Set((String(v||'').match(/\d+/g)||[]).map(Number));
@@ -486,7 +487,7 @@ function parse(src){
         else if(S.tool&&!S.tool.sawCool)add('info',li,`T${S.T} has no coolant code of its own. Coolant is only on because the previous tool left it on`,null,'cool')}
     }
     const p0=pts.length/3;for(const p of part)pts.push(p[0],p[1],p[2]);for(const p of poly)rawPts.push(p[0],p[1],p[2]);
-    const m={type,line:li,p0,n:poly.length,len,f:S.F,s:S.S,t:S.T,d:S.D,h:S.H,lc:S.len,cc:S.comp,wo:S.wo,tool:S.tool?S.tool.idx:-1,inv:S.feedMode===93};
+    const m={type,line:li,p0,n:poly.length,len,f:S.F,s:S.S,t:S.T,d:S.D,h:S.H,lc:S.len,cc:S.comp,wo:S.wo,op:S.opN||0,tool:S.tool?S.tool.idx:-1,inv:S.feedMode===93};
     const a1=angs?angs[angs.length-1]:a0;if(RT.any){m.r0=angs?angs[0]:a0;m.r1=a1}
     const ax=toolAxis(a1);if(ax)m.ax=ax;
     const fkey=RT.frame?'F'+RT.frameId:a1.map(v=>Math.round(v*1000)).join(',');let fk=faceMap.get(fkey);if(fk===undefined){fk=faceMap.size;faceMap.set(fkey,fk)}m.fk=fk;
@@ -560,6 +561,7 @@ function parse(src){
     let t=lines[li];
     t=t.replace(/\(([^)]*)\)?/g,(m,c)=>{lastComment=c.trim();lastCommentLine=li;const tm=c.match(/\bT(?:OOL)?\s*[-#:]?\s*(\d+)\b/i);if(tm)toolDesc[+tm[1]]=(toolDesc[+tm[1]]||'')+' '+c;return ' '});
     t=t.replace(/;.*$/,'').trim().toUpperCase();
+    if(lastCommentLine===li&&/^[\s)]*$/.test(t)){S.opN=(S.opN||0)+1;if(!/\bTOOL\s*[-#:]|\bDIA\.|\bDIA(?:METER)?\s*[-=:]/i.test(lastComment))opNames[S.opN]=lastComment.replace(/[()]/g,'').trim()}
     if(!t||t[0]==='%')continue;
     if(t[0]==='/')t=t.slice(1);
     if(/^[O:]\d+/.test(t)){if(!progName)progName=t.split(/\s/)[0]+(lastCommentLine===li?' '+lastComment:'');continue}
@@ -724,7 +726,7 @@ function parse(src){
     if(mv.type){feed+=mv.len;time+=mv.f>0?mv.len/mv.f:0}else{rapid+=mv.len;time+=mv.len/rr}
     for(let k=0;k<mv.n;k++){const o=(mv.p0+k)*3;for(let a=0;a<3;a++){const v=P[o+a];if(v<bb[a])bb[a]=v;if(v>bb[a+3])bb[a+3]=v;if(mv.type){if(v<cb[a])cb[a]=v;if(v>cb[a+3])cb[a+3]=v}}}
   }
-  return {lines,pts:P,raw:new Float64Array(rawPts),rot:RT.any?RT.seen:null,faces:faceMap.size,moves,issues,tools,lineToMove,units,progName,woExp:woExp||S.woFirst,stats:{feed,rapid,time,bb,cb}};
+  return {lines,pts:P,raw:new Float64Array(rawPts),rot:RT.any?RT.seen:null,faces:faceMap.size,moves,issues,tools,lineToMove,units,progName,opNames,woExp:woExp||S.woFirst,stats:{feed,rapid,time,bb,cb}};
 }
 function fmt(v,d){if(!isFinite(v))return '—';d=d??(cur&&cur.units==='mm'?3:4);let s=v.toFixed(d).replace(/0+$/,'').replace(/\.$/,'.');if(s==='-0.')s='0.';return s}
 function fmtTime(min){const s=Math.round(min*60);const h=Math.floor(s/3600),m=Math.floor(s%3600/60),ss=s%60;return (h?h+':'+String(m).padStart(2,'0'):m)+':'+String(ss).padStart(2,'0')}
@@ -1398,14 +1400,16 @@ function renderPanels(){
    Step down: the gap between the Z levels where the tool cuts flat. */
 function measureSteps(c){
   const P=c.pts,groups=new Map();
-  for(const m of c.moves){if(!m.type||m.n<2)continue;let g=groups.get(m.tool);if(!g)groups.set(m.tool,g=[]);g.push(m)}
+  // one row per operation: a tool's moves split where a comment-only line starts a new operation
+  const opName=o=>{for(let k=o;k>=0;k--)if(c.opNames&&c.opNames[k])return c.opNames[k];return ''};
+  for(const m of c.moves){if(!m.type||m.n<2)continue;const nm=opName(m.op),key=m.tool+'|'+nm;let g=groups.get(key);if(!g)groups.set(key,g=Object.assign([],{ti:m.tool,op:nm}));g.push(m)}
   const out=[];
-  for(const [ti,ms] of groups){
+  for(const [,ms] of groups){const ti=ms.ti;
     let L=0,flatL=0,vertL=0;const lv=new Map();let bx0=Infinity,by0=Infinity,bx1=-Infinity,by1=-Infinity;
     for(const m of ms)for(let k=0;k<m.n-1;k++){const a=(m.p0+k)*3,b=a+3,dx=P[b]-P[a],dy=P[b+1]-P[a+1],dz=P[b+2]-P[a+2],sl=Math.hypot(dx,dy,dz),xy=Math.hypot(dx,dy);L+=sl;
       if(Math.abs(dz)<1e-4&&xy>0){flatL+=sl;const z=Math.round(P[a+2]*1e4)/1e4;lv.set(z,(lv.get(z)||0)+sl)}else if(xy<Math.abs(dz)*0.05)vertL+=sl;
       bx0=Math.min(bx0,P[a]);bx1=Math.max(bx1,P[a]);by0=Math.min(by0,P[a+1]);by1=Math.max(by1,P[a+1])}
-    const tool=ti>=0?c.tools[ti]:null,typed=(c.userDia||{})[ti],dia=typed>0?typed:tool&&tool.dia>0?tool.dia:0,r={tool,ti,first:ms[0]&&c.moves.indexOf(ms[0]),L,typed:typed>0};out.push(r);
+    const tool=ti>=0?c.tools[ti]:null,typed=(c.userDia||{})[ti],dia=typed>0?typed:tool&&tool.dia>0?tool.dia:0,r={tool,ti,op:ms.op,first:ms[0]&&c.moves.indexOf(ms[0]),L,typed:typed>0};out.push(r);
     if(L<=0)continue;
     if(vertL>0.7*L){r.kind='drill';continue}
     // Z levels (step down)
@@ -1437,9 +1441,17 @@ function measureSteps(c){
       if(best<Infinity)vals.push(best)}
     if(vals.length<10||vals.length<0.3*asked){r.single=true;continue}   // only a few points have a neighbour pass (e.g. where a loop closes): one pass
     vals.sort((a,b)=>a-b);const pc=f=>vals[Math.min(vals.length-1,Math.floor(f*vals.length))];
-    r.over=pc(0.5);r.overLo=pc(0.1);r.overHi=pc(0.9);r.dia=dia;
-    // looping / dynamic paths overlap themselves, so most gaps are small; the real step over is the biggest gap between loops
-    if(r.overHi>2.5*r.over){r.dyn=true;r.over=pc(0.97)}}
+    r.overLo=pc(0.1);r.overHi=pc(0.9);r.dia=dia;
+    // step over = the most common gap (dynamic / looping paths have lots of small overlap gaps, so the middle value runs low)
+    {const hi=r.overHi,bin=Math.max(hi*0.05,1e-5),cut=hi*0.15,cnt=new Map();let pk=null,pn=0;
+     for(const v of vals){if(v<cut)continue;const k=Math.round(v/bin);const n=(cnt.get(k)||0)+1;cnt.set(k,n)}
+     for(const [k,n] of cnt){const w=n+(cnt.get(k-1)||0)*0.5+(cnt.get(k+1)||0)*0.5;if(w>pn){pn=w;pk=k}}
+     // tight overlapping loops (trochoidal slot): most gaps are the overlap, the real step is the higher peak
+     if(pk!=null&&pk*bin<0.35*hi){const W=k=>(cnt.get(k)||0)+(cnt.get(k-1)||0)*0.5+(cnt.get(k+1)||0)*0.5;
+       for(const [k] of cnt)if(k>pk&&W(k)>=0.25*pn&&W(k)>=W(k-1)&&W(k)>=W(k+1)&&k>pk+2){if(k>(r._up||0)){r._up=k}}
+       if(r._up){pk=r._up;r.loops=true}delete r._up}
+     let sum=0,nn=0;if(pk!=null)for(const v of vals){if(Math.abs(v/bin-pk)<=1.5){sum+=v;nn++}}
+     r.over=nn?sum/nn:pc(0.5)}}
   return out}
 function ensureSteps(){const c=cur,box=$('stepsBox');if(!c||!box)return;
   if(c.steps){drawSteps();return}
@@ -1449,13 +1461,13 @@ function drawSteps(){const c=cur,box=$('stepsBox');if(!box||!c.steps)return;cons
   const f=v=>v==null?'—':fmt(v),pct=(v,d)=>d&&v!=null?`${Math.round(v/d*100)}%`:'—';
   box.innerHTML=`<div class="tblwrap"><table class="tl"><thead><tr><th>Tool</th><th style="text-align:right">Step over</th><th style="text-align:right">% of Ø</th><th style="text-align:right">Step down</th></tr></thead><tbody>${c.steps.map(r=>{
     const t=r.tool,needD=!(t&&t.dia>0),dBox=needD?`<label class="tcm diain" title="Cutter diameter — not in the program (e.g. a sub program), type it to get % of Ø">Ø <input type="text" inputmode="decimal" data-dia="${r.ti}" value="${r.typed?fmt(r.dia):''}" placeholder="dia"></label>`:'';
-    const name=t?`<span class="sw" style="background:${TOOLCOL[t.idx%TOOLCOL.length]}"></span><span class="tnum">T${t.t}</span><div class="tcm">${esc(t.comment||'')}${t.dia>0?` · Ø${fmt(t.dia)}`:''}</div>${dBox}`:`<span class="tnum">Program</span><div class="tcm">no tool change (sub program?)</div>${dBox}`;
+    const opL=r.op?`<div class="opn">${esc(r.op)}</div>`:'';
+    const name=t?`<span class="sw" style="background:${TOOLCOL[t.idx%TOOLCOL.length]}"></span><span class="tnum">T${t.t}</span>${opL}<div class="tcm">${t.dia>0?`Ø${fmt(t.dia)}`:esc((t.comment||'').slice(0,60))}</div>${dBox}`:`<span class="tnum">Program</span>${opL}<div class="tcm">no tool change (sub program?)</div>${dBox}`;
     let so,pc;if(r.kind==='drill'){so='<span class="tcm">drill / plunge</span>';pc='—'}else if(r.single||r.over==null){so='<span class="tcm">single pass</span>';pc='—'}
-    else if(r.dyn){so=`${f(r.over)}<div class="tcm">looping path · biggest gap</div>`;pc=pct(r.over,r.dia)}
     else{so=`${f(r.over)}${r.overHi-r.overLo>r.over*0.25?`<div class="tcm">${f(r.overLo)}–${f(r.overHi)}</div>`:''}`;pc=pct(r.over,r.dia)}
     const sd=r.down!=null?`${f(r.down)}<div class="tcm">${r.levels} levels${r.downMax-r.downMin>r.down*0.25?` · ${f(r.downMin)}–${f(r.downMax)}`:''}</div>`:(r.kind==='3d'?'<span class="tcm">3D</span>':'—');
     return `<tr data-m="${r.first>=0?r.first:''}"><td>${name}</td><td class="n">${so}</td><td class="n">${pc}</td><td class="n">${sd}</td></tr>`}).join('')}</tbody></table></div>
-  <p class="note">Measured from the toolpath (${u}): step over is the typical gap between neighbouring passes${c.steps.some(r=>r.kind==='3d')?' (3D surfacing measured along the surface)':''}; the small range under it is where most passes fall. For dynamic / looping paths it shows the biggest gap between loops (the forward step). Step down is the gap between flat cutting levels. Tap a tool to jump to it.</p>`}
+  <p class="note">Measured from the toolpath (${u}): step over is the most common gap between neighbouring passes${c.steps.some(r=>r.kind==='3d')?' (3D surfacing measured along the surface)':''}; the small range under it is where most passes fall. Step down is the gap between flat cutting levels. One row per operation (named from the comment line before it). Tap a row to jump to it.</p>`}
 
 $('p-check').addEventListener('click',e=>{
   const t=e.target.closest('[data-tog],[data-off],[data-on]');
