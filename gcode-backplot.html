@@ -127,6 +127,8 @@ button{cursor:pointer}
 .frow label{display:flex;align-items:center;gap:4px;font-size:13px;color:var(--muted);cursor:pointer;white-space:nowrap}
 .frow label input{accent-color:var(--accent)}
 #fClose{margin-left:auto}
+.diain{display:flex;align-items:center;gap:4px;margin-top:4px;cursor:text}
+.diain input{width:64px;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:4px;padding:3px 6px;font-family:var(--f-mono);font-size:13px}
 .frow [hidden]{display:none}
 #fUndo{border-color:var(--accent);color:var(--accent);font-weight:600}
 #hits{position:absolute;top:0;left:0;right:0}
@@ -1381,12 +1383,80 @@ function renderPanels(){
   const u=c.units;
   $('p-tools').innerHTML=c.tools.length?`<div class="tblwrap"><table class="tl"><thead><tr><th>Tool</th><th style="text-align:right">RPM</th><th style="text-align:right">Low Z</th><th style="text-align:right">Cut ${u}</th><th style="text-align:right">Time</th></tr></thead><tbody>${c.tools.map(t=>`<tr data-m="${t.first}"><td><span class="sw" style="background:${TOOLCOL[t.idx%TOOLCOL.length]}"></span><span class="tnum">T${t.t}</span><div class="tcm">${esc(t.comment||'')}${t.dia>0?` · Ø${fmt(t.dia)}`:''}</div></td><td class="n">${t.maxS||'—'}</td><td class="n">${fmt(t.minZ)}</td><td class="n">${t.cut.toFixed(1)}</td><td class="n">${fmtTime(t.time)}</td></tr>`).join('')}</tbody></table></div><p class="note">Tap a tool to jump to its first move. Low Z is the deepest cutting point.</p>`:'<p class="empty">No M6 tool changes found.</p>';
   const s=c.stats,bb=s.bb,cb=s.cb;const row=(l,a,b)=>`<tr><td>${l}</td><td class="n">${fmt(a)}</td><td class="n">${fmt(b)}</td><td class="n">${fmt(b-a)}</td></tr>`;
-  $('p-stats').innerHTML=`<h3>Cycle time estimate</h3><table><tbody><tr><td>Total</td><td class="n">${fmtTime(s.time)}</td></tr><tr><td>Feed distance</td><td class="n">${s.feed.toFixed(2)} ${u}</td></tr><tr><td>Rapid distance</td><td class="n">${s.rapid.toFixed(2)} ${u}</td></tr><tr><td>Moves / lines</td><td class="n">${c.moves.length} / ${c.lines.length}</td></tr><tr><td>Units</td><td class="n">${u==='mm'?'Metric G21':'Inch G20'}</td></tr></tbody></table>
+  $('p-stats').innerHTML=`<h3>Step over / step down</h3><div id="stepsBox"><p class="note">Measuring…</p></div>
+  <h3>Cycle time estimate</h3><table><tbody><tr><td>Total</td><td class="n">${fmtTime(s.time)}</td></tr><tr><td>Feed distance</td><td class="n">${s.feed.toFixed(2)} ${u}</td></tr><tr><td>Rapid distance</td><td class="n">${s.rapid.toFixed(2)} ${u}</td></tr><tr><td>Moves / lines</td><td class="n">${c.moves.length} / ${c.lines.length}</td></tr><tr><td>Units</td><td class="n">${u==='mm'?'Metric G21':'Inch G20'}</td></tr></tbody></table>
   <h3>Cutting extents</h3><div class="tblwrap"><table><thead><tr><th></th><th style="text-align:right">Min</th><th style="text-align:right">Max</th><th style="text-align:right">Range</th></tr></thead><tbody>${row('X',cb[0],cb[3])}${row('Y',cb[1],cb[4])}${row('Z',cb[2],cb[5])}</tbody></table></div>
   <h3>All moves incl. rapids</h3><div class="tblwrap"><table><tbody>${row('X',bb[0],bb[3])}${row('Y',bb[1],bb[4])}${row('Z',bb[2],bb[5])}</tbody></table></div>
   <p class="note">Time ignores tool changes, acceleration and dwell, so real cycle time runs longer. Rapid rate is set in Setup.</p>`;
   $('sRapidU').textContent=(u==='mm'?'in/min (converted for metric)':'in/min')+' — used for cycle time';
+  if(!$('p-stats').hidden)ensureSteps();
 }
+/* Step over / step down, measured from the toolpath itself.
+   Step over: for points along each tool's cutting moves, the distance to the nearest point on a *different* pass
+   (a point counts as a different pass when the path between the two is much longer than the gap - so the same
+   line, a corner or a U-turn never counts). Flat cutting is measured in XY at the same Z; 3D surfacing in 3D.
+   Step down: the gap between the Z levels where the tool cuts flat. */
+function measureSteps(c){
+  const P=c.pts,groups=new Map();
+  for(const m of c.moves){if(!m.type||m.n<2)continue;let g=groups.get(m.tool);if(!g)groups.set(m.tool,g=[]);g.push(m)}
+  const out=[];
+  for(const [ti,ms] of groups){
+    let L=0,flatL=0,vertL=0;const lv=new Map();let bx0=Infinity,by0=Infinity,bx1=-Infinity,by1=-Infinity;
+    for(const m of ms)for(let k=0;k<m.n-1;k++){const a=(m.p0+k)*3,b=a+3,dx=P[b]-P[a],dy=P[b+1]-P[a+1],dz=P[b+2]-P[a+2],sl=Math.hypot(dx,dy,dz),xy=Math.hypot(dx,dy);L+=sl;
+      if(Math.abs(dz)<1e-4&&xy>0){flatL+=sl;const z=Math.round(P[a+2]*1e4)/1e4;lv.set(z,(lv.get(z)||0)+sl)}else if(xy<Math.abs(dz)*0.05)vertL+=sl;
+      bx0=Math.min(bx0,P[a]);bx1=Math.max(bx1,P[a]);by0=Math.min(by0,P[a+1]);by1=Math.max(by1,P[a+1])}
+    const tool=ti>=0?c.tools[ti]:null,typed=(c.userDia||{})[ti],dia=typed>0?typed:tool&&tool.dia>0?tool.dia:0,r={tool,ti,first:ms[0]&&c.moves.indexOf(ms[0]),L,typed:typed>0};out.push(r);
+    if(L<=0)continue;
+    if(vertL>0.7*L){r.kind='drill';continue}
+    // Z levels (step down)
+    const levels=[...lv].filter(([,l])=>l>0.01*flatL).map(([z])=>z).sort((a,b)=>b-a);r.levels=levels.length;
+    if(levels.length>1&&flatL>0.5*L){const d=[];for(let i=1;i<levels.length;i++)d.push(levels[i-1]-levels[i]);d.sort((a,b)=>a-b);r.down=d[d.length>>1];r.downMin=d[0];r.downMax=d[d.length-1]}
+    const flat=flatL>0.5*L;r.kind=flat?'2d':'3d';
+    // sample points along the cutting path
+    const diag=Math.hypot(bx1-bx0,by1-by0)||1;let ds=Math.max(diag/3000,L/60000);if(dia)ds=Math.min(ds,dia/8);ds=Math.max(ds,L/120000);
+    const X=[],Y=[],Z=[],S=[],F=[];let sAcc=0,lastEnd=null;
+    for(const m of ms){const a0=m.p0*3;
+      if(lastEnd&&Math.hypot(P[a0]-lastEnd[0],P[a0+1]-lastEnd[1],P[a0+2]-lastEnd[2])>1e-6)sAcc+=1e9;   // rapid / gap between: a different pass
+      let carry=0;
+      for(let k=0;k<m.n-1;k++){const a=(m.p0+k)*3,b=a+3,dx=P[b]-P[a],dy=P[b+1]-P[a+1],dz=P[b+2]-P[a+2],sl=Math.hypot(dx,dy,dz);if(sl<=0)continue;
+        const fl=Math.abs(dz)<1e-4?1:0;let t=carry;
+        while(t<sl){const u=t/sl;X.push(P[a]+dx*u);Y.push(P[a+1]+dy*u);Z.push(P[a+2]+dz*u);S.push(sAcc+t);F.push(fl);t+=ds}
+        carry=t-sl;sAcc+=sl}
+      const e=(m.p0+m.n-1)*3;lastEnd=[P[e],P[e+1],P[e+2]]}
+    const N=X.length;if(N<4){r.single=true;continue}
+    // grid on XY
+    const R=dia?dia*1.25:diag/8,cell=Math.max(R/6,ds*2),gx=x=>Math.floor((x-bx0)/cell),gy=y=>Math.floor((y-by0)/cell),grid=new Map();
+    for(let i=0;i<N;i++){const k=gx(X[i])*100003+gy(Y[i]);let a=grid.get(k);if(!a)grid.set(k,a=[]);a.push(i)}
+    const Q=Math.min(N,8000),step=N/Q,ring=Math.ceil(R/cell),vals=[];let asked=0;
+    for(let q=0;q<Q;q++){const i=Math.floor(q*step);if(flat&&!F[i])continue;asked++;const cx=gx(X[i]),cy=gy(Y[i]);let best=Infinity;
+      for(let rr=0;rr<=ring;rr++){if((rr-1)*cell>best)break;
+        for(let ix=cx-rr;ix<=cx+rr;ix++)for(let iy=cy-rr;iy<=cy+rr;iy++){if(Math.max(Math.abs(ix-cx),Math.abs(iy-cy))!==rr)continue;const a=grid.get(ix*100003+iy);if(!a)continue;
+          for(const j of a){if(j===i)continue;
+            let d;if(flat){if(!F[j]||Math.abs(Z[j]-Z[i])>2e-4)continue;d=Math.hypot(X[j]-X[i],Y[j]-Y[i])}else d=Math.hypot(X[j]-X[i],Y[j]-Y[i],Z[j]-Z[i]);
+            if(d<1e-4||d>=best||d>R)continue;if(Math.abs(S[j]-S[i])<3*d+2*ds)continue;best=d}}}
+      if(best<Infinity)vals.push(best)}
+    if(vals.length<10||vals.length<0.3*asked){r.single=true;continue}   // only a few points have a neighbour pass (e.g. where a loop closes): one pass
+    vals.sort((a,b)=>a-b);const pc=f=>vals[Math.min(vals.length-1,Math.floor(f*vals.length))];
+    r.over=pc(0.5);r.overLo=pc(0.1);r.overHi=pc(0.9);r.dia=dia;
+    // looping / dynamic paths overlap themselves, so most gaps are small; the real step over is the biggest gap between loops
+    if(r.overHi>2.5*r.over){r.dyn=true;r.over=pc(0.97)}}
+  return out}
+function ensureSteps(){const c=cur,box=$('stepsBox');if(!c||!box)return;
+  if(c.steps){drawSteps();return}
+  setTimeout(()=>{if(cur!==c)return;try{c.steps=measureSteps(c)}catch(e){console.warn(e);c.steps=[]}drawSteps()},20)}
+function drawSteps(){const c=cur,box=$('stepsBox');if(!box||!c.steps)return;const u=c.units;
+  if(!c.steps.length){box.innerHTML='<p class="empty">No cutting moves.</p>';return}
+  const f=v=>v==null?'—':fmt(v),pct=(v,d)=>d&&v!=null?`${Math.round(v/d*100)}%`:'—';
+  box.innerHTML=`<div class="tblwrap"><table class="tl"><thead><tr><th>Tool</th><th style="text-align:right">Step over</th><th style="text-align:right">% of Ø</th><th style="text-align:right">Step down</th></tr></thead><tbody>${c.steps.map(r=>{
+    const t=r.tool,needD=!(t&&t.dia>0),dBox=needD?`<label class="tcm diain" title="Cutter diameter — not in the program (e.g. a sub program), type it to get % of Ø">Ø <input type="text" inputmode="decimal" data-dia="${r.ti}" value="${r.typed?fmt(r.dia):''}" placeholder="dia"></label>`:'';
+    const name=t?`<span class="sw" style="background:${TOOLCOL[t.idx%TOOLCOL.length]}"></span><span class="tnum">T${t.t}</span><div class="tcm">${esc(t.comment||'')}${t.dia>0?` · Ø${fmt(t.dia)}`:''}</div>${dBox}`:`<span class="tnum">Program</span><div class="tcm">no tool change (sub program?)</div>${dBox}`;
+    let so,pc;if(r.kind==='drill'){so='<span class="tcm">drill / plunge</span>';pc='—'}else if(r.single||r.over==null){so='<span class="tcm">single pass</span>';pc='—'}
+    else if(r.dyn){so=`${f(r.over)}<div class="tcm">looping path · biggest gap</div>`;pc=pct(r.over,r.dia)}
+    else{so=`${f(r.over)}${r.overHi-r.overLo>r.over*0.25?`<div class="tcm">${f(r.overLo)}–${f(r.overHi)}</div>`:''}`;pc=pct(r.over,r.dia)}
+    const sd=r.down!=null?`${f(r.down)}<div class="tcm">${r.levels} levels${r.downMax-r.downMin>r.down*0.25?` · ${f(r.downMin)}–${f(r.downMax)}`:''}</div>`:(r.kind==='3d'?'<span class="tcm">3D</span>':'—');
+    return `<tr data-m="${r.first>=0?r.first:''}"><td>${name}</td><td class="n">${so}</td><td class="n">${pc}</td><td class="n">${sd}</td></tr>`}).join('')}</tbody></table></div>
+  <p class="note">Measured from the toolpath (${u}): step over is the typical gap between neighbouring passes${c.steps.some(r=>r.kind==='3d')?' (3D surfacing measured along the surface)':''}; the small range under it is where most passes fall. For dynamic / looping paths it shows the biggest gap between loops (the forward step). Step down is the gap between flat cutting levels. Tap a tool to jump to it.</p>`}
+
 $('p-check').addEventListener('click',e=>{
   const t=e.target.closest('[data-tog],[data-off],[data-on]');
   if(t){const d=t.dataset;cfg.off=cfg.off||{};
@@ -1398,6 +1468,10 @@ $('p-check').addEventListener('click',e=>{
 $('p-check').addEventListener('keydown',e=>{if(e.key==='Enter'){const r=e.target.closest('.issue');if(r)openLine(+r.dataset.l)}});
 function openLine(l){if(l<0)return;showTab('program');manualUntil=0;jumpLine(l)}
 $('p-tools').addEventListener('click',e=>{const r=e.target.closest('tr[data-m]');if(r&&+r.dataset.m>=0){stop();prog=+r.dataset.m;manualUntil=0;req()}});
+$('p-stats').addEventListener('change',e=>{const i=e.target.closest('input[data-dia]');if(!i)return;const v=parseFloat(i.value.replace(',','.'));
+  cur.userDia=cur.userDia||{};if(v>0)cur.userDia[+i.dataset.dia]=v;else delete cur.userDia[+i.dataset.dia];cur.steps=null;ensureSteps()});
+$('p-stats').addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.matches('input[data-dia]'))e.target.blur()});
+$('p-stats').addEventListener('click',e=>{if(e.target.closest('label.diain'))return;const r=e.target.closest('tr[data-m]');if(r&&r.dataset.m!==''&&+r.dataset.m>=0){stop();prog=+r.dataset.m;manualUntil=0;req()}});
 
 let source='';
 function load(text,name,opts){opts=opts||{};text=String(text).replace(/\r\n?/g,'\n');
@@ -1422,6 +1496,7 @@ function showTab(t){if(t===tab)return;
   tab=t;document.querySelectorAll('.tabs button[data-t]').forEach(x=>{x.classList.toggle('on',x.dataset.t===t);x.setAttribute('aria-selected',x.dataset.t===t)});
   $('p-program').hidden=t!=='program';$('tabbody').hidden=t==='program';
   ['check','tools','stats','setup'].forEach(k=>$('p-'+k).hidden=k!==t);
+  if(t==='stats')ensureSteps();
   if(t==='program'){measureLH();ed.scrollTop=edTop;ed.scrollLeft=edLeft;syncLayer();rFrom=rTo=0;renderRows(true);lastLine=-2;if(playing)hideEd();req()}
   else $('tabbody').scrollTop=0}
 document.querySelectorAll('.tabs button[data-t]').forEach(b=>b.addEventListener('click',()=>showTab(b.dataset.t)));
