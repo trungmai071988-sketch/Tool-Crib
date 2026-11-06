@@ -75,6 +75,46 @@
   }
   .tab.active{color:var(--accent);border-bottom-color:var(--accent);}
 
+  /* sub-tabs inside the ShopNote tab */
+  .subtabs{display:flex;gap:6px;margin-bottom:12px;}
+  .subtab{
+    padding:7px 13px;border-radius:7px;font-size:12.5px;font-weight:600;cursor:pointer;
+    background:var(--panel);border:1px solid var(--line);color:var(--muted);
+  }
+  .subtab.active{border-color:var(--accent);color:var(--accent);}
+
+  /* ShopNote */
+  textarea{
+    width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--text);
+    border-radius:7px;padding:9px 10px;font-size:13.5px;font-family:var(--mono);
+    line-height:1.6;box-sizing:border-box;resize:vertical;
+  }
+  textarea:focus{outline:none;border-color:var(--accent);}
+  .note-card{
+    background:var(--panel2);border:1px solid var(--line);border-radius:9px;
+    padding:12px;margin-bottom:9px;cursor:pointer;
+  }
+  .note-card:hover{border-color:var(--accent-dim);}
+  .note-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px;}
+  .note-top .t{font-weight:800;font-size:14.5px;letter-spacing:0.3px;}
+  .note-top .d{font-family:var(--mono);font-size:11.5px;color:var(--muted);white-space:nowrap;}
+  .note-chips{margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;}
+  .chip{font-size:10px;background:#0d3d5c;color:#7fd4ff;padding:3px 7px;border-radius:8px;}
+  .chip.m{background:var(--accent-dim);color:#ffd694;}
+  .note-snip{margin-top:7px;color:var(--muted);font-size:12.5px;line-height:1.55;}
+  .note-body{font-size:14.5px;line-height:1.7;}
+  .note-body h3{
+    font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;
+    margin:18px 0 7px;font-weight:600;
+  }
+  .note-body h3:first-child{margin-top:0;}
+  .note-body p{margin:0 0 10px;}
+  .note-body ul,.note-body ol{margin:0 0 10px;padding-left:22px;}
+  .note-body li{margin-bottom:5px;}
+  .note-body b{color:var(--accent);}
+  .note-head{margin-bottom:14px;}
+  .note-head .t{font-size:21px;font-weight:700;color:var(--accent);line-height:1.3;}
+
   main{padding:14px;max-width:820px;margin:0 auto;padding-bottom:60px;}
   .side-quote{
     position:fixed;
@@ -420,7 +460,7 @@
   <div class="tab" data-tab="feeds">Speed &amp; Feed</div>
   <div class="tab" data-tab="ports">Ports</div>
   <div class="tab" data-tab="threads">Threads</div>
-  <div class="tab" data-tab="import">Import / Export</div>
+  <div class="tab" data-tab="import">-TM- ShopNote</div>
   <div class="tab" data-tab="backplot">G code Backplot</div>
 </div>
 
@@ -703,6 +743,105 @@
   </section>
 
   <section id="tab-import" style="display:none;">
+
+    <!-- sub-tabs: notes is the everyday side, data is admin-only -->
+    <div class="subtabs" id="subTabs">
+      <div class="subtab active" data-sub="notes">-TM- ShopNote</div>
+      <div class="subtab" data-sub="data" id="subTabData">Import / Export</div>
+    </div>
+
+    <!-- ===== SHOPNOTE ===== -->
+    <div id="sub-notes">
+
+      <div id="noteListView">
+        <div class="panel">
+          <div class="row">
+            <div class="field" style="flex:2;">
+              <label>Machine</label>
+              <select id="noteMachine"><option value="">All machines</option></select>
+            </div>
+            <div class="field" style="flex:2;">
+              <label>Tag</label>
+              <select id="noteTag"><option value="">All tags</option></select>
+            </div>
+            <div class="field" style="flex:3;">
+              <label>Keyword</label>
+              <input id="noteKeyword" type="text" placeholder="e.g. INHI, probe, offset">
+            </div>
+          </div>
+          <div class="row">
+            <div class="field" style="margin-bottom:0;">
+              <button id="noteResetBtn" class="secondary" type="button">Reset</button>
+            </div>
+            <div class="field" style="margin-bottom:0;">
+              <button id="noteNewBtn" type="button">+ New note</button>
+            </div>
+          </div>
+        </div>
+        <div class="count" id="noteCount"></div>
+        <div id="noteList"></div>
+      </div>
+
+      <div id="noteDetailView" style="display:none;"></div>
+
+      <div id="noteEditView" style="display:none;">
+        <div class="panel">
+          <div class="row">
+            <div class="field" style="flex:2;">
+              <label>Machine</label>
+              <input id="noteEditMachine" type="text" placeholder="e.g. Matsuura MX-520" list="noteMachineList">
+              <datalist id="noteMachineList"></datalist>
+            </div>
+            <div class="field" style="flex:3;">
+              <label>Title</label>
+              <input id="noteEditTitle" type="text" placeholder="e.g. Setting a LARGE (oversize) tool">
+            </div>
+          </div>
+          <div class="row">
+            <div class="field">
+              <label>Tags &mdash; comma separated</label>
+              <input id="noteEditTags" type="text" placeholder="e.g. ATC, tool manage">
+            </div>
+          </div>
+          <div class="field">
+            <label>Note</label>
+            <textarea id="noteEditBody" rows="16" placeholder="## Know first
+Plain lines are paragraphs.
+
+## Procedure
+- a dash starts a bullet
+1. a number starts a step
+
+Wrap something in **stars** to make it stand out."></textarea>
+          </div>
+          <div class="csv-row">
+            <button id="noteSaveBtn" type="button">Save note</button>
+            <button id="noteCancelBtn" class="secondary" type="button">Cancel</button>
+            <button id="noteDeleteBtn" class="danger" type="button" style="display:none;">Delete</button>
+          </div>
+          <div id="noteEditStatus"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <label style="margin-bottom:8px;display:block;">Shared notes (notes.json)</label>
+        <div class="hint">
+          Notes live in <b>notes.json</b> next to this page on GitHub &mdash; same deal as tools.json.
+          Notes you write here are saved on this device only.<br>
+          To share them: <b>Download notes.json</b>, then upload that file to GitHub replacing the old one.
+        </div>
+        <div class="csv-row">
+          <button class="secondary" id="downloadNotesBtn">Download notes.json</button>
+          <button class="secondary" id="resetNotesBtn">Clear local notes</button>
+        </div>
+        <div id="noteLocalCount" class="hint"></div>
+        <div id="noteStatus"></div>
+      </div>
+
+    </div>
+
+    <!-- ===== IMPORT / EXPORT (admin) ===== -->
+    <div id="sub-data" style="display:none;">
     <div class="panel">
       <label style="margin-bottom:8px;display:block;">Paste multiple tools at once</label>
       <div class="hint">
@@ -747,6 +886,8 @@ Maford, Carbide Drill, 0.5, MF-1187, 41.20, 1.25"></textarea>
       </div>
       <div id="localCount" class="hint"></div>
     </div>
+    </div>
+
   </section>
 
   <!-- G CODE BACKPLOT TAB -->
@@ -2454,6 +2595,287 @@ PICKERS.forEach(pk=>{
 });
 loadPorts();
 
+// ---- -TM- ShopNote ----
+// Notes live in notes.json next to this page, same pattern as tools.json.
+// Anything written here is saved on this device until you download the file
+// and upload it to GitHub.
+const NOTES_URL = 'notes.json';
+const LS_N_ADDED   = 'shopnote_added';
+const LS_N_DELETED = 'shopnote_deleted';
+
+let noteCatalog = [], notesAdded = [], notesDeleted = [], notes = [];
+let noteEditingId = null;
+
+function saveNotesLocal(){
+  try{
+    localStorage.setItem(LS_N_ADDED, JSON.stringify(notesAdded));
+    localStorage.setItem(LS_N_DELETED, JSON.stringify(notesDeleted));
+  }catch(e){
+    showStatus('noteStatus', 'Save failed — device storage is full or unavailable.', 'err');
+  }
+}
+
+async function loadNotes(){
+  notesAdded   = readLS(LS_N_ADDED);
+  notesDeleted = readLS(LS_N_DELETED);
+  try{
+    const res = await fetch(NOTES_URL, {cache:'no-cache'});
+    if(res.ok){
+      const data = await res.json();
+      if(Array.isArray(data)) noteCatalog = data;
+    }
+  }catch(e){ /* no notes.json yet is fine — you start with an empty book */ }
+  rebuildNotes();
+}
+
+function rebuildNotes(){
+  const del = new Set(notesDeleted);
+  const catIds = new Set(noteCatalog.map(n=>n.id));
+  notes = [
+    ...noteCatalog.filter(n=>!del.has(n.id)),
+    ...notesAdded.filter(n=>!catIds.has(n.id) && !del.has(n.id))
+  ];
+  refreshNoteFilters();
+  renderNoteList();
+  updateNoteLocalCount();
+}
+
+function updateNoteLocalCount(){
+  const el = document.getElementById('noteLocalCount');
+  if(!el) return;
+  const changed = notesAdded.length + notesDeleted.length;
+  el.innerHTML = changed === 0
+    ? notes.length + ' note' + (notes.length===1?'':'s') + ' — nothing unsaved on this device.'
+    : '<b>' + changed + ' change' + (changed===1?'':'s') + ' on this device.</b> ' +
+      'Not shared yet — download notes.json and upload it to GitHub.';
+}
+
+function noteTags(n){
+  return Array.isArray(n.tags) ? n.tags : String(n.tags||'').split(',').map(s=>s.trim()).filter(Boolean);
+}
+
+function refreshNoteFilters(){
+  const mSel = document.getElementById('noteMachine'), tSel = document.getElementById('noteTag');
+  const mPrev = mSel.value, tPrev = tSel.value;
+  const machines = [...new Set(notes.map(n=>n.machine).filter(Boolean))].sort();
+  const tags = [...new Set(notes.flatMap(noteTags))].sort();
+  mSel.innerHTML = '<option value="">All machines</option>' +
+    machines.map(m=>`<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('');
+  tSel.innerHTML = '<option value="">All tags</option>' +
+    tags.map(t=>`<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+  mSel.value = machines.includes(mPrev) ? mPrev : '';
+  tSel.value = tags.includes(tPrev) ? tPrev : '';
+  document.getElementById('noteMachineList').innerHTML =
+    machines.map(m=>`<option value="${escapeHtml(m)}"></option>`).join('');
+}
+
+// plain text in, readable HTML out. "## " heading, "- " bullet,
+// "1. " step, **stars** for emphasis. Everything else is a paragraph.
+function noteHtml(body){
+  const lines = String(body||'').split('\n');
+  const bold = s => escapeHtml(s).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+  let out = '', list = null, para = [];
+  const flushPara = ()=>{ if(para.length){ out += '<p>' + bold(para.join(' ')) + '</p>'; para = []; } };
+  const flushList = ()=>{ if(list){ out += '</' + list + '>'; list = null; } };
+  lines.forEach(raw=>{
+    const line = raw.trim();
+    if(line === ''){ flushPara(); flushList(); return; }
+    let m;
+    if((m = line.match(/^#{1,6}\s+(.*)$/))){
+      flushPara(); flushList();
+      out += '<h3>' + bold(m[1]) + '</h3>';
+    }else if((m = line.match(/^[-*]\s+(.*)$/))){
+      flushPara();
+      if(list !== 'ul'){ flushList(); out += '<ul>'; list = 'ul'; }
+      out += '<li>' + bold(m[1]) + '</li>';
+    }else if((m = line.match(/^\d+[.)]\s+(.*)$/))){
+      flushPara();
+      if(list !== 'ol'){ flushList(); out += '<ol>'; list = 'ol'; }
+      out += '<li>' + bold(m[1]) + '</li>';
+    }else{
+      flushList();
+      para.push(line);
+    }
+  });
+  flushPara(); flushList();
+  return out || '<p class="pt-c">(empty)</p>';
+}
+
+function noteSnippet(n){
+  const first = String(n.body||'').split('\n')
+    .map(s=>s.trim())
+    .find(s=>s && !/^#{1,6}\s/.test(s)) || '';
+  return first.replace(/\*\*/g, '').slice(0, 160);
+}
+
+function showNoteView(which){
+  document.getElementById('noteListView').style.display   = which==='list'   ? '' : 'none';
+  document.getElementById('noteDetailView').style.display = which==='detail' ? '' : 'none';
+  document.getElementById('noteEditView').style.display   = which==='edit'   ? '' : 'none';
+}
+
+function renderNoteList(){
+  const mF = document.getElementById('noteMachine').value;
+  const tF = document.getElementById('noteTag').value;
+  const kF = document.getElementById('noteKeyword').value.trim().toLowerCase();
+  const list = notes.filter(n=>{
+    if(mF && n.machine !== mF) return false;
+    if(tF && !noteTags(n).includes(tF)) return false;
+    if(kF){
+      const hay = [n.title, n.machine, n.body, noteTags(n).join(' ')].join(' ').toLowerCase();
+      if(!hay.includes(kF)) return false;
+    }
+    return true;
+  }).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
+
+  const countEl = document.getElementById('noteCount');
+  const listEl  = document.getElementById('noteList');
+
+  if(notes.length === 0){
+    countEl.textContent = '';
+    listEl.innerHTML = '<div class="empty">No notes yet. Hit <b>+ New note</b> and write the first one — ' +
+      'the thing you had to figure out the hard way is exactly what belongs here.</div>';
+    return;
+  }
+  if(list.length === 0){
+    countEl.textContent = '';
+    listEl.innerHTML = '<div class="empty">No notes match. Try clearing a filter.</div>';
+    return;
+  }
+  countEl.textContent = list.length + ' note' + (list.length===1?'':'s') + (mF ? ' — ' + mF : '');
+  listEl.innerHTML = list.map(n=>`
+    <div class="note-card" onclick="openNote('${n.id}')">
+      <div class="note-top">
+        <div class="t">${escapeHtml(n.title||'(untitled)')}</div>
+        <div class="d">${escapeHtml(n.date||'')}</div>
+      </div>
+      <div class="note-chips">
+        ${n.machine ? '<span class="chip m">'+escapeHtml(n.machine)+'</span>' : ''}
+        ${noteTags(n).map(t=>'<span class="chip">'+escapeHtml(t)+'</span>').join('')}
+      </div>
+      <div class="note-snip">${escapeHtml(noteSnippet(n))}</div>
+    </div>`).join('');
+}
+
+window.openNote = function(id){
+  const n = notes.find(x=>x.id===id);
+  if(!n) return;
+  document.getElementById('noteDetailView').innerHTML = `
+    <div style="margin-bottom:12px;">
+      <button class="secondary" type="button" onclick="closeNote()">&#8592; All notes</button>
+      <button class="secondary" type="button" onclick="editNote('${n.id}')" style="margin-left:8px;">Edit</button>
+    </div>
+    <div class="panel">
+      <div class="note-head">
+        <div class="t">${escapeHtml(n.title||'(untitled)')}</div>
+        <div class="note-chips">
+          ${n.machine ? '<span class="chip m">'+escapeHtml(n.machine)+'</span>' : ''}
+          ${noteTags(n).map(t=>'<span class="chip">'+escapeHtml(t)+'</span>').join('')}
+          ${n.date ? '<span class="d" style="font-family:var(--mono);font-size:11.5px;color:var(--muted);">updated '+escapeHtml(n.date)+'</span>' : ''}
+        </div>
+      </div>
+      <div class="note-body">${noteHtml(n.body)}</div>
+    </div>`;
+  showNoteView('detail');
+  document.getElementById('tab-import').scrollIntoView({behavior:'smooth', block:'start'});
+};
+
+window.closeNote = function(){ showNoteView('list'); };
+
+window.editNote = function(id){
+  const n = id ? notes.find(x=>x.id===id) : null;
+  noteEditingId = n ? n.id : null;
+  document.getElementById('noteEditMachine').value = n ? (n.machine||'') : '';
+  document.getElementById('noteEditTitle').value   = n ? (n.title||'')   : '';
+  document.getElementById('noteEditTags').value    = n ? noteTags(n).join(', ') : '';
+  document.getElementById('noteEditBody').value    = n ? (n.body||'')    : '';
+  document.getElementById('noteDeleteBtn').style.display = n ? '' : 'none';
+  showNoteView('edit');
+  document.getElementById('tab-import').scrollIntoView({behavior:'smooth', block:'start'});
+};
+
+document.getElementById('noteNewBtn').addEventListener('click', ()=>editNote(null));
+document.getElementById('noteCancelBtn').addEventListener('click', ()=>showNoteView('list'));
+
+document.getElementById('noteSaveBtn').addEventListener('click', ()=>{
+  const title = document.getElementById('noteEditTitle').value.trim();
+  if(!title){ showStatus('noteEditStatus', 'Give the note a title first.', 'err'); return; }
+  const rec = {
+    id: noteEditingId || ('n_' + Date.now() + '_' + Math.random().toString(36).slice(2,6)),
+    machine: document.getElementById('noteEditMachine').value.trim(),
+    title,
+    tags: document.getElementById('noteEditTags').value.split(',').map(s=>s.trim()).filter(Boolean),
+    date: new Date().toISOString().slice(0,10),
+    body: document.getElementById('noteEditBody').value
+  };
+  // editing a note that came from notes.json: hide the original, keep the edit
+  if(noteEditingId && noteCatalog.some(n=>n.id===noteEditingId) && !notesDeleted.includes(noteEditingId)){
+    notesDeleted.push(noteEditingId);
+  }
+  const at = notesAdded.findIndex(n=>n.id===rec.id);
+  if(at >= 0) notesAdded[at] = rec; else notesAdded.push(rec);
+  saveNotesLocal();
+  rebuildNotes();
+  openNote(rec.id);
+});
+
+document.getElementById('noteDeleteBtn').addEventListener('click', ()=>{
+  if(!noteEditingId) return;
+  const n = notes.find(x=>x.id===noteEditingId);
+  if(!confirm('Delete "' + (n ? n.title : 'this note') + '"? It stays on GitHub until you upload a new notes.json.')) return;
+  const at = notesAdded.findIndex(x=>x.id===noteEditingId);
+  if(at >= 0) notesAdded.splice(at,1);
+  if(!notesDeleted.includes(noteEditingId)) notesDeleted.push(noteEditingId);
+  saveNotesLocal();
+  rebuildNotes();
+  showNoteView('list');
+});
+
+['noteMachine','noteTag'].forEach(id=>
+  document.getElementById(id).addEventListener('change', renderNoteList));
+document.getElementById('noteKeyword').addEventListener('input', debounce(renderNoteList, 130));
+document.getElementById('noteResetBtn').addEventListener('click', ()=>{
+  ['noteMachine','noteTag','noteKeyword'].forEach(id=>{ document.getElementById(id).value = ''; });
+  renderNoteList();
+});
+
+document.getElementById('downloadNotesBtn').addEventListener('click', ()=>{
+  if(notes.length === 0){ showStatus('noteStatus','No notes to save yet.','err'); return; }
+  const text = '[\n' + notes.map(n=>JSON.stringify(n)).join(',\n') + '\n]\n';
+  const blob = new Blob([text], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'notes.json';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showStatus('noteStatus', `Downloaded notes.json with ${notes.length} note(s). Upload it to GitHub to replace the old one.`, 'ok');
+});
+
+document.getElementById('resetNotesBtn').addEventListener('click', ()=>{
+  if(notesAdded.length === 0 && notesDeleted.length === 0){
+    showStatus('noteStatus','No local notes to clear.','ok'); return;
+  }
+  if(!confirm('Discard the ' + notesAdded.length + ' note(s) written and ' + notesDeleted.length +
+              ' removed on this device? What is on GitHub is not affected.')) return;
+  notesAdded = []; notesDeleted = [];
+  saveNotesLocal();
+  rebuildNotes();
+  showNoteView('list');
+  showStatus('noteStatus', 'Back to the shared notes.', 'ok');
+});
+
+// sub-tabs
+function switchSub(name){
+  document.querySelectorAll('.subtab').forEach(s=>s.classList.toggle('active', s.dataset.sub === name));
+  document.getElementById('sub-notes').style.display = name === 'notes' ? '' : 'none';
+  document.getElementById('sub-data').style.display  = name === 'data'  ? '' : 'none';
+}
+document.querySelectorAll('.subtab').forEach(s=>
+  s.addEventListener('click', ()=>switchSub(s.dataset.sub)));
+
+switchSub('notes');
+
+loadNotes();
 loadTools();
 </script>
 
