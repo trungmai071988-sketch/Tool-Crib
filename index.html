@@ -112,6 +112,12 @@
   .note-body ul,.note-body ol{margin:0 0 10px;padding-left:22px;}
   .note-body li{margin-bottom:5px;}
   .note-body b{color:var(--accent);}
+  .note-body code{
+    font-family:var(--mono);font-size:13.5px;background:var(--panel2);
+    border:1px solid var(--line);border-radius:5px;padding:2px 6px;
+    color:var(--good);white-space:nowrap;
+  }
+  .note-snip code{font-family:var(--mono);color:var(--good);}
   .note-banner{
     background:var(--accent-dim);border:1px solid var(--accent);border-radius:9px;
     padding:11px 13px;margin-bottom:12px;font-size:13px;line-height:1.6;color:var(--text);
@@ -2743,7 +2749,9 @@ function refreshNoteFilters(){
 // "1. " step, **stars** for emphasis. Everything else is a paragraph.
 function noteHtml(body){
   const lines = String(body||'').split('\n');
-  const bold = s => escapeHtml(s).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+  const bold = s => escapeHtml(s)
+    .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>');
   let out = '', list = null, para = [];
   const flushPara = ()=>{ if(para.length){ out += '<p>' + bold(para.join(' ')) + '</p>'; para = []; } };
   const flushList = ()=>{ if(list){ out += '</' + list + '>'; list = null; } };
@@ -2762,6 +2770,9 @@ function noteHtml(body){
       flushPara();
       if(list !== 'ol'){ flushList(); out += '<ol>'; list = 'ol'; }
       out += '<li>' + bold(m[1]) + '</li>';
+    }else if(list && /<\/li>$/.test(out)){
+      // a wrapped line right under a bullet belongs to that bullet
+      out = out.replace(/<\/li>$/, ' ' + bold(line) + '</li>');
     }else{
       flushList();
       para.push(line);
