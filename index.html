@@ -2638,7 +2638,8 @@ const LS_N_DELETED = 'shopnote_deleted';
 const NOTE_SECTIONS = [
   {id:'machine',   label:'Machine Fix / Troubleshoot', who:'At the machine — alarms, ATC, setup, what broke and what fixed it.'},
   {id:'mastercam', label:'Mastercam',                  who:'At the desk — posts, toolpaths, settings, the steps nobody remembers.'},
-  {id:'other',     label:'Other',                      who:'Anything that is neither.'}
+  {id:'probe',     label:'Probe',                      who:'Probing — cycles, calibration, work offsets, probe alarms.'},
+  {id:'other',     label:'Other',                      who:'Anything else — shop procedures, where things live, inspection gear.'}
 ];
 const sectionLabel = id =>
   (NOTE_SECTIONS.find(s=>s.id===id) || NOTE_SECTIONS[0]).label;
