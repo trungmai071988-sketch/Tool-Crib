@@ -784,11 +784,11 @@
         <div class="hint" id="sectionWho" style="margin:-4px 0 12px;"></div>
         <div class="panel">
           <div class="row">
-            <div class="field" style="flex:2;">
+            <div class="field" id="noteMachineField" style="flex:2;">
               <label>Machine / Software</label>
               <select id="noteMachine"><option value="">Everything</option></select>
             </div>
-            <div class="field" style="flex:2;">
+            <div class="field" id="noteTagField" style="flex:2;">
               <label>Tag</label>
               <select id="noteTag"><option value="">All tags</option></select>
             </div>
@@ -2716,6 +2716,7 @@ function renderSectionBar(){
     b.addEventListener('click', ()=>{
       noteSection = b.dataset.section;
       renderSectionBar();
+      refreshNoteFilters();
       renderNoteList();
     }));
   const s = NOTE_SECTIONS.find(x=>x.id===noteSection);
@@ -2731,8 +2732,11 @@ function noteTags(n){
 function refreshNoteFilters(){
   const mSel = document.getElementById('noteMachine'), tSel = document.getElementById('noteTag');
   const mPrev = mSel.value, tPrev = tSel.value;
-  const machines = [...new Set(notes.map(n=>n.machine).filter(Boolean))].sort();
-  const tags = [...new Set(notes.flatMap(noteTags))].sort();
+  // only offer machines and tags that exist in the section you are looking at,
+  // otherwise picking one gives an empty list
+  const inScope = noteSection ? notes.filter(n=>noteSectionOf(n)===noteSection) : notes;
+  const machines = [...new Set(inScope.map(n=>n.machine).filter(Boolean))].sort();
+  const tags = [...new Set(inScope.flatMap(noteTags))].sort();
   mSel.innerHTML = '<option value="">Everything</option>' +
     machines.map(m=>`<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('');
   tSel.innerHTML = '<option value="">All tags</option>' +
@@ -2743,6 +2747,10 @@ function refreshNoteFilters(){
   const suggest = [...new Set([...machines, 'Mastercam', 'Matsuura MX-520'])].sort();
   document.getElementById('noteMachineList').innerHTML =
     suggest.map(m=>`<option value="${escapeHtml(m)}"></option>`).join('');
+  // a dropdown with nothing to choose between is just clutter — hide it.
+  // Mastercam notes are about the software, so there is rarely a machine to pick.
+  document.getElementById('noteMachineField').style.display = machines.length > 1 ? '' : 'none';
+  document.getElementById('noteTagField').style.display     = tags.length     > 1 ? '' : 'none';
 }
 
 // plain text in, readable HTML out. "## " heading, "- " bullet,
