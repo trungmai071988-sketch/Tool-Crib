@@ -112,6 +112,20 @@
   .note-body ul,.note-body ol{margin:0 0 10px;padding-left:22px;}
   .note-body li{margin-bottom:5px;}
   .note-body b{color:var(--accent);}
+  .note-banner{
+    background:var(--accent-dim);border:1px solid var(--accent);border-radius:9px;
+    padding:11px 13px;margin-bottom:12px;font-size:13px;line-height:1.6;color:var(--text);
+  }
+  .note-banner b{color:var(--accent);}
+  .sectionbar{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:12px;}
+  .sectionbar button{
+    background:var(--panel);border:1px solid var(--line);color:var(--muted);
+    padding:9px 14px;border-radius:999px;font-size:12.5px;font-weight:600;
+    cursor:pointer;min-height:44px;
+  }
+  .sectionbar button:hover{border-color:var(--accent-dim);color:var(--text);}
+  .sectionbar button.on{background:var(--accent);border-color:var(--accent);color:#1a1400;}
+  .chip.s{background:#1f3d22;color:#8fe39a;}
   .note-head{margin-bottom:14px;}
   .note-head .t{font-size:21px;font-weight:700;color:var(--accent);line-height:1.3;}
 
@@ -753,12 +767,20 @@
     <!-- ===== SHOPNOTE ===== -->
     <div id="sub-notes">
 
+      <div class="note-banner">
+        <b>Notes you write stay on your own phone or PC.</b>
+        Nobody else sees them. If you add or change a note that the rest of the shop should have,
+        tell <b>-TM-</b> so he can put it up for everyone.
+      </div>
+
       <div id="noteListView">
+        <div class="sectionbar" id="sectionBar"></div>
+        <div class="hint" id="sectionWho" style="margin:-4px 0 12px;"></div>
         <div class="panel">
           <div class="row">
             <div class="field" style="flex:2;">
-              <label>Machine</label>
-              <select id="noteMachine"><option value="">All machines</option></select>
+              <label>Machine / Software</label>
+              <select id="noteMachine"><option value="">Everything</option></select>
             </div>
             <div class="field" style="flex:2;">
               <label>Tag</label>
@@ -788,11 +810,17 @@
         <div class="panel">
           <div class="row">
             <div class="field" style="flex:2;">
-              <label>Machine</label>
-              <input id="noteEditMachine" type="text" placeholder="e.g. Matsuura MX-520" list="noteMachineList">
+              <label>Section</label>
+              <select id="noteEditSection"></select>
+            </div>
+            <div class="field" style="flex:2;">
+              <label>Machine / Software</label>
+              <input id="noteEditMachine" type="text" placeholder="e.g. Matsuura MX-520, Mastercam" list="noteMachineList">
               <datalist id="noteMachineList"></datalist>
             </div>
-            <div class="field" style="flex:3;">
+          </div>
+          <div class="row">
+            <div class="field">
               <label>Title</label>
               <input id="noteEditTitle" type="text" placeholder="e.g. Setting a LARGE (oversize) tool">
             </div>
@@ -818,6 +846,9 @@ Wrap something in **stars** to make it stand out."></textarea>
             <button id="noteSaveBtn" type="button">Save note</button>
             <button id="noteCancelBtn" class="secondary" type="button">Cancel</button>
             <button id="noteDeleteBtn" class="danger" type="button" style="display:none;">Delete</button>
+          </div>
+          <div class="hint" style="margin-top:8px;">
+            Saving keeps this on your device only. Let <b>-TM-</b> know so it goes up for the whole shop.
           </div>
           <div id="noteEditStatus"></div>
         </div>
@@ -2603,8 +2634,18 @@ const NOTES_URL = 'notes.json';
 const LS_N_ADDED   = 'shopnote_added';
 const LS_N_DELETED = 'shopnote_deleted';
 
+// Sections — the top-level split. Add one here and it shows up everywhere.
+const NOTE_SECTIONS = [
+  {id:'machine',   label:'Machine Fix / Troubleshoot', who:'At the machine — alarms, ATC, setup, what broke and what fixed it.'},
+  {id:'mastercam', label:'Mastercam',                  who:'At the desk — posts, toolpaths, settings, the steps nobody remembers.'},
+  {id:'other',     label:'Other',                      who:'Anything that is neither.'}
+];
+const sectionLabel = id =>
+  (NOTE_SECTIONS.find(s=>s.id===id) || NOTE_SECTIONS[0]).label;
+
 let noteCatalog = [], notesAdded = [], notesDeleted = [], notes = [];
 let noteEditingId = null;
+let noteSection = '';   // '' = every section
 
 function saveNotesLocal(){
   try{
@@ -2636,6 +2677,7 @@ function rebuildNotes(){
     ...notesAdded.filter(n=>!catIds.has(n.id) && !del.has(n.id))
   ];
   refreshNoteFilters();
+  renderSectionBar();
   renderNoteList();
   updateNoteLocalCount();
 }
@@ -2650,6 +2692,31 @@ function updateNoteLocalCount(){
       'Not shared yet — download notes.json and upload it to GitHub.';
 }
 
+function noteSectionOf(n){
+  return NOTE_SECTIONS.some(s=>s.id===n.section) ? n.section : 'machine';
+}
+
+function renderSectionBar(){
+  const bar = document.getElementById('sectionBar');
+  const counts = {};
+  notes.forEach(n=>{ const s = noteSectionOf(n); counts[s] = (counts[s]||0)+1; });
+  const btn = (id, label, n) =>
+    `<button type="button" class="${noteSection===id?'on':''}" data-section="${id}">` +
+    `${escapeHtml(label)}${n ? ' <span style="opacity:.65">'+n+'</span>' : ''}</button>`;
+  bar.innerHTML = btn('', 'All', notes.length) +
+    NOTE_SECTIONS.map(s=>btn(s.id, s.label, counts[s.id]||0)).join('');
+  bar.querySelectorAll('button').forEach(b=>
+    b.addEventListener('click', ()=>{
+      noteSection = b.dataset.section;
+      renderSectionBar();
+      renderNoteList();
+    }));
+  const s = NOTE_SECTIONS.find(x=>x.id===noteSection);
+  const who = document.getElementById('sectionWho');
+  who.innerHTML = s ? escapeHtml(s.who) : '';
+  who.style.display = s ? '' : 'none';
+}
+
 function noteTags(n){
   return Array.isArray(n.tags) ? n.tags : String(n.tags||'').split(',').map(s=>s.trim()).filter(Boolean);
 }
@@ -2659,14 +2726,16 @@ function refreshNoteFilters(){
   const mPrev = mSel.value, tPrev = tSel.value;
   const machines = [...new Set(notes.map(n=>n.machine).filter(Boolean))].sort();
   const tags = [...new Set(notes.flatMap(noteTags))].sort();
-  mSel.innerHTML = '<option value="">All machines</option>' +
+  mSel.innerHTML = '<option value="">Everything</option>' +
     machines.map(m=>`<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('');
   tSel.innerHTML = '<option value="">All tags</option>' +
     tags.map(t=>`<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
   mSel.value = machines.includes(mPrev) ? mPrev : '';
   tSel.value = tags.includes(tPrev) ? tPrev : '';
+  // suggestions in the editor: whatever is already in use, plus a few common ones
+  const suggest = [...new Set([...machines, 'Mastercam', 'Matsuura MX-520'])].sort();
   document.getElementById('noteMachineList').innerHTML =
-    machines.map(m=>`<option value="${escapeHtml(m)}"></option>`).join('');
+    suggest.map(m=>`<option value="${escapeHtml(m)}"></option>`).join('');
 }
 
 // plain text in, readable HTML out. "## " heading, "- " bullet,
@@ -2719,6 +2788,7 @@ function renderNoteList(){
   const tF = document.getElementById('noteTag').value;
   const kF = document.getElementById('noteKeyword').value.trim().toLowerCase();
   const list = notes.filter(n=>{
+    if(noteSection && noteSectionOf(n) !== noteSection) return false;
     if(mF && n.machine !== mF) return false;
     if(tF && !noteTags(n).includes(tF)) return false;
     if(kF){
@@ -2739,10 +2809,13 @@ function renderNoteList(){
   }
   if(list.length === 0){
     countEl.textContent = '';
-    listEl.innerHTML = '<div class="empty">No notes match. Try clearing a filter.</div>';
+    listEl.innerHTML = '<div class="empty">Nothing in ' +
+      (noteSection ? '<b>'+escapeHtml(sectionLabel(noteSection))+'</b>' : 'this filter') +
+      ' yet. Hit <b>+ New note</b> to start it off.</div>';
     return;
   }
-  countEl.textContent = list.length + ' note' + (list.length===1?'':'s') + (mF ? ' — ' + mF : '');
+  countEl.textContent = list.length + ' note' + (list.length===1?'':'s') +
+    (noteSection ? ' — ' + sectionLabel(noteSection) : '') + (mF ? ' — ' + mF : '');
   listEl.innerHTML = list.map(n=>`
     <div class="note-card" onclick="openNote('${n.id}')">
       <div class="note-top">
@@ -2750,6 +2823,7 @@ function renderNoteList(){
         <div class="d">${escapeHtml(n.date||'')}</div>
       </div>
       <div class="note-chips">
+        ${noteSection ? '' : '<span class="chip s">'+escapeHtml(sectionLabel(noteSectionOf(n)))+'</span>'}
         ${n.machine ? '<span class="chip m">'+escapeHtml(n.machine)+'</span>' : ''}
         ${noteTags(n).map(t=>'<span class="chip">'+escapeHtml(t)+'</span>').join('')}
       </div>
@@ -2769,6 +2843,7 @@ window.openNote = function(id){
       <div class="note-head">
         <div class="t">${escapeHtml(n.title||'(untitled)')}</div>
         <div class="note-chips">
+          <span class="chip s">${escapeHtml(sectionLabel(noteSectionOf(n)))}</span>
           ${n.machine ? '<span class="chip m">'+escapeHtml(n.machine)+'</span>' : ''}
           ${noteTags(n).map(t=>'<span class="chip">'+escapeHtml(t)+'</span>').join('')}
           ${n.date ? '<span class="d" style="font-family:var(--mono);font-size:11.5px;color:var(--muted);">updated '+escapeHtml(n.date)+'</span>' : ''}
@@ -2785,6 +2860,11 @@ window.closeNote = function(){ showNoteView('list'); };
 window.editNote = function(id){
   const n = id ? notes.find(x=>x.id===id) : null;
   noteEditingId = n ? n.id : null;
+  const secSel = document.getElementById('noteEditSection');
+  secSel.innerHTML = NOTE_SECTIONS.map(s=>
+    `<option value="${s.id}">${escapeHtml(s.label)}</option>`).join('');
+  // a new note lands in whichever section you were looking at
+  secSel.value = n ? noteSectionOf(n) : (noteSection || 'machine');
   document.getElementById('noteEditMachine').value = n ? (n.machine||'') : '';
   document.getElementById('noteEditTitle').value   = n ? (n.title||'')   : '';
   document.getElementById('noteEditTags').value    = n ? noteTags(n).join(', ') : '';
@@ -2802,6 +2882,7 @@ document.getElementById('noteSaveBtn').addEventListener('click', ()=>{
   if(!title){ showStatus('noteEditStatus', 'Give the note a title first.', 'err'); return; }
   const rec = {
     id: noteEditingId || ('n_' + Date.now() + '_' + Math.random().toString(36).slice(2,6)),
+    section: document.getElementById('noteEditSection').value,
     machine: document.getElementById('noteEditMachine').value.trim(),
     title,
     tags: document.getElementById('noteEditTags').value.split(',').map(s=>s.trim()).filter(Boolean),
