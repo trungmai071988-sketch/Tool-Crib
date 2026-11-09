@@ -118,6 +118,23 @@
     color:var(--good);white-space:nowrap;
   }
   .note-snip code{font-family:var(--mono);color:var(--good);}
+  .note-body figure{margin:12px 0;}
+  .note-body figure img{
+    display:block;max-width:100%;height:auto;border:1px solid var(--line);
+    border-radius:8px;background:var(--panel2);cursor:zoom-in;
+  }
+  .note-body figure img:hover{border-color:var(--accent-dim);}
+  .note-body figcaption{
+    margin-top:6px;font-size:12px;color:var(--muted);line-height:1.5;
+  }
+  .hint code{
+    font-family:var(--mono);font-size:12px;background:var(--panel2);
+    border:1px solid var(--line);border-radius:4px;padding:1px 5px;color:var(--good);
+  }
+  .note-body .img-missing{
+    border:1px dashed var(--line);border-radius:8px;padding:14px;
+    font-size:12.5px;color:var(--muted);font-family:var(--mono);
+  }
   .note-banner{
     background:var(--accent-dim);border:1px solid var(--accent);border-radius:9px;
     padding:11px 13px;margin-bottom:12px;font-size:13px;line-height:1.6;color:var(--text);
@@ -846,7 +863,17 @@ Plain lines are paragraphs.
 - a dash starts a bullet
 1. a number starts a step
 
-Wrap something in **stars** to make it stand out."></textarea>
+Wrap something in **stars** to make it stand out.
+Wrap code in `backticks`.
+
+img: notes-img/my-photo.jpg | what the photo shows"></textarea>
+          <div class="hint" style="margin-top:6px;">
+            <b>Formatting:</b> <code>## </code> heading &middot; <code>- </code> bullet &middot;
+            <code>1. </code> numbered step &middot; <code>**bold**</code> &middot;
+            <code>`code`</code><br>
+            <b>Photo:</b> <code>img: notes-img/file.jpg | caption</code> &mdash; the file has to be
+            uploaded to GitHub first, in the <code>notes-img</code> folder. Caption is optional.
+          </div>
           </div>
           <div class="csv-row">
             <button id="noteSaveBtn" type="button">Save note</button>
@@ -2768,7 +2795,18 @@ function noteHtml(body){
     const line = raw.trim();
     if(line === ''){ flushPara(); flushList(); return; }
     let m;
-    if((m = line.match(/^#{1,6}\s+(.*)$/))){
+    // a picture: ![caption](file.png)  or  img: file.png | caption
+    if((m = line.match(/^!\[(.*)\]\(([^)]+)\)$/)) ||
+       (m = line.match(/^img:\s*([^|]+?)\s*(?:\|\s*(.*))?$/i)) && (m = [m[0], m[2]||'', m[1]])){
+      flushPara(); flushList();
+      const src = escapeHtml(m[2].trim());
+      const cap = m[1].trim();
+      out += `<figure><a href="${src}" target="_blank" rel="noopener">` +
+             `<img src="${src}" alt="${escapeHtml(cap)}" loading="lazy" ` +
+             `onerror="this.parentNode.outerHTML='&lt;div class=&quot;img-missing&quot;&gt;` +
+             `image not found: ${src}&lt;/div&gt;'"></a>` +
+             (cap ? `<figcaption>${bold(cap)}</figcaption>` : '') + `</figure>`;
+    }else if((m = line.match(/^#{1,6}\s+(.*)$/))){
       flushPara(); flushList();
       out += '<h3>' + bold(m[1]) + '</h3>';
     }else if((m = line.match(/^[-*]\s+(.*)$/))){
@@ -2794,7 +2832,7 @@ function noteHtml(body){
 function noteSnippet(n){
   const first = String(n.body||'').split('\n')
     .map(s=>s.trim())
-    .find(s=>s && !/^#{1,6}\s/.test(s)) || '';
+    .find(s=>s && !/^#{1,6}\s/.test(s) && !/^!\[/.test(s) && !/^img:/i.test(s)) || '';
   return first.replace(/\*\*/g, '').slice(0, 160);
 }
 
