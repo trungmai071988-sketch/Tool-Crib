@@ -105,7 +105,12 @@ button{cursor:pointer}
 .code{position:relative;height:44vh;overflow:auto;font-family:var(--f-mono);font-size:14px;background:var(--bg);overscroll-behavior:contain}
 #layer,#hlLayer{position:absolute;top:0;left:0;right:0;will-change:transform;pointer-events:none}
 #rows{position:absolute;top:0;left:0;right:0}
-#edWrap{position:absolute;inset:0;z-index:2}
+#vScroll{position:absolute;inset:0;overflow:auto;z-index:1;cursor:text;overscroll-behavior:contain}
+#vSpacer{width:1px;height:1px}
+/* view mode: the browser edit box (whole program) is switched off - it is slow with big programs; on only while you edit */
+#edWrap{position:absolute;inset:0;z-index:2;content-visibility:hidden;pointer-events:none}
+.code.editing #edWrap{content-visibility:visible;pointer-events:auto}
+.code.editing #vScroll{visibility:hidden}
 #codeText{position:absolute;inset:0;width:100%;height:100%;margin:0;border:0;outline:none;resize:none;background:transparent;color:transparent;caret-color:var(--ink);
   font-family:var(--f-mono);font-size:inherit;font-weight:400;line-height:22px;letter-spacing:normal;tab-size:4;white-space:pre;overflow:auto;padding:0 14px 0 var(--numw,58px);z-index:2}
 #codeText::selection{background:color-mix(in srgb,var(--accent) 38%,transparent);color:transparent}
@@ -312,7 +317,7 @@ td.n{font-family:var(--f-mono);font-size:13px;text-align:right}
         <div class="frow"><input id="fFind" type="text" placeholder="Find" spellcheck="false" autocomplete="off" aria-label="Find"><button class="mini fnav" id="fPrev" title="Find previous (Shift+F3 or Shift+Enter)" aria-label="Find previous">▲</button><button class="mini fnav" id="fNext" title="Find next (F3 or Enter)" aria-label="Find next">▼</button><span class="fcount" id="fCount" role="status"></span><button class="mini fnav" id="fClose" title="Close (Esc)" aria-label="Close find">✕</button></div>
         <div class="frow"><input id="fRep" type="text" placeholder="Replace with" spellcheck="false" autocomplete="off" aria-label="Replace with"><button class="mini" id="fRepOne" title="Replace this one and go to the next (Enter in the Replace box)">Replace</button><button class="mini" id="fRepAll" title="Replace every match in the program">Replace all</button><button class="mini" id="fUndo" hidden title="Put back everything Replace all changed">Undo</button><label><input type="checkbox" id="fCase"> Match case</label><label title="T1 finds T1 but not T12. Z3 finds Z3 and Z3. but not Z3.5"><input type="checkbox" id="fWord"> Whole word</label></div>
       </div>
-      <div class="code" id="code"><div id="hlLayer"><div class="hlbar" id="hlbar" hidden></div></div><div id="layer"><div id="hits"></div><div id="rows"></div></div><div id="edWrap"><textarea id="codeText" wrap="off" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" aria-label="Program — click to edit, arrow keys move line by line"></textarea></div></div>
+      <div class="code" id="code"><div id="hlLayer"><div class="hlbar" id="hlbar" hidden></div></div><div id="layer"><div id="hits"></div><div id="rows"></div></div><div id="vScroll" aria-hidden="true"><div id="vSpacer"></div></div><div id="edWrap"><textarea id="codeText" wrap="off" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" aria-label="Program — click to edit, arrow keys move line by line"></textarea></div></div>
     </section>
       <div class="tabbody" id="tabbody" hidden>
         <section id="p-check" hidden></section>
@@ -1098,7 +1103,7 @@ function advance(dt){if(!cur||!cur.moves.length){stop();return}
   while(budget>0&&prog<mv.length){const i=Math.floor(prog),w=wt[i],rem=(1-(prog-i))*w;if(budget>=rem){budget-=rem;prog=i+1}else{prog+=budget/w;budget=0}}
   if(prog>=mv.length){prog=mv.length;stop()}}
 function play(){if(!cur||!cur.moves.length)return;if(prog>=cur.moves.length)prog=0;playing=true;manualUntil=0;hideEd();$('playIco').innerHTML='<path d="M3 2h4v12H3zM9 2h4v12H9z"/>';$('bPlay').title='Pause';req()}
-function stop(){playing=false;showEd();$('playIco').innerHTML='<path d="M4 2l10 6-10 6z"/>';$('bPlay').title='Play';req()}
+function stop(){playing=false;$('playIco').innerHTML='<path d="M4 2l10 6-10 6z"/>';$('bPlay').title='Play';req()}
 
 /* ---------------- Program listing (virtualized, highlight follows) ---------------- */
 const F={on:false,dirty:true,re:null,starts:new Int32Array(0),len:0,cur:-1,anchor:0};
@@ -1107,24 +1112,36 @@ let LH=22;  // real line pitch of the editor; at 90% / 67% zoom it is not exactl
    With a big program, the browser does work for every line of that box whenever anything near it changes or it scrolls
    (about 15-25 ms each time on an 88,000-line program). The coloured listing in front of it is what you see anyway, so while playing
    it scrolls on its own; the edit box comes back (in a few ms, its layout is kept) when you pause, step, click or press a key. */
-let edHidden=false,vTop=0,vLeft=0,edH=400,edW=400;
-const edTopNow=()=>edHidden?vTop:ed.scrollTop,edLeftNow=()=>edHidden?vLeft:ed.scrollLeft;
-function hideEd(){if(edHidden||typeof tab==='undefined'||tab!=='program'||$('p-program').hidden)return;
-  edH=ed.clientHeight;edW=ed.clientWidth;vTop=ed.scrollTop;vLeft=ed.scrollLeft;if(document.activeElement===ed)ed.blur();
-  $('edWrap').style.contentVisibility='hidden';edHidden=true}
-function showEd(){if(!edHidden)return;$('edWrap').style.contentVisibility='';edHidden=false;ed.scrollTop=vTop;ed.scrollLeft=vLeft;syncLayer();renderRows(false)}
-function measureLH(){if(edHidden)return false;const n=liveLines.length,sh=ed.scrollHeight;const v=(n>0&&sh>ed.clientHeight+2)?sh/n:RH;CW=0;if(Math.abs(v-LH)>1e-7){LH=v;return true}return false}
+let edHidden=true,maxLen=0;
+// program text waiting to go into the edit box: putting 4 MB into it takes seconds, so it only happens the first time you edit
+let edPend=null;
+const getText=()=>edPend!=null?edPend:ed.value;
+const selS=()=>edPend!=null?(lineStarts[Math.max(0,shownLine())]||0):ed.selectionStart,selE=()=>edPend!=null?selS():ed.selectionEnd;
+function setSel(a,b){if(edPend==null)try{ed.setSelectionRange(a,b)}catch(_){}}
+function fillEd(){if(edPend!=null){const t=edPend;edPend=null;ed.value=t}}
+const vs=$('vScroll'),vSp=$('vSpacer');
+const scrTop=()=>edHidden?vs.scrollTop:ed.scrollTop,scrLeft=()=>edHidden?vs.scrollLeft:ed.scrollLeft;
+const scrH=()=>(edHidden?vs.clientHeight:ed.clientHeight)||400,scrW=()=>(edHidden?vs.clientWidth:ed.clientWidth)||400;
+function setScr(t,l){const el=edHidden?vs:ed;if(t!=null)el.scrollTop=t;if(l!=null)el.scrollLeft=l}
+const edTopNow=scrTop,edLeftNow=scrLeft;
+function sizeSpacer(){vSp.style.height=(liveLines.length*RH+2)+'px';vSp.style.width=Math.ceil(numW+maxLen*(charW()||8.4)+40)+'px'}
+function hideEd(){if(edHidden)return;const line=ed.scrollTop/LH,l=ed.scrollLeft;edHidden=true;if(document.activeElement===ed)ed.blur();
+  codeBox.classList.remove('editing');LH=RH;sizeSpacer();vs.scrollTop=line*RH;vs.scrollLeft=l;syncLayer();rFrom=rTo=0;renderRows(true);if(lastLine>=0)hlbar.style.transform=`translateY(${(lastLine*LH).toFixed(3)}px)`}
+function showEd(){if(!edHidden)return;fillEd();const line=vs.scrollTop/RH,l=vs.scrollLeft;codeBox.classList.add('editing');edHidden=false;measureLH();
+  ed.scrollTop=line*LH;ed.scrollLeft=l;syncLayer();rFrom=rTo=0;renderRows(true);if(lastLine>=0)hlbar.style.transform=`translateY(${(lastLine*LH).toFixed(3)}px)`}
+function measureLH(){if(edHidden){LH=RH;return false}const n=liveLines.length,sh=ed.scrollHeight;const v=(n>0&&sh>ed.clientHeight+2)?sh/n:RH;CW=0;if(Math.abs(v-LH)>1e-7){LH=v;return true}return false}
 const RH=22,codeBox=$('code'),layer=$('layer'),hlLayer=$('hlLayer'),rowsEl=$('rows'),hlbar=$('hlbar'),ed=$('codeText');
 let rFrom=0,rTo=0,lineSev=null,manualUntil=0,liveLines=[],lineStarts=new Uint32Array(1),origText='';
 let numW=58;
 function setLive(text){F.dirty=true;liveLines=text.split('\n');const ls=new Uint32Array(liveLines.length);let p=0;for(let i=0;i<liveLines.length;i++){ls[i]=p;p+=liveLines[i].length+1}lineStarts=ls;
-  numW=String(liveLines.length).length*10+26;codeBox.style.setProperty('--numw',numW+'px');measureLH()}
+  numW=String(liveLines.length).length*10+26;codeBox.style.setProperty('--numw',numW+'px');
+  let mx=0;for(const l of liveLines)if(l.length>mx)mx=l.length;maxLen=mx;measureLH();if(edHidden)sizeSpacer()}
 function lineOfPos(pos){let lo=0,hi=lineStarts.length-1;while(lo<hi){const mid=(lo+hi+1)>>1;if(lineStarts[mid]<=pos)lo=mid;else hi=mid-1}return lo}
 const esc=s=>s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function hl(s){let out='';let i=0;const re=/\([^)]*\)?|;.*$/g;let m;while((m=re.exec(s))){out+=hlw(s.slice(i,m.index))+`<span class="k-c">${esc(m[0])}</span>`;i=m.index+m[0].length}return out+hlw(s.slice(i))}
 function hlw(s){return esc(s).replace(/([A-Za-z])(\s*[-+]?[\d.]+)/g,(m,L,v)=>{const u=L.toUpperCase();const k=u==='G'?'g':u==='M'?'m':'THD'.includes(u)?'t':'FS'.includes(u)?'f':u==='N'?'n':'';return k?`<span class="k-${k}">${L}${v}</span>`:m})}
 function renderRows(force){
-  const n=liveLines.length,st=edTopNow(),h=(edHidden?edH:ed.clientHeight)||400;
+  const n=liveLines.length,st=scrTop(),h=scrH();
   const s=Math.max(0,Math.floor(st/LH)-4),e=Math.min(n,Math.ceil((st+h)/LH)+4);
   if(!force&&s>=rFrom&&e<=rTo)return;
   const s2=Math.max(0,s-60),e2=Math.min(n,e+60);let out='';
@@ -1132,32 +1149,26 @@ function renderRows(force){
   rowsEl.innerHTML=out;rFrom=s2;rTo=e2;drawHits(s2,e2);
 }
 function syncLayer(){const t=edTopNow();layer.style.transform=`translate(${-edLeftNow()}px,${-t}px)`;hlLayer.style.transform=`translateY(${-t}px)`}
-ed.addEventListener('scroll',()=>{syncLayer();renderRows(false)},{passive:true});
-for(const ev of ['wheel','touchstart'])ed.addEventListener(ev,()=>{manualUntil=performance.now()+2500},{passive:true});
-new ResizeObserver(()=>{if(edHidden){showEd();hideEd()}if(measureLH()){rFrom=rTo=0;renderRows(true);lastLine=-2;req()}else renderRows(false)}).observe(codeBox);
-{const w=$('edWrap');
- // wheel over the listing while playing: scroll the coloured listing (follow pauses for 2.5 s, like before)
- w.addEventListener('wheel',e=>{if(!edHidden)return;e.preventDefault();manualUntil=performance.now()+2500;
-   vTop=Math.max(0,Math.min(liveLines.length*LH-edH,vTop+e.deltaY*(e.deltaMode===1?LH:e.deltaMode===2?edH:1)));syncLayer();renderRows(false)},{passive:false});
- // click in the listing while playing: stop and put the typing cursor where you clicked
- w.addEventListener('pointerdown',e=>{if(!edHidden||e.button!==0)return;e.preventDefault();
-   const r=codeBox.getBoundingClientRect(),ln=Math.max(0,Math.min(liveLines.length-1,Math.floor((e.clientY-r.top+vTop)/LH)));
-   const col=Math.max(0,Math.min(liveLines[ln].length,Math.round((e.clientX-r.left+vLeft-numW)/(charW()||8.4))));
-   stop();const p=lineStarts[ln]+col;ed.focus({preventScroll:true});try{ed.setSelectionRange(p,p)}catch(_){}caretLine=-1;caretMoved()})}
+ed.addEventListener('scroll',()=>{if(!edHidden){syncLayer();renderRows(false)}},{passive:true});
+vs.addEventListener('scroll',()=>{if(edHidden){syncLayer();renderRows(false)}},{passive:true});
+for(const ev of ['wheel','touchstart'])for(const el of [ed,vs])el.addEventListener(ev,()=>{manualUntil=performance.now()+2500},{passive:true});
+new ResizeObserver(()=>{if(edHidden){sizeSpacer();renderRows(false);return}if(measureLH()){rFrom=rTo=0;renderRows(true);lastLine=-2;req()}else renderRows(false)}).observe(codeBox);
+// click in the listing: switch the edit box on and put the typing cursor where you clicked (stops playback)
+vs.addEventListener('pointerdown',e=>{if(e.button!==0||!edHidden)return;
+  const r=vs.getBoundingClientRect();if(e.clientX-r.left>=vs.clientWidth||e.clientY-r.top>=vs.clientHeight)return;   // on a scrollbar: let it scroll
+  e.preventDefault();const ln=Math.max(0,Math.min(liveLines.length-1,Math.floor((e.clientY-r.top+vs.scrollTop)/RH)));
+  const col=Math.max(0,Math.min(liveLines[ln].length,Math.round((e.clientX-r.left+vs.scrollLeft-numW)/(charW()||8.4))));
+  if(playing)stop();showEd();const p=lineStarts[ln]+col;ed.focus({preventScroll:true});try{ed.setSelectionRange(p,p)}catch(_){}caretLine=-1;caretMoved()});
+ed.addEventListener('blur',()=>setTimeout(()=>{if(document.activeElement!==ed)hideEd()},0));
 let navScroll=false,followT=0;
 function showLine(ln){
   hlbar.hidden=ln<0;if(ln<0)return;hlbar.style.transform=`translateY(${(ln*LH).toFixed(3)}px)`;
-  if(edHidden){if($('tFollow').checked&&performance.now()>manualUntil){const want=Math.max(0,Math.min(liveLines.length*LH-edH,Math.round(ln*LH-edH*0.4+RH/2)));
-      if(Math.abs(vTop-want)>0.5){vTop=want;syncLayer();renderRows(false)}}return}
-  if(navScroll){navScroll=false;  // keyboard/click: keep the line in view with as little scrolling as possible
-    const h=ed.clientHeight,top=ln*LH,m=RH*2;
-    if(top<ed.scrollTop+m)ed.scrollTop=Math.max(0,top-m);else if(top+RH>ed.scrollTop+h-m)ed.scrollTop=top+RH-h+m;return}
-  if($('tFollow').checked&&performance.now()>manualUntil){const h=ed.clientHeight,top=ln*LH,now=performance.now();
-    // while playing, scroll the listing about 8 times a second instead of every frame: repainting a huge program every frame
-    // is a big share of the work; the highlight bar still moves every frame, and the line never leaves the view
-    const inView=top>=ed.scrollTop+RH&&top+RH*2<=ed.scrollTop+h;
-    if(playing&&inView&&now-followT<120)return;
-    followT=now;const want=Math.max(0,Math.round(ln*LH-h*0.4+RH/2));if(Math.abs(ed.scrollTop-want)>1)ed.scrollTop=want}
+  const h=scrH(),top=ln*LH,st=scrTop();
+  if(navScroll){navScroll=false;const m=RH*2;   // keyboard/click: keep the line in view with as little scrolling as possible
+    if(top<st+m)setScr(Math.max(0,top-m));else if(top+RH>st+h-m)setScr(top+RH-h+m);return}
+  if($('tFollow').checked&&performance.now()>manualUntil){const now=performance.now(),inView=top>=st+RH&&top+RH*2<=st+h;
+    if(!edHidden&&playing&&inView&&now-followT<120)return;   // edit box on while playing: scroll it less often (it is slow)
+    followT=now;const want=Math.max(0,Math.round(top-h*0.4+RH/2));if(Math.abs(st-want)>1)setScr(want)}
 }
 /* typing cursor in the program drives the plot, like CIMCO */
 let caretLine=-1;
@@ -1178,13 +1189,13 @@ ed.addEventListener('keydown',e=>{
 if(window.parent!==window){let keyT=0;document.addEventListener('keydown',()=>{keyT=performance.now()},true);
   try{window.parent.addEventListener('scroll',()=>{const P=window.parent;if(P.scrollX&&performance.now()-keyT<600)P.scrollTo(0,P.scrollY)},{passive:true})}catch(_){}}ed.addEventListener('mouseup',caretMoved);
 let editTimer=0;
-function markEdited(){$('editedTag').hidden=ed.value===origText}
-ed.addEventListener('input',()=>{stop();setLive(ed.value);rFrom=rTo=0;renderRows(true);markEdited();clearTimeout(editTimer);editTimer=setTimeout(applyEdit,liveLines.length>30000?1500:500)});
-function applyEdit(){const camS=JSON.stringify(cam),cl=lineOfPos(ed.selectionStart),foc=document.activeElement===ed;
-  load(ed.value,null,{keep:true});Object.assign(cam,JSON.parse(camS));if(foc){caretLine=cl;setCursorLine(cl,true,true)}req()}
+function markEdited(){$('editedTag').hidden=getText()===origText}
+ed.addEventListener('input',()=>{stop();setLive(getText());rFrom=rTo=0;renderRows(true);markEdited();clearTimeout(editTimer);editTimer=setTimeout(applyEdit,liveLines.length>30000?1500:500)});
+function applyEdit(){const camS=JSON.stringify(cam),cl=lineOfPos(selS()),foc=document.activeElement===ed;
+  load(getText(),null,{keep:true});Object.assign(cam,JSON.parse(camS));if(foc){caretLine=cl;setCursorLine(cl,true,true)}req()}
 $('btnCopy').onclick=()=>{const b=$('btnCopy'),ok=()=>{b.textContent='Copied';setTimeout(()=>b.textContent='Copy',1500)},fb=()=>{ed.focus();ed.select();b.textContent='Press Ctrl+C';setTimeout(()=>b.textContent='Copy',2500)};
-  try{navigator.clipboard.writeText(ed.value).then(ok,fb)}catch(e){fb()}};
-$('btnRevert').onclick=()=>{if(ed.value===origText)return;const camS=JSON.stringify(cam);const t=origText;ed.value=t;load(t,null,{keep:true});origText=t;markEdited();Object.assign(cam,JSON.parse(camS));req()};
+  try{navigator.clipboard.writeText(getText()).then(ok,fb)}catch(e){fb()}};
+$('btnRevert').onclick=()=>{if(getText()===origText)return;const camS=JSON.stringify(cam);const t=origText;if(edPend!=null)edPend=t;else ed.value=t;load(t,null,{keep:true});origText=t;markEdited();Object.assign(cam,JSON.parse(camS));req()};
 /* ---------------- Find / replace (like CIMCO / Code Expert) ---------------- */
 let CW=0;const hitsEl=$('hits'),fbar=$('fbar'),fFind=$('fFind'),fRep=$('fRep'),fCountEl=$('fCount');
 function charW(){if(!CW){const p=document.createElement('span');p.style.cssText='position:absolute;visibility:hidden;white-space:pre';p.textContent='0'.repeat(80);rowsEl.appendChild(p);CW=p.getBoundingClientRect().width/80*(rowsEl.offsetWidth/(rowsEl.getBoundingClientRect().width||rowsEl.offsetWidth)||1);p.remove()}return CW}
@@ -1195,7 +1206,7 @@ function fBuild(){F.dirty=false;const t=fFind.value;F.len=t.length;F.cur=-1;
   let src=t.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
   if($('fWord').checked)src='(?<![A-Za-z0-9.])'+src+'(?![0-9]|\\.[0-9])';   // G-code aware: Z3 matches Z3 and Z3. but not Z35 or Z3.5
   F.re=new RegExp(src,$('fCase').checked?'g':'gi');
-  const txt=ed.value,arr=[];let m;F.re.lastIndex=0;
+  const txt=getText(),arr=[];let m;F.re.lastIndex=0;
   while((m=F.re.exec(txt))){arr.push(m.index);if(arr.length>=500000)break;F.re.lastIndex=m.index+Math.max(1,t.length)}
   F.starts=Int32Array.from(arr)}
 function fCount(msg){const n=F.starts.length;fCountEl.classList.toggle('none',!!fFind.value&&!n);
@@ -1208,32 +1219,31 @@ function drawHits(s2,e2){
     out+=`<div class="fhit${k===F.cur?' cur':''}" style="top:${(ln*LH).toFixed(3)}px;height:${LH.toFixed(3)}px;left:${(numW+c0*cw).toFixed(2)}px;width:${((c1-c0)*cw).toFixed(2)}px"></div>`}
   hitsEl.innerHTML=out}
 function fShow(i){
-  if(edHidden)stop();
   const s=F.starts[i],ln=lineOfPos(s),L=liveLines[ln]||'';F.cur=i;F.anchor=s;
-  try{ed.setSelectionRange(s,s+F.len)}catch(e){}
-  const h=ed.clientHeight,top=ln*LH;if(top<ed.scrollTop+LH*2||top+LH>ed.scrollTop+h-LH*2)ed.scrollTop=Math.max(0,top-h*0.4);
-  const cw=charW(),x=numW+vcol(L,s-lineStarts[ln])*cw,w=F.len*cw,vw=ed.clientWidth;
-  if(x+w>ed.scrollLeft+vw-24||x<ed.scrollLeft+numW)ed.scrollLeft=Math.max(0,x-vw/2);
+  setSel(s,s+F.len);
+  const h=scrH(),top=ln*LH;if(top<scrTop()+LH*2||top+LH>scrTop()+h-LH*2)setScr(Math.max(0,top-h*0.4));
+  const cw=charW(),x=numW+vcol(L,s-lineStarts[ln])*cw,w=F.len*cw,vw=scrW();
+  if(x+w>scrLeft()+vw-24||x<scrLeft()+numW)setScr(null,Math.max(0,x-vw/2));
   syncLayer();caretLine=ln;setCursorLine(ln,true,true);rFrom=rTo=0;renderRows(true);fCount()}
 function fGo(dir,from){
   fFlush();if(F.dirty)fBuild();const a=F.starts,n=a.length;if(!n){F.cur=-1;fCount();renderRows(true);return}
   let i;
   if(from==null&&F.cur>=0&&F.cur<n)i=(F.cur+dir+n)%n;
-  else{const p=from!=null?from:(ed.selectionStart||0);i=lowerBound(a,p);if(dir<0)i=i-1;i=(i+n)%n}
+  else{const p=from!=null?from:(selS()||0);i=lowerBound(a,p);if(dir<0)i=i-1;i=(i+n)%n}
   fShow(i)}
 let fTimer=0;
 function fFlush(){if(fTimer){clearTimeout(fTimer);fTimer=0;F.dirty=true}}   // a button pressed right after typing uses what was typed
 function fLive(){clearTimeout(fTimer);fTimer=setTimeout(()=>{fTimer=0;fBuild();if(F.starts.length)fGo(1,F.anchor);else{fCount();renderRows(true)}},liveLines.length>20000?160:60)}
 function openFind(rep){
   if(tab!=='program')showTab('program');
-  const sel=ed.value.slice(ed.selectionStart,ed.selectionEnd);
+  const sel=getText().slice(selS(),selE());
   if(sel&&sel.length<=60&&!sel.includes('\n'))fFind.value=sel;
-  F.on=true;fbar.hidden=false;F.anchor=ed.selectionStart||lineStarts[Math.max(0,shownLine())]||0;F.dirty=true;
+  F.on=true;fbar.hidden=false;F.anchor=selS()||lineStarts[Math.max(0,shownLine())]||0;F.dirty=true;
   const box=rep&&fFind.value?fRep:fFind;box.focus();box.select();
   fBuild();fCount();rFrom=rTo=0;renderRows(true)}
 function closeFind(){F.on=false;fbar.hidden=true;F.undoText=null;$('fUndo').hidden=true;F.cur=-1;hitsEl.innerHTML='';fCount('')}
 function editRange(s,e,text){   // goes through the browser's edit history so Ctrl+Z undoes it
-  if(edHidden)stop();
+  showEd();
   const back=document.activeElement;ed.focus({preventScroll:true});ed.setSelectionRange(s,e);let ok=false;
   try{ok=text?document.execCommand('insertText',false,text):document.execCommand('delete')}catch(err){}
   if(!ok){ed.setRangeText(text,s,e,'end');ed.dispatchEvent(new Event('input'))}
@@ -1241,22 +1251,21 @@ function editRange(s,e,text){   // goes through the browser's edit history so Ct
 function fReplaceOne(){
   fFlush();if(F.dirty)fBuild();if(!F.starts.length){fCount();return}
   if(F.cur<0){fGo(1);return}                       // first press shows the match, next press replaces it
-  const s=F.starts[F.cur],r=fRep.value,st=ed.scrollTop,sl=ed.scrollLeft;
-  editRange(s,s+F.len,r);ed.scrollTop=st;ed.scrollLeft=sl;fBuild();
+  const s=F.starts[F.cur],r=fRep.value;
+  editRange(s,s+F.len,r);fBuild();
   if(F.starts.length)fGo(1,s+r.length);else{fCount('Done — no more');renderRows(true)}}
 function fReplaceAll(){
-  if(edHidden)stop();
   fFlush();if(F.dirty)fBuild();const n=F.starts.length;if(!n){fCount();return}
-  const re=new RegExp(F.re.source,F.re.flags),r=fRep.value,v=ed.value,nv=v.replace(re,()=>r);
-  const st=ed.scrollTop,sl=ed.scrollLeft,ln=shownLine();
+  const re=new RegExp(F.re.source,F.re.flags),r=fRep.value,v=getText(),nv=v.replace(re,()=>r);
+  const st=scrTop(),sl=scrLeft(),ln=shownLine();
   setText(nv);F.undoText=v;$('fUndo').hidden=false;   // browser undo is far too slow on a whole program, so keep our own one-step undo
-  ed.scrollTop=st;ed.scrollLeft=sl;syncLayer();fBuild();F.cur=-1;rFrom=rTo=0;renderRows(true);
-  try{const p=lineStarts[Math.min(ln,lineStarts.length-1)]||0;ed.setSelectionRange(p,p)}catch(e){}
+  setScr(st,sl);syncLayer();fBuild();F.cur=-1;rFrom=rTo=0;renderRows(true);
+  {const p=lineStarts[Math.min(ln,lineStarts.length-1)]||0;setSel(p,p)}
   fCount(`Replaced ${n.toLocaleString()}`)}
-function setText(t){F.own=true;ed.value=t;ed.dispatchEvent(new Event('input'));F.own=false}
+function setText(t){F.own=true;if(edPend!=null)edPend=t;else ed.value=t;ed.dispatchEvent(new Event('input'));F.own=false}
 ed.addEventListener('input',()=>{if(!F.own&&F.undoText!=null){F.undoText=null;$('fUndo').hidden=true}});   // any later edit by hand ends the Undo offer
-$('fUndo').onclick=()=>{if(F.undoText==null)return;const st=ed.scrollTop,sl=ed.scrollLeft;setText(F.undoText);F.undoText=null;$('fUndo').hidden=true;
-  ed.scrollTop=st;ed.scrollLeft=sl;syncLayer();fBuild();rFrom=rTo=0;renderRows(true);fCount('Undone')};
+$('fUndo').onclick=()=>{if(F.undoText==null)return;const st=scrTop(),sl=scrLeft();setText(F.undoText);F.undoText=null;$('fUndo').hidden=true;
+  setScr(st,sl);syncLayer();fBuild();rFrom=rTo=0;renderRows(true);fCount('Undone')};
 $('btnFind').onclick=()=>F.on?closeFind():openFind(false);
 $('fClose').onclick=closeFind;$('fNext').onclick=()=>fGo(1);$('fPrev').onclick=()=>fGo(-1);
 $('fRepOne').onclick=fReplaceOne;$('fRepAll').onclick=fReplaceAll;
@@ -1277,7 +1286,7 @@ $('fCase').checked=!!cfg.fCase;$('fWord').checked=!!cfg.fWord;
 let cursorLine=-1,cursorProg=-1;
 function setCursorLine(l,keepScroll,fromCaret){
   if(!cur||!cur.lines.length)return;l=Math.max(0,Math.min(cur.lines.length-1,l));
-  if(!fromCaret&&document.activeElement!==ed){try{const p=lineStarts[l]||0;ed.setSelectionRange(p,p);caretLine=l}catch(e){}}
+  if(!fromCaret&&document.activeElement!==ed){const p=lineStarts[l]||0;setSel(p,p);caretLine=l}
   if(!cur.upto){const u=new Uint32Array(cur.lines.length),mv=cur.moves;let j=0;for(let i=0;i<u.length;i++){while(j<mv.length&&mv[j].line<=i)j++;u[i]=j}cur.upto=u}
   stop();prog=cur.upto[l];cursorLine=l;cursorProg=prog;lastLine=-2;navScroll=true;if(!keepScroll)manualUntil=0;req();
 }
@@ -1495,7 +1504,7 @@ function load(text,name,opts){opts=opts||{};text=String(text).replace(/\r\n?/g,'
   for(const L of ['A','B','C'])$('row'+L).hidden=!(cur.rot&&cur.rot[L]);visKey='';computeVis();
   if(!opts.keep)$('progName').textContent=name||cur.progName||'Untitled program';
   renderPanels();uploadGL();fbDirty=true;fbKey='';
-  if(!opts.keep){ed.value=text;ed.scrollTop=0;ed.scrollLeft=0;origText=text;caretLine=-1}
+  if(!opts.keep){hideEd();edPend=text;if(ed.value)ed.value='';ed.scrollTop=0;ed.scrollLeft=0;vs.scrollTop=0;vs.scrollLeft=0;origText=text;caretLine=-1}
   setLive(text);rFrom=rTo=0;syncLayer();renderRows(true);markEdited();
   if(!opts.keep){needFit=true;fit()}
   req();
@@ -1504,12 +1513,12 @@ function load(text,name,opts){opts=opts||{};text=String(text).replace(/\r\n?/g,'
 /* ---------------- Events ---------------- */
 let tab='program',edTop=0,edLeft=0;
 function showTab(t){if(t===tab)return;
-  if(tab==='program'){showEd();edTop=ed.scrollTop;edLeft=ed.scrollLeft}   // remember where the listing was
+  if(tab==='program'){edTop=scrTop();edLeft=scrLeft()}   // remember where the listing was
   tab=t;document.querySelectorAll('.tabs button[data-t]').forEach(x=>{x.classList.toggle('on',x.dataset.t===t);x.setAttribute('aria-selected',x.dataset.t===t)});
   $('p-program').hidden=t!=='program';$('tabbody').hidden=t==='program';
   ['check','tools','stats','setup'].forEach(k=>$('p-'+k).hidden=k!==t);
   if(t==='stats')ensureSteps();
-  if(t==='program'){measureLH();ed.scrollTop=edTop;ed.scrollLeft=edLeft;syncLayer();rFrom=rTo=0;renderRows(true);lastLine=-2;if(playing)hideEd();req()}
+  if(t==='program'){measureLH();if(edHidden)sizeSpacer();setScr(edTop,edLeft);syncLayer();rFrom=rTo=0;renderRows(true);lastLine=-2;req()}
   else $('tabbody').scrollTop=0}
 document.querySelectorAll('.tabs button[data-t]').forEach(b=>b.addEventListener('click',()=>showTab(b.dataset.t)));
 $('views').addEventListener('click',e=>{const v=e.target.dataset.v;if(!v)return;const V={iso:[-Math.PI/4,.62],top:[0,Math.PI/2],front:[0,0],right:[-Math.PI/2,0]};if(V[v]){cam.R=viewFromYP(V[v][0],V[v][1]);document.querySelectorAll('#views button').forEach(b=>b.classList.toggle('on',b.dataset.v===v))}fit()});
