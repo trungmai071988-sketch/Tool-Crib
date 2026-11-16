@@ -472,7 +472,7 @@ function parse(src){
   /* Rotary axes and tilted planes. Points are stored in part coordinates so each indexed face lands where it is on the part.
      Table kinematics: C sits on B sits on A, all through one rotary center. part = Rc*Rb*Ra*(machine - center) + center */
   const RT={a:0,b:0,c:0,seen:{A:false,B:false,C:false},any:false,tcp:false,frame:null,frameId:0,ever:false};
-  const rawPts=[],wrapOn=cfg.rotView!=='machine',ctr=[+cfg.rcx||0,+cfg.rcy||0,+cfg.rcz||0],faceMap=new Map();
+  const rawPts=[],wrapOn=cfg.rotView!=='machine',ctr=[+cfg.rcx||0,+cfg.rcy||0,+cfg.rcz||0],faceMap=new Map(),faceInfo=[];
   const sg=[cfg.revA?-1:1,cfg.revB?-1:1,cfg.revC?-1:1];
   const rotMat=ang=>{let M=null;if(ang[0])M=rot3('x',sg[0]*ang[0]);if(ang[1]){const B=rot3('y',sg[1]*ang[1]);M=M?mm3(B,M):B}if(ang[2]){const C=rot3('z',sg[2]*ang[2]);M=M?mm3(C,M):C}return M};
   const toPart=(p,ang)=>{
@@ -506,7 +506,9 @@ function parse(src){
     const m={type,line:li,p0,n:poly.length,len,f:S.F,s:S.S,t:S.T,d:S.D,h:S.H,lc:S.len,cc:S.comp,wo:S.wo,op:S.opN||0,tool:S.tool?S.tool.idx:-1,inv:S.feedMode===93};
     const a1=angs?angs[angs.length-1]:a0;if(RT.any){m.r0=angs?angs[0]:a0;m.r1=a1}
     const ax=toolAxis(a1);if(ax)m.ax=ax;
-    const fkey=RT.frame?'F'+RT.frameId:a1.map(v=>Math.round(v*1000)).join(',');let fk=faceMap.get(fkey);if(fk===undefined){fk=faceMap.size;faceMap.set(fkey,fk)}m.fk=fk;
+    const fkey=RT.frame?'F'+RT.frameId:a1.map(v=>Math.round(v*1000)).join(',');let fk=faceMap.get(fkey);if(fk===undefined){fk=faceMap.size;faceMap.set(fkey,fk);
+      // part point = M·(program point) + o for this A/B/C position or tilted plane (null = not turned)
+      const M=RT.frame?RT.frame.m:rotMat(a1);faceInfo.push(M?{M:M.slice(),o:RT.frame?RT.frame.o.slice():ctr.map((v,i)=>v-(M[3*i]*ctr[0]+M[3*i+1]*ctr[1]+M[3*i+2]*ctr[2])),fr:!!RT.frame}:null)}m.fk=fk;if(RT.tcp)m.tcp=1;
     if(lineToMove[li]<0)lineToMove[li]=moves.length;
     moves.push(m);
     if(S.tool){const t=S.tool;if(t.first<0)t.first=moves.length-1;
@@ -745,7 +747,7 @@ function parse(src){
     if(mv.type){feed+=mv.len;time+=mv.f>0?mv.len/mv.f:0}else{rapid+=mv.len;time+=mv.len/rr}
     for(let k=0;k<mv.n;k++){const o=(mv.p0+k)*3;for(let a=0;a<3;a++){const v=P[o+a];if(v<bb[a])bb[a]=v;if(v>bb[a+3])bb[a+3]=v;if(mv.type){if(v<cb[a])cb[a]=v;if(v>cb[a+3])cb[a+3]=v}}}
   }
-  return {lines,pts:P,raw:new Float64Array(rawPts),rot:RT.any?RT.seen:null,faces:faceMap.size,moves,issues,tools,lineToMove,units,progName,opNames,woExp:woExp||S.woFirst,stats:{feed,rapid,time,bb,cb}};
+  return {lines,pts:P,raw:new Float64Array(rawPts),faceInfo,wrap:wrapOn,rot:RT.any?RT.seen:null,faces:faceMap.size,moves,issues,tools,lineToMove,units,progName,opNames,woExp:woExp||S.woFirst,stats:{feed,rapid,time,bb,cb}};
 }
 function fmt(v,d){if(!isFinite(v))return '—';d=d??(cur&&cur.units==='mm'?3:4);let s=v.toFixed(d).replace(/0+$/,'').replace(/\.$/,'.');if(s==='-0.')s='0.';return s}
 function fmtTime(min){const s=Math.round(min*60);const h=Math.floor(s/3600),m=Math.floor(s%3600/60),ss=s%60;return (h?h+':'+String(m).padStart(2,'0'):m)+':'+String(ss).padStart(2,'0')}
@@ -753,7 +755,7 @@ function fmtTime(min){const s=Math.round(min*60);const h=Math.floor(s/3600),m=Ma
 
 /* Tool diameter from comments: "1/2 FLAT ENDMILL", "2.0 FACE MILL", "DIA. - .5", "D=0.5", "Ø12" */
 function parseDia(s){if(!s)return 0;s=String(s).toUpperCase();let m;
-  const W='(?:IN(?:CH)?\\.?|"|MM)?\\s*(?:FLAT|BALL|BULL|END|E\\/M|EM\\b|FACE|DRILL|SPOT|CHAMF|SHELL|MILL|TAP|REAM|BORE|CENTER|CTR|ROUGH|FINISH)';
+  const W='(?:IN(?:CH)?\\.?|"|MM)?\\s*(?:\\d+\\s*-?\\s*FL(?:UTES?)?\\.?\\s*)?(?:(?:CARB(?:IDE)?|HSS|COB(?:ALT)?|SOLID|INSERT(?:ED)?|INDEX(?:ABLE)?|ROUGH(?:ING)?|FINISH(?:ING)?|HP|HEM)\\.?\\s*)*(?:FLAT|BALL|BULL|END|E\\/M|E\\.\\s*M\\b|EM\\b|FACE|DRILL|SPOT|CHAMF|SHELL|MILL|TAP|REAM|BORE|CENTER|CTR|ROUGH|FINISH)';
   if((m=s.match(/DIA(?:METER)?\.?\s*[=:\-]?\s*(\d*\.\d+|\d+)(?!\s*\/)/)))return +m[1];
   if((m=s.match(/(?:^|[^A-Z])D\s*=\s*(\d*\.\d+|\d+)/)))return +m[1];
   if((m=s.match(/[Ø⌀]\s*(\d*\.\d+|\d+)/)))return +m[1];
@@ -995,7 +997,7 @@ function drawGL(target){
   const set=lod?G.lod:G.path,vs=lod?cur.vsL:cur.vs,u=G.u,c0=cur.c0;
   // while the view is turning/zooming, draw without edge smoothing (about 4x less work for the graphics card); redraw smooth once it stops
   const fast=!!(gl2&&G.pic&&G.pic.s>0&&(performance.now()<interactUntil||smActive()));
-  const key=[cam.R.join(),cam.scale,cam.px,cam.py,cam.c.join(),W,H,glc.width,glc.height,opt.rapid,opt.tool,opt.ghost,opt.grid,dataId,vpColor,lod,cfg.machine,visKey,fast?'F':'Q',partOn()?PART.ver+pcfg().look:'-'].join('|');
+  const key=[cam.R.join(),cam.scale,cam.px,cam.py,cam.c.join(),W,H,glc.width,glc.height,opt.rapid,opt.tool,opt.ghost,opt.grid,dataId,vpColor,lod,cfg.machine,visKey,fast?'F':'Q',partOn()?PART.ver+pcfg().look+'|'+((partTurn(target)||{}).M||'').toString():'-'].join('|');
   gl.useProgram(G.p);
   if(gl2&&G.pic){try{ensurePic()}catch(e){console.warn(e);gl2=false;glKey=''}}
   const pic=gl2&&G.pic&&G.pic.fbo,dst=pic?(fast?G.pic.res:G.pic.fbo):null;if(pic)gl.bindFramebuffer(gl.FRAMEBUFFER,dst);
@@ -1009,7 +1011,7 @@ function drawGL(target){
     gl.uniform4f(u.uView,W,H,cam.px,cam.py);gl.uniform1f(u.uScale,cam.scale);
     gl.uniform1f(u.uShowRapid,opt.rapid?1:0);gl.uniform1f(u.uByTool,opt.tool?1:0);gl.uniform1f(u.uHoriz,HZ()?1:0);
     gl.disable(gl.BLEND);   // solid lines need no blending; only the faint remaining path does
-    partDepth=partOn()&&MG?drawPartGL(c0,dk):false;
+    partDepth=partOn()&&MG?drawPartGL(c0,dk,target):false;
     if(partDepth){gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LEQUAL)}   // solid part hides the path behind it
     bindSet(set);
     const spans=visR||[[0,cur.moves.length]];
@@ -1582,11 +1584,11 @@ function removePart(){PART=null;PCHK.tok++;PCHK.state='';PCHK.marks=[];$('tPartL
 const SHAPES=[['flat','Flat end mill'],['bull','Corner radius'],['ball','Ball'],['drill','Drill 118°'],['spot','Spot / center 90°'],['chamf','Chamfer 90°'],['skip','Don’t check']];
 function toolKey(t){return t?'T'+t.t:'T?'}
 function toolShape(t){   // {dia, rc, shape, src}
-  const s=String(t?(t.comment||'')+' '+(t.desc||''):'').toUpperCase(),o=partTools[toolKey(t)]||{};
+  const s=String(t?t.desc||t.comment||'':'').toUpperCase(),o=partTools[toolKey(t)]||{};   // the tool's own description line (matched by T number) beats a nearby comment
   const typed=t&&cur&&cur.userDia&&cur.userDia[t.idx]>0?cur.userDia[t.idx]:0;
-  let dia=o.dia>0?o.dia:typed>0?typed:t&&t.dia>0?t.dia:0,m;
+  const pd=t&&t.desc?parseDia(t.desc):0;let dia=o.dia>0?o.dia:typed>0?typed:pd>0?pd:t&&t.dia>0?t.dia:0,m;
   if(!(dia>0)&&(m=s.match(/(\d*\.\d+)\s*X\s*\d*\.\d+\s*R(?![A-Z])/)||s.match(/DRILL\s*(\d*\.\d+)/)))dia=+m[1];
-  let rc=0;if((m=s.match(/(?:^|[^\d.])(\d*\.\d+)\s*R(?![A-Z])/))||(m=s.match(/(?:\bCR|\bRAD(?:IUS)?|(?:^|[\sX])R)\s*[=:]?\s*(\d*\.\d+)(?!\s*\/)/)))rc=+m[1];
+  let rc=0;if((m=s.match(/(?:^|[^\d.])(\d*\.\d+)\s*(?:RAD(?:IUS)?|R)(?![A-Z])/))||(m=s.match(/(?:\bCR|\bRAD(?:IUS)?|(?:^|[\sX])R)\s*[=:]?\s*(\d*\.\d+)(?!\s*\/)/)))rc=+m[1];
   let shape;
   if(/BALL|\bB\.?E\.?M\b|\bBN\b|\bB\/N\b/.test(s))shape='ball';
   else if(/\bTAP\b|THREAD|THD\.? ?MILL|ENGRAV|LOLLI|UNDERCUT|T-?SLOT|KEY ?SEAT|DOVETAIL|BACK ?CHAMF|BACK ?SPOT/.test(s))shape='skip';
@@ -1607,8 +1609,8 @@ function mkProf(sh){const R=sh.dia/2;
   return ()=>0}
 
 /* ---- height map + max pyramid ---- */
-function* buildHM(){
-  const P=PART.P,b=PART.bb,u=cur&&cur.units==='mm'?25.4:1;
+function* buildHM(P,b,pct0,pct1){
+  const u=cur&&cur.units==='mm'?25.4:1;
   const wx=b[3]-b[0],wy=b[4]-b[1];let cs=Math.max(Math.sqrt(Math.max(wx*wy,1e-9)/6e6),0.0005*u);
   cs=Math.max(cs,Math.max(wx,wy)/6000);
   const x0=b[0]-2*cs,y0=b[1]-2*cs,nx=Math.ceil(wx/cs)+5,ny=Math.ceil(wy/cs)+5;
@@ -1626,7 +1628,7 @@ function* buildHM(){
         const w1=((cx-px)*(ay-py)-(cy-py)*(ax-px))*iA;if(w1<e)continue;
         const w2=1-w0-w1;if(w2<e)continue;
         const z=w0*az+w1*bz+w2*cz;if(z>h[row+ix])h[row+ix]=z}}
-    if((i&1023)===0&&performance.now()-t0>14){PCHK.pct=5+20*i/P.length;yield;t0=performance.now()}}
+    if((i&1023)===0&&performance.now()-t0>14){PCHK.pct=pct0+(pct1-pct0)*i/P.length;yield;t0=performance.now()}}
   // safe side: lowest of each cell and its 8 neighbours (separable min)
   const t=new Float32Array(nx*ny),hE=new Float32Array(nx*ny);
   for(let y=0;y<ny;y++){const r=y*nx;for(let x=0;x<nx;x++){let v=h[r+x];if(x>0&&h[r+x-1]<v)v=h[r+x-1];if(x<nx-1&&h[r+x+1]<v)v=h[r+x+1];t[r+x]=x===0||x===nx-1?-1e30:v}}
@@ -1636,12 +1638,12 @@ function* buildHM(){
   while(L.length<12){const p=L[L.length-1];if(p.nx<=1&&p.ny<=1)break;const qx=Math.ceil(p.nx/2),qy=Math.ceil(p.ny/2),q=new Float32Array(qx*qy);
     for(let y=0;y<qy;y++)for(let x=0;x<qx;x++){let v=-1e30;for(let dy=0;dy<2;dy++){const yy=2*y+dy;if(yy>=p.ny)continue;for(let dx=0;dx<2;dx++){const xx=2*x+dx;if(xx>=p.nx)continue;const w=p.h[yy*p.nx+xx];if(w>v)v=w}}q[y*qx+x]=v}
     L.push({h:q,nx:qx,ny:qy})}
-  PART.hm={x0,y0,cs,nx,ny,L,top:L[L.length-1].h[0]};
+  return {x0,y0,cs,nx,ny,L,top:L[L.length-1].h[0]};
 }
 // deepest gouge for a cutter tip at (x,y,z); returns 0 or depth (with where)
 const GQ={stack:new Int32Array(3*4096),gx:0,gy:0};
-function gougeAt(x,y,z,T,tol,floor){
-  const hm=PART.hm,thr=z+tol;if(hm.top<=thr)return 0;
+function gougeAt(hm,x,y,z,T,tol,floor){
+  const thr=z+tol;if(hm.top<=thr)return 0;
   const Re=T.Re,R=T.R,prof=T.prof,flat=T.shape==='flat',x0=hm.x0,y0=hm.y0,cs=hm.cs,L=hm.L,lv=Math.min(T.lev,L.length-1);
   const bs=cs*(1<<lv),S=GQ.stack;let sp=0,best=floor||0;
   const i0=Math.floor((x-Re-x0)/bs),i1=Math.floor((x+Re-x0)/bs),j0=Math.floor((y-Re-y0)/bs),j1=Math.floor((y+Re-y0)/bs);
@@ -1653,7 +1655,7 @@ function gougeAt(x,y,z,T,tol,floor){
       const d=Math.sqrt(d2),g=v-(flat?0:prof(d))-z;if(g>tol){const into=Math.min(g,R-d);if(into>best){best=into;GQ.gx=cx;GQ.gy=cy}}continue}
     const b=cs*(1<<l),rx0=x0+i*b,ry0=y0+j*b,ddx=Math.max(rx0-x,0,x-rx0-b),ddy=Math.max(ry0-y,0,y-ry0-b),dm2=ddx*ddx+ddy*ddy;
     if(dm2>Re2)continue;const dm=Math.sqrt(dm2),gm=v-(flat?0:prof(dm))-z;if(gm<=tol||Math.min(gm,R-dm)<=best)continue;   // nothing in this block can beat what we have
-    if(sp+12>S.length){const n=new Int32Array(S.length*2);n.set(S);GQ.stack=n;return gougeAt(x,y,z,T,tol,floor)}
+    if(sp+12>S.length){const n=new Int32Array(S.length*2);n.set(S);GQ.stack=n;return gougeAt(hm,x,y,z,T,tol,floor)}
     const l1=l-1,a=2*i,c=2*j;S[sp++]=l1;S[sp++]=a;S[sp++]=c;S[sp++]=l1;S[sp++]=a+1;S[sp++]=c;S[sp++]=l1;S[sp++]=a;S[sp++]=c+1;S[sp++]=l1;S[sp++]=a+1;S[sp++]=c+1}
   return best>(floor||0)?best:0}
 
@@ -1665,31 +1667,44 @@ function runPartCheck(){
   const step=()=>{if(tok!==PCHK.tok||cur!==c)return;let r;try{r=it.next()}catch(e){console.warn(e);PCHK.state='fail';partStatus();return}
     if(r.done)return;partStatus();setTimeout(step,0)};
   step()}
+const rot0=a=>a.every(v=>{const r=((v%360)+360)%360;return r<1e-4||r>360-1e-4});
 function* partCheckGen(c){
   PCHK.state='run';PCHK.pct=1;PCHK.marks=[];
-  if(!PART.hm)yield* buildHM();
-  const hm=PART.hm,tol=partTol(),mv=c.moves,P=c.pts,u=c.units==='mm'?25.4:1;
-  // per-tool cutter
-  const TT=new Map(),noDia=new Set(),skipT=new Set();
-  const cutter=ti=>{if(TT.has(ti))return TT.get(ti);const t=ti>=0?c.tools[ti]:null,sh=toolShape(t);let T=null;
-    if(sh.shape==='skip')skipT.add(t?'T'+t.t:'program');
-    else if(!(sh.dia>0))noDia.add(t?'T'+t.t:'program');
-    else{const R=sh.dia/2,Re=Math.max(R*0.5,R-tol);T={shape:sh.shape,R,Re,prof:mkProf(sh),lev:Math.max(0,Math.min(11,Math.ceil(Math.log2(Math.max(1,Re/hm.cs)))-1)),ds:Math.max(Math.min(R*0.25,0.05*u),hm.cs)}}
-    TT.set(ti,T);return T};
-  let tilted=0,checked=0,t0=performance.now();const hit=[];   // per move: [mi, depth, x, y, z]
-  const pb=PART.bb,pad=Math.max(1,0.5*u);
+  const tol=partTol(),mv=c.moves,P=c.raw,u=c.units==='mm'?25.4:1,FI=c.faceInfo||[];
+  // sort the moves by how the part sits (A/B/C position or tilted plane). Each position gets its own height map,
+  // made from the part turned the way the machine holds it, so the cutter always points straight down
+  let tilted=0,moving=0,checked=0;const faces=new Map();
   for(let mi=0;mi<mv.length;mi++){const m=mv[mi];
-    if(m.ax&&Math.abs(m.ax[2])<0.99999){tilted++;continue}
-    const T=cutter(m.tool);if(!T)continue;checked++;
-    let best=0,bx=0,by=0,bz=0;
-    for(let k=0;k<m.n-1;k++){const a=(m.p0+k)*3,ax=P[a],ay=P[a+1],az=P[a+2],ex=P[a+3],ey=P[a+4],ez=P[a+5];
-      // skip segments nowhere near the part
-      if(Math.min(az,ez)>pb[5]+tol||Math.max(ax,ex)<pb[0]-T.R-pad||Math.min(ax,ex)>pb[3]+T.R+pad||Math.max(ay,ey)<pb[1]-T.R-pad||Math.min(ay,ey)>pb[4]+T.R+pad)continue;
-      const L=Math.hypot(ex-ax,ey-ay,ez-az),ns=Math.max(1,Math.ceil(L/T.ds));
-      for(let s=(k===0?0:1);s<=ns;s++){const f=s/ns,x=ax+(ex-ax)*f,y=ay+(ey-ay)*f,z=az+(ez-az)*f;
-        const g=gougeAt(x,y,z,T,tol,best);if(g>best){best=g;bx=x;by=y;bz=z}}}
-    if(best>0)hit.push([mi,best,bx,by,bz]);
-    if((mi&63)===0&&performance.now()-t0>14){PCHK.pct=25+75*mi/mv.length;yield;t0=performance.now()}}
+    if(m.tcp){tilted++;continue}
+    if(m.r0&&m.r1&&m.r0.some((v,i)=>Math.abs(v-m.r1[i])>1e-6)){moving++;continue}   // A/B/C turning while it moves
+    const fi=FI[m.fk],k=fi?m.fk:-1;let a=faces.get(k);if(!a)faces.set(k,a=[]);a.push(mi)}
+  const order=[...faces.keys()].sort((a,b)=>a-b),total=Math.max(1,mv.length);let done=0;
+  const TT=new Map(),noDia=new Set(),skipT=new Set(),hit=[];
+  for(const fk of order){const list=faces.get(fk),fi=fk<0?null:FI[fk];
+    let hm;
+    if(!fi){if(!PART.hm)PART.hm=yield* buildHM(PART.P,PART.bb,1,10);hm=PART.hm}
+    else{const Q=PART.P,M=fi.M,o=fi.o,R=new Float32Array(Q.length);   // part → program coordinates: Mᵀ·(q − o)
+      for(let i=0;i<Q.length;i+=3){const x=Q[i]-o[0],y=Q[i+1]-o[1],z=Q[i+2]-o[2];R[i]=M[0]*x+M[3]*y+M[6]*z;R[i+1]=M[1]*x+M[4]*y+M[7]*z;R[i+2]=M[2]*x+M[5]*y+M[8]*z}
+      hm=yield* buildHM(R,bbOf(R),PCHK.pct,PCHK.pct+3)}
+    const pb=[hm.x0,hm.y0,0,hm.x0+hm.nx*hm.cs,hm.y0+hm.ny*hm.cs,hm.top],pad=Math.max(1,0.5*u);
+    const cutter=ti=>{const kk=ti+'|'+fk;if(TT.has(kk))return TT.get(kk);const t=ti>=0?c.tools[ti]:null,sh=toolShape(t);let T=null;
+      if(sh.shape==='skip')skipT.add(t?'T'+t.t:'program');
+      else if(!(sh.dia>0))noDia.add(t?'T'+t.t:'program');
+      else{const R=sh.dia/2,Re=Math.max(R*0.5,R-tol);T={shape:sh.shape,R,Re,prof:mkProf(sh),lev:Math.max(0,Math.min(11,Math.ceil(Math.log2(Math.max(1,Re/hm.cs)))-1)),ds:Math.max(Math.min(R*0.25,0.05*u),hm.cs)}}
+      TT.set(kk,T);return T};
+    let t0=performance.now();
+    for(let li=0;li<list.length;li++){const mi=list[li],m=mv[mi];done++;
+      const T=cutter(m.tool);if(!T)continue;checked++;
+      let best=0,bx=0,by=0,bz=0;
+      for(let k=0;k<m.n-1;k++){const a=(m.p0+k)*3,ax=P[a],ay=P[a+1],az=P[a+2],ex=P[a+3],ey=P[a+4],ez=P[a+5];
+        // skip segments nowhere near the part
+        if(Math.min(az,ez)>pb[5]+tol||Math.max(ax,ex)<pb[0]-T.R-pad||Math.min(ax,ex)>pb[3]+T.R+pad||Math.max(ay,ey)<pb[1]-T.R-pad||Math.min(ay,ey)>pb[4]+T.R+pad)continue;
+        const L=Math.hypot(ex-ax,ey-ay,ez-az),ns=Math.max(1,Math.ceil(L/T.ds));
+        for(let s=(k===0?0:1);s<=ns;s++){const f=s/ns,x=ax+(ex-ax)*f,y=ay+(ey-ay)*f,z=az+(ez-az)*f;
+          const g=gougeAt(hm,x,y,z,T,tol,best);if(g>best){best=g;bx=x;by=y;bz=z}}}
+      if(best>0){let d=[bx,by,bz];if(fi&&(c.wrap||fi.fr))d=mv3(fi.M,d).map((v,i)=>v+fi.o[i]);hit.push([mi,best,bx,by,bz,d])}
+      if((li&63)===0&&performance.now()-t0>14){PCHK.pct=10+90*done/total;yield;t0=performance.now()}}}
+  hit.sort((a,b)=>a[0]-b[0]);
   // group touching moves of the same tool into one problem
   const iss=[],marks=[],fx4=v=>fmt(v);
   for(let i=0;i<hit.length;){let j=i,deep=hit[i];const m0=mv[hit[i][0]],rap=!m0.type;
@@ -1697,13 +1712,14 @@ function* partCheckGen(c){
     const md=mv[deep[0]],t=md.tool>=0?c.tools[md.tool]:null,tn=t?`T${t.t}`:'Tool',l0=mv[hit[i][0]].line,l1=mv[hit[j][0]].line;
     const where=`X${fx4(deep[2])} Y${fx4(deep[3])} Z${fx4(deep[4])}`,lines=l1>l0?`lines ${l0+1}–${l1+1}`:`line ${l0+1}`;
     const msg=rap?`Rapid crashes ${tn} ${fx4(deep[1])} into the part (${lines}, at ${where})`:`${tn} cuts ${fx4(deep[1])} into the part (${lines}, deepest at ${where})${md.cc&&md.cc!==40?' — cutter comp is on, check the D offset':''}`;
-    iss.push({sev:'err',line:md.line,msg,cat:'part'});marks.push([deep[2],deep[3],deep[4],rap?1:0,md.line]);i=j+1}
+    iss.push({sev:'err',line:md.line,msg,cat:'part'});marks.push([deep[5][0],deep[5][1],deep[5][2],rap?1:0,md.line,deep[0]]);i=j+1}
   for(const k of noDia)iss.push({sev:'warn',line:-1,msg:`${k} not checked against the part — no cutter diameter in its comment. Type it in Setup ▸ Finished part`,cat:'part'});
   for(const k of skipT)iss.push({sev:'info',line:-1,msg:`${k} not checked against the part (tap, thread mill or other tool set to Don’t check)`,cat:'part'});
-  if(tilted)iss.push({sev:'info',line:-1,msg:`${tilted} move${tilted>1?'s':''} with a tilted tool (A/B/C or G68) not checked against the part — the part check is 3-axis only`,cat:'part'});
+  if(moving)iss.push({sev:'info',line:-1,msg:`${moving} move${moving>1?'s':''} where A/B/C turns during the move (the index turn itself, or simultaneous 4/5-axis cutting) not checked against the part. Cuts at each A/B/C position are checked`,cat:'part'});
+  if(tilted)iss.push({sev:'info',line:-1,msg:`${tilted} move${tilted>1?'s':''} with TCP (G43.4/G43.5) not checked against the part`,cat:'part'});
   const feedN=mv.filter(m=>m.type).length,bad=hit.filter(h=>mv[h[0]].type).length;
   if(feedN>20&&bad>feedN*0.3)iss.unshift({sev:'warn',line:-1,msg:`Most of the program cuts into the part — the STL may not line up with the program zero or units. Check the shift and units in Setup ▸ Finished part`,cat:'part'});
-  const cb=c.stats.cb;if(cb[0]<Infinity&&(pb[3]<cb[0]||pb[0]>cb[3]||pb[4]<cb[1]||pb[1]>cb[4]))iss.unshift({sev:'warn',line:-1,msg:`The part is nowhere near the toolpath — the STL must be saved in the same WCS / zero as the program. Check the shift and units in Setup ▸ Finished part`,cat:'part'});
+  const cb=c.stats.cb,pb=PART.bb;if(cb[0]<Infinity&&(pb[3]<cb[0]||pb[0]>cb[3]||pb[4]<cb[1]||pb[1]>cb[4]))iss.unshift({sev:'warn',line:-1,msg:`The part is nowhere near the toolpath — the STL must be saved in the same WCS / zero as the program. Check the shift and units in Setup ▸ Finished part`,cat:'part'});
   c.issues=c.issues.filter(i=>i.cat!=='part').concat(iss);
   PCHK.marks=marks;PCHK.state='done';PCHK.pct=100;PCHK.n=marks.length;PCHK.checked=checked;
   renderCheck();renderRows(true);partStatus();req()}
@@ -1716,8 +1732,9 @@ function partStatus(){
 /* ---- drawing the part (WebGL) ---- */
 const MVS=`attribute vec3 aPos;attribute vec3 aNrm;
 uniform vec3 uC;uniform mat3 uM;uniform vec4 uView;uniform float uScale;uniform float uHoriz;uniform float uDepth;
+uniform mat3 uR;uniform vec3 uK;
 varying float vL;
-void main(){vec3 p=aPos-uC;vec3 n=aNrm;if(uHoriz>0.5){p=vec3(p.x,-p.z,p.y);n=vec3(n.x,-n.z,n.y);}
+void main(){vec3 p=uR*(aPos+uK)-uC;vec3 n=uR*aNrm;if(uHoriz>0.5){p=vec3(p.x,-p.z,p.y);n=vec3(n.x,-n.z,n.y);}
   vec3 v=uM*p;vec3 q=uM*n;
   float sx=uView.x*0.5+uView.z+v.x*uScale;float sy=uView.y*0.5+uView.w-v.y*uScale;
   gl_Position=vec4(sx/uView.x*2.0-1.0,1.0-sy/uView.y*2.0,clamp(-v.z*uDepth,-1.0,1.0),1.0);
@@ -1729,7 +1746,7 @@ function initMeshGL(){
   const p=gl.createProgram();gl.attachShader(p,sh(gl.VERTEX_SHADER,MVS));gl.attachShader(p,sh(gl.FRAGMENT_SHADER,MFS));
   gl.bindAttribLocation(p,0,'aPos');gl.bindAttribLocation(p,1,'aNrm');gl.linkProgram(p);if(!gl.getProgramParameter(p,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(p));
   MG={p,u:{},pos:gl.createBuffer(),nrm:gl.createBuffer(),n:0,key:''};
-  for(const n of ['uC','uM','uView','uScale','uHoriz','uDepth','uCol'])MG.u[n]=gl.getUniformLocation(p,n)}
+  for(const n of ['uC','uM','uView','uScale','uHoriz','uDepth','uCol','uR','uK'])MG.u[n]=gl.getUniformLocation(p,n)}
 function uploadPart(){
   if(!MG||!PART||!PART.P||!cur)return false;const key=PART.ver+'|'+cur.c0.join();if(MG.key===key)return MG.n>0;
   const P=PART.P,c0=cur.c0,n=P.length/3,pos=new Float32Array(n*3),nrm=new Float32Array(n*3);
@@ -1741,10 +1758,15 @@ function uploadPart(){
 // depth range covering program + part
 function sceneDepth(){const b=cur.stats.bb.slice();if(partOn()){const p=PART.bb;for(let a=0;a<3;a++){b[a]=Math.min(b[a],p[a]);b[a+3]=Math.max(b[a+3],p[a+3])}}
   const r=Math.max(1e-6,Math.hypot(b[3]-b[0],b[4]-b[1],b[5]-b[2])/2);return {k:1/(4*r),bias:Math.max(partTol()*2,r*0.003)/(4*r)}}
-function drawPartGL(c0,dk){
-  if(!uploadPart())return false;const u=MG.u,see=pcfg().look==='see';
+// machine view: the part turns with A/B/C like on the machine (part view keeps it still and wraps the toolpath)
+function partTurn(target){if(!cur||cur.wrap||!cur.faceInfo)return null;const m=cur.moves[Math.max(0,Math.min(target,cur.moves.length-1))];
+  if(!m||m.tcp)return null;const fi=cur.faceInfo[m.fk];return fi&&!fi.fr?fi:null}
+function drawPartGL(c0,dk,target){
+  if(!uploadPart())return false;const u=MG.u,see=pcfg().look==='see',fi=partTurn(target);
   gl.useProgram(MG.p);
-  gl.uniform3f(u.uC,cam.c[0]-c0[0],cam.c[1]-c0[1],cam.c[2]-c0[2]);
+  gl.uniform3f(u.uC,cam.c[0],cam.c[1],cam.c[2]);
+  if(fi){const M=fi.M;gl.uniformMatrix3fv(u.uR,false,new Float32Array(M));gl.uniform3f(u.uK,c0[0]-fi.o[0],c0[1]-fi.o[1],c0[2]-fi.o[2])}   // Mᵀ as column-major = M as row-major
+  else{gl.uniformMatrix3fv(u.uR,false,new Float32Array([1,0,0,0,1,0,0,0,1]));gl.uniform3f(u.uK,c0[0],c0[1],c0[2])}
   {const R=cam.R;gl.uniformMatrix3fv(u.uM,false,new Float32Array([R[0],R[3],R[6],R[1],R[4],R[7],R[2],R[5],R[8]]))}
   gl.uniform4f(u.uView,W,H,cam.px,cam.py);gl.uniform1f(u.uScale,cam.scale);gl.uniform1f(u.uHoriz,HZ()?1:0);gl.uniform1f(u.uDepth,dk.k);
   gl.bindBuffer(gl.ARRAY_BUFFER,MG.pos);gl.enableVertexAttribArray(0);gl.vertexAttribPointer(0,3,gl.FLOAT,false,0,0);
@@ -1757,7 +1779,7 @@ function drawPartGL(c0,dk){
 // red marks where the tool cuts into the part
 function drawPartMarks(c){
   if(!PART||!PCHK.marks.length)return;const mk=PCHK.marks,n=Math.min(mk.length,400);
-  c.lineWidth=2;for(let i=0;i<n;i++){const m=mk[i],q=toScreen(m[0],m[1],m[2]);if(q[0]<-20||q[1]<-20||q[0]>W+20||q[1]>H+20)continue;
+  c.lineWidth=2;for(let i=0;i<n;i++){const m=mk[i];if(visMask&&!visMask[m[5]])continue;const q=toScreen(m[0],m[1],m[2]);if(q[0]<-20||q[1]<-20||q[0]>W+20||q[1]>H+20)continue;
     c.fillStyle=m[3]?'#ff3b30':'#ff4d4d';c.beginPath();c.arc(q[0],q[1],5.5,0,7);c.fill();c.strokeStyle='#fff';c.stroke();
     c.beginPath();c.moveTo(q[0]-2.6,q[1]-2.6);c.lineTo(q[0]+2.6,q[1]+2.6);c.moveTo(q[0]+2.6,q[1]-2.6);c.lineTo(q[0]-2.6,q[1]+2.6);c.stroke()}}
 
