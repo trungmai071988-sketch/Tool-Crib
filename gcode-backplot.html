@@ -355,6 +355,7 @@ td.n{font-family:var(--f-mono);font-size:13px;text-align:right}
           <div class="field"><label for="sRotAbout">Rotate around<small>Where the part spins when you hold the middle button</small></label><select id="sRotAbout" class="sel"><option value="cursor">Spot you press on</option><option value="screen">Center of screen</option><option value="part">Center of part</option></select></div>
           <div class="field"><label for="sRotSpeed">Rotate speed<small>1 is normal</small></label><input id="sRotSpeed" type="number" min="0.2" max="4" step="0.1"></div>
           <label class="chk" for="sAA"><input type="checkbox" id="sAA"><span>Smooth lines<small>Untick for faster rotating on older computers. Lines look a little more jagged</small></span></label>
+          <p class="note" id="gfxInfo" style="margin-top:6px"></p>
           <h3>Program checks</h3>
           <div class="field"><label for="sWo">Work offset<small>Any other offset in the program is flagged as an error and shown in red at top left</small></label><select id="sWo" class="sel"><option value="G54">G54</option><option value="G55">G55</option><option value="G56">G56</option><option value="G57">G57</option><option value="G58">G58</option><option value="G59">G59</option><option value="any">Any — only flag changes</option></select></div>
           <div class="field"><label for="sCoolOn">Coolant on codes<small>Any of these counts as coolant on</small></label><input id="sCoolOn" type="text" spellcheck="false"></div>
@@ -868,6 +869,7 @@ function gridSegs(){
 }
 
 /* ---- GPU renderer (WebGL): the whole path lives on the graphics card; rotate/zoom/play only change uniforms ---- */
+const slowGL={on:false,t:0,avg:0,n:0};let gpuName='';
 let partDepth=false,gl=null,G=null,softGL=false,gl2=false,glKey='',glDone=0,interactUntil=0,settleTimer=0;
 const VS=`attribute vec3 aPos;attribute vec3 aInfo;
 uniform vec3 uC;uniform mat3 uM;uniform vec4 uView;uniform float uScale;uniform float uShowRapid;uniform vec3 uCols[8];uniform vec3 uRapidCol;uniform float uByTool;uniform float uHoriz;uniform float uDepth;uniform float uBias;
@@ -897,7 +899,7 @@ void main(){
 function initGL(){
   gl=null;G=null;
   let soft=false;
-  try{const t=document.createElement('canvas').getContext('webgl');if(t){const ext=t.getExtension('WEBGL_debug_renderer_info');const rn=String(ext?t.getParameter(ext.UNMASKED_RENDERER_WEBGL):t.getParameter(t.RENDERER));soft=/swiftshader|llvmpipe|softpipe|software|basic render/i.test(rn);const l=t.getExtension('WEBGL_lose_context');if(l)l.loseContext()}}catch(e){}
+  try{const t=document.createElement('canvas').getContext('webgl');if(t){const ext=t.getExtension('WEBGL_debug_renderer_info');const rn=String(ext?t.getParameter(ext.UNMASKED_RENDERER_WEBGL):t.getParameter(t.RENDERER));soft=/swiftshader|llvmpipe|softpipe|software|basic render/i.test(rn);gpuName=rn;const l=t.getExtension('WEBGL_lose_context');if(l)l.loseContext()}}catch(e){}
   softGL=soft;
   gl2=false;
   try{gl=glc.getContext('webgl2',{antialias:false,alpha:false,depth:true,preserveDrawingBuffer:false,powerPreference:'high-performance'});gl2=!!gl}catch(e){gl=null}
@@ -1011,7 +1013,9 @@ function drawGL(target){
   const lod=false;
   const set=lod?G.lod:G.path,vs=lod?cur.vsL:cur.vs,u=G.u,c0=cur.c0;
   // while the view is turning/zooming, draw without edge smoothing (about 4x less work for the graphics card); redraw smooth once it stops
-  const fast=!!(gl2&&G.pic&&(G.pic.s>0||G.pic.hfb)&&(performance.now()<interactUntil||smActive()));
+  // a real graphics card draws every frame at full quality, even while turning; only software graphics get the rough moving picture
+  const fast=!!(gl2&&G.pic&&G.pic.s===0&&G.pic.hfb&&(performance.now()<interactUntil||smActive()));
+  // half-size picture + lighter part only when this computer can't keep up while turning (a fast graphics card stays sharp)
   const key=[cam.R.join(),cam.scale,cam.px,cam.py,cam.c.join(),W,H,glc.width,glc.height,opt.rapid,opt.tool,opt.ghost,opt.grid,dataId,vpColor,lod,cfg.machine,visKey,fast?'F':'Q',partOn()?PART.ver+pcfg().look+'|'+((partTurn(target)||{}).M||'').toString():'-'].join('|');
   gl.useProgram(G.p);
   if(gl2&&G.pic){try{ensurePic()}catch(e){console.warn(e);gl2=false;glKey=''}}
@@ -1125,7 +1129,8 @@ function frame(t){raf=0;if(playing){const dt=Math.min(.05,(t-(lastT||t))/1000);l
   if(smActive()){const dt=Math.min(.05,(t-(smT||t))/1000);smT=t;smApply(dt);if(!raf)raf=requestAnimationFrame(frame)}else smT=0;
   draw();syncUI()}
 function resize(){const r=vpwrap.getBoundingClientRect();W=r.width;H=r.height;if(!W||!H)return;
-  DPR=Math.max(1,Math.min(2,window.devicePixelRatio||1));GDPR=Math.max(1,softGL?1:Math.min(1.5,window.devicePixelRatio||1));
+  // draw at the screen's real sharpness (high-res laptop screens are 2-2.5x); only cut back on slow graphics, and keep under ~4K worth of pixels
+  const dpr=window.devicePixelRatio||1;DPR=Math.max(1,Math.min(3,dpr));GDPR=Math.max(1,softGL?1:Math.min(3,dpr,Math.sqrt(8.5e6/Math.max(1,W*H))));
   cv.width=Math.round(W*DPR);cv.height=Math.round(H*DPR);
   if(gl){glc.width=Math.round(W*GDPR);glc.height=Math.round(H*GDPR)}
   else{base.width=done.width=cv.width;base.height=done.height=cv.height;fbDirty=true;fbKey=''}
@@ -2026,6 +2031,10 @@ function hookSettings2(){
    d.addEventListener('change',()=>{cfg.droz=+d.value;store.set('bp-cfg',JSON.stringify(cfg));ap()})}
   $('sRotAbout').value=cfg.rotAbout||'cursor';$('sRotAbout').addEventListener('change',e=>{cfg.rotAbout=e.target.value;store.set('bp-cfg',JSON.stringify(cfg))});
   $('sRotSpeed').value=cfg.rotSpeed||1;$('sRotSpeed').addEventListener('change',e=>{const v=parseFloat(e.target.value);if(isFinite(v)&&v>0){cfg.rotSpeed=v;store.set('bp-cfg',JSON.stringify(cfg))}});
+  // what the graphics are doing, so a screenshot of Setup tells what is wrong
+  const gfxInfo=()=>{const e=$('gfxInfo');if(!e||e.offsetParent===null)return;const P=G&&G.pic;
+    e.textContent=`Graphics: ${(gpuName||'unknown').replace(/^ANGLE \(|\)$/g,'').slice(0,70)} · screen ${(window.devicePixelRatio||1).toFixed(2)}× · drawn ${GDPR.toFixed(2)}× (${glc.width}×${glc.height}) · smoothing ${P?P.s+'×':gl2?'?':'WebGL1'}${softGL?' · SOFTWARE':''}${sm.dev?' · 3D mouse '+(smActive()?'MOVING':'still'):''}${performance.now()<interactUntil?' · moving':''}`};
+  setInterval(gfxInfo,1000);
   $('sAA').checked=cfg.aa!==false;$('sAA').addEventListener('change',e=>{cfg.aa=e.target.checked;store.set('bp-cfg',JSON.stringify(cfg));rebuildGL()})}
 // smooth lines can only be switched with a fresh drawing surface
 function rebuildGL(){const n=glc.cloneNode(false);glc.replaceWith(n);glc=n;hookGL(glc);initGL();if(!gl){glc.hidden=true;return}
