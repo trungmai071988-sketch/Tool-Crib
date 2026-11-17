@@ -65,6 +65,7 @@ button{cursor:pointer}
 .dro .mode{font-family:var(--f-disp);font-weight:700;letter-spacing:.08em;font-size:15px}
 .dro .mode.rapid{color:#ff7a5e}.dro .mode.feed{color:#4cc3ff}
 
+.mstop{position:absolute;left:50%;bottom:44px;transform:translateX(-50%);z-index:3;pointer-events:none;background:#e8a317;color:#14191b;font-family:var(--f-disp);font-weight:700;font-size:15px;letter-spacing:.04em;padding:8px 14px;border-radius:6px;box-shadow:0 4px 14px rgba(0,0,0,.4);white-space:nowrap;max-width:calc(100% - 20px);overflow:hidden;text-overflow:ellipsis}
 .views{position:absolute;top:10px;right:10px;display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;max-width:calc(100% - 190px*var(--droz,1.4) - 50px)}
 .views button{background:rgba(20,26,28,.82);color:#cfd9db;border:1px solid #2f3a3d;border-radius:5px;padding:4px 9px;font-family:var(--f-disp);font-weight:600;font-size:13px;letter-spacing:.06em;text-transform:uppercase}
 .views button.on{color:#14191b;background:#cfd9db}
@@ -267,6 +268,7 @@ td.n{font-family:var(--f-mono);font-size:13px;text-align:right}
     <div class="vpwrap" id="vpwrap">
       <canvas id="gl"></canvas>
       <canvas id="cv" aria-label="3D toolpath backplot"></canvas>
+      <div class="mstop" id="mStop" hidden></div>
       <div class="dro" id="dro" aria-live="off">
         <div class="ax"><b>X</b><span id="dX">0.0000</span></div>
         <div class="ax"><b>Y</b><span id="dY">0.0000</span></div>
@@ -303,6 +305,7 @@ td.n{font-family:var(--f-mono);font-size:13px;text-align:right}
         <output id="spdOut" class="spdout" for="speed">10×</output>
       </div>
       <div class="toggles">
+        <label title="Playback pauses at M00 and M01, like the machine with optional stop on"><input type="checkbox" id="tMStop" checked> Stop at M01</label>
         <label id="tPartL" hidden><input type="checkbox" id="tPart" checked> Part</label>
         <label><input type="checkbox" id="tRapid" checked> Rapids</label>
         <label><input type="checkbox" id="tGhost" checked> Show remaining path</label>
@@ -458,7 +461,7 @@ try{const c=JSON.parse(store.get('bp-cfg')||'null');if(c)cfg=Object.assign(cfg,c
 function parse(src){
   const lines=src.replace(/\r/g,'').split('\n');
   const pts=[],moves=[],issues=[],tools=[];
-  const lineToMove=new Int32Array(lines.length).fill(-1);
+  const lineToMove=new Int32Array(lines.length).fill(-1),stops=[];   // stops: [move index it stops before, line, 0|1] for M00 / M01
   const S={x:0,y:0,z:0,kx:false,ky:false,kz:false,abs:true,units:null,plane:17,motion:null,F:0,S:0,spin:false,
     T:null,nextT:null,len:false,lenWarned:false,r98:true,cyc:null,feedMode:94,tool:null,
     planeSeen:false,planeLine:-1,planeTool:-1,comp:40,compLine:-1,D:null,H:null,cool:false,wo:null,woFirst:null,absLine:-1,absG28:false,dir:0,sLine:-1,fLine:-1};
@@ -663,6 +666,7 @@ function parse(src){
         if(!S.abs&&!S.absG28)add('warn',li,'Program ends in G91 incremental — add G90',null,'abs')}
       else if(mm===98||mm===97)add('warn',li,'Subprogram call is not followed — that program is not plotted','sub');
       else if(mm===99)add('info',li,'M99 return','m99');
+      else if(mm===0||mm===1)stops.push([moves.length,li,mm]);
     }
     // T, H and D must always be the same number as the tool in the spindle
     const g43=G.some(g=>g===43||g===44);
@@ -747,7 +751,7 @@ function parse(src){
     if(mv.type){feed+=mv.len;time+=mv.f>0?mv.len/mv.f:0}else{rapid+=mv.len;time+=mv.len/rr}
     for(let k=0;k<mv.n;k++){const o=(mv.p0+k)*3;for(let a=0;a<3;a++){const v=P[o+a];if(v<bb[a])bb[a]=v;if(v>bb[a+3])bb[a+3]=v;if(mv.type){if(v<cb[a])cb[a]=v;if(v>cb[a+3])cb[a+3]=v}}}
   }
-  return {lines,pts:P,raw:new Float64Array(rawPts),faceInfo,wrap:wrapOn,rot:RT.any?RT.seen:null,faces:faceMap.size,moves,issues,tools,lineToMove,units,progName,opNames,woExp:woExp||S.woFirst,stats:{feed,rapid,time,bb,cb}};
+  return {lines,pts:P,raw:new Float64Array(rawPts),stops,faceInfo,wrap:wrapOn,rot:RT.any?RT.seen:null,faces:faceMap.size,moves,issues,tools,lineToMove,units,progName,opNames,woExp:woExp||S.woFirst,stats:{feed,rapid,time,bb,cb}};
 }
 function fmt(v,d){if(!isFinite(v))return '—';d=d??(cur&&cur.units==='mm'?3:4);let s=v.toFixed(d).replace(/0+$/,'').replace(/\.$/,'.');if(s==='-0.')s='0.';return s}
 function fmtTime(min){const s=Math.round(min*60);const h=Math.floor(s/3600),m=Math.floor(s%3600/60),ss=s%60;return (h?h+':'+String(m).padStart(2,'0'):m)+':'+String(ss).padStart(2,'0')}
@@ -929,7 +933,8 @@ function initPic(){
 function ensurePic(){
   const P=G.pic,w=glc.width,h=glc.height,s=(softGL||cfg.aa===false)?0:Math.min(4,P.maxS);   // no smoothing on software graphics (same as before)
   if(P.w===w&&P.h===h&&P.s===s)return;
-  if(P.fbo){if(P.fbo!==P.res)gl.deleteFramebuffer(P.fbo);gl.deleteFramebuffer(P.res);gl.deleteRenderbuffer(P.rb);gl.deleteRenderbuffer(P.dr);gl.deleteRenderbuffer(P.drm);gl.deleteTexture(P.tex);P.fbo=P.rb=P.dr=P.drm=null}
+  if(P.fbo){if(P.fbo!==P.res)gl.deleteFramebuffer(P.fbo);gl.deleteFramebuffer(P.res);gl.deleteRenderbuffer(P.rb);gl.deleteRenderbuffer(P.dr);gl.deleteRenderbuffer(P.drm);gl.deleteTexture(P.tex);P.fbo=P.rb=P.dr=P.drm=null;
+    if(P.hfb){gl.deleteFramebuffer(P.hfb);gl.deleteTexture(P.htex);gl.deleteRenderbuffer(P.hdr);P.hfb=null}}
   P.tex=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,P.tex);gl.texStorage2D(gl.TEXTURE_2D,1,gl.RGBA8,w,h);
   for(const [k,v] of [[gl.TEXTURE_MIN_FILTER,gl.NEAREST],[gl.TEXTURE_MAG_FILTER,gl.NEAREST],[gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE],[gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE]])gl.texParameteri(gl.TEXTURE_2D,k,v);
   P.res=gl.createFramebuffer();gl.bindFramebuffer(gl.FRAMEBUFFER,P.res);gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,P.tex,0);
@@ -939,9 +944,19 @@ function ensurePic(){
     P.drm=gl.createRenderbuffer();gl.bindRenderbuffer(gl.RENDERBUFFER,P.drm);gl.renderbufferStorageMultisample(gl.RENDERBUFFER,s,gl.DEPTH_COMPONENT24,w,h);gl.framebufferRenderbuffer(gl.FRAMEBUFFER,gl.DEPTH_ATTACHMENT,gl.RENDERBUFFER,P.drm)}
   else P.fbo=P.res;
   if(gl.checkFramebufferStatus(gl.FRAMEBUFFER)!==gl.FRAMEBUFFER_COMPLETE)throw new Error('framebuffer incomplete');
+  // half-size picture used while the view is turning / zooming: 4x fewer pixels to fill, sharp again once it stops
+  P.hw=Math.max(1,Math.ceil(w/2));P.hh=Math.max(1,Math.ceil(h/2));
+  P.htex=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,P.htex);gl.texStorage2D(gl.TEXTURE_2D,1,gl.RGBA8,P.hw,P.hh);
+  for(const [k,v] of [[gl.TEXTURE_MIN_FILTER,gl.LINEAR],[gl.TEXTURE_MAG_FILTER,gl.LINEAR],[gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE],[gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE]])gl.texParameteri(gl.TEXTURE_2D,k,v);
+  P.hfb=gl.createFramebuffer();gl.bindFramebuffer(gl.FRAMEBUFFER,P.hfb);gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,P.htex,0);
+  P.hdr=gl.createRenderbuffer();gl.bindRenderbuffer(gl.RENDERBUFFER,P.hdr);gl.renderbufferStorage(gl.RENDERBUFFER,gl.DEPTH_COMPONENT24,P.hw,P.hh);gl.framebufferRenderbuffer(gl.FRAMEBUFFER,gl.DEPTH_ATTACHMENT,gl.RENDERBUFFER,P.hdr);
+  if(gl.checkFramebufferStatus(gl.FRAMEBUFFER)!==gl.FRAMEBUFFER_COMPLETE){gl.deleteFramebuffer(P.hfb);gl.deleteTexture(P.htex);gl.deleteRenderbuffer(P.hdr);P.hfb=null}
   gl.bindFramebuffer(gl.FRAMEBUFFER,null);P.w=w;P.h=h;P.s=s;glKey=''}
 function showPic(src){   // multisampled picture -> plain picture -> screen
   const P=G.pic;
+  if(src&&src===P.hfb){gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.viewport(0,0,P.w,P.h);gl.disable(gl.BLEND);
+    gl.useProgram(P.p);gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,P.htex);gl.uniform1i(P.uT,0);
+    gl.bindVertexArray(P.vao);gl.drawArrays(gl.TRIANGLE_STRIP,0,4);gl.bindVertexArray(null);gl.useProgram(G.p);return}
   if(src!==P.res){gl.bindFramebuffer(gl.READ_FRAMEBUFFER,P.fbo);gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER,P.res);gl.blitFramebuffer(0,0,P.w,P.h,0,0,P.w,P.h,gl.COLOR_BUFFER_BIT,gl.NEAREST)}
   gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.viewport(0,0,P.w,P.h);gl.disable(gl.BLEND);
   gl.useProgram(P.p);gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,P.tex);gl.uniform1i(P.uT,0);
@@ -996,22 +1011,23 @@ function drawGL(target){
   const lod=false;
   const set=lod?G.lod:G.path,vs=lod?cur.vsL:cur.vs,u=G.u,c0=cur.c0;
   // while the view is turning/zooming, draw without edge smoothing (about 4x less work for the graphics card); redraw smooth once it stops
-  const fast=!!(gl2&&G.pic&&G.pic.s>0&&(performance.now()<interactUntil||smActive()));
+  const fast=!!(gl2&&G.pic&&(G.pic.s>0||G.pic.hfb)&&(performance.now()<interactUntil||smActive()));
   const key=[cam.R.join(),cam.scale,cam.px,cam.py,cam.c.join(),W,H,glc.width,glc.height,opt.rapid,opt.tool,opt.ghost,opt.grid,dataId,vpColor,lod,cfg.machine,visKey,fast?'F':'Q',partOn()?PART.ver+pcfg().look+'|'+((partTurn(target)||{}).M||'').toString():'-'].join('|');
   gl.useProgram(G.p);
   if(gl2&&G.pic){try{ensurePic()}catch(e){console.warn(e);gl2=false;glKey=''}}
-  const pic=gl2&&G.pic&&G.pic.fbo,dst=pic?(fast?G.pic.res:G.pic.fbo):null;if(pic)gl.bindFramebuffer(gl.FRAMEBUFFER,dst);
+  const pic=gl2&&G.pic&&G.pic.fbo,half=!!(pic&&fast&&G.pic.hfb),dst=pic?(half?G.pic.hfb:fast?G.pic.res:G.pic.fbo):null;if(pic)gl.bindFramebuffer(gl.FRAMEBUFFER,dst);
+  const vw=half?G.pic.hw:glc.width,vh=half?G.pic.hh:glc.height;gl.viewport(0,0,vw,vh);
   let drew=true;
   if(key!==glKey||target<glDone||(!pic&&!softGL&&target!==glDone)){
     glKey=key;glDone=target;
-    gl.viewport(0,0,glc.width,glc.height);const bg=hexRgb(vpColor);gl.clearColor(bg[0],bg[1],bg[2],1);gl.depthMask(true);gl.clearDepth(1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);gl.depthMask(false);
+    const bg=hexRgb(vpColor);gl.clearColor(bg[0],bg[1],bg[2],1);gl.depthMask(true);gl.clearDepth(1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);gl.depthMask(false);
     const dk=sceneDepth();gl.uniform1f(u.uDepth,dk.k);gl.uniform1f(u.uBias,dk.bias);
     gl.uniform3f(u.uC,cam.c[0]-c0[0],cam.c[1]-c0[1],cam.c[2]-c0[2]);
     {const R=cam.R;gl.uniformMatrix3fv(u.uM,false,new Float32Array([R[0],R[3],R[6],R[1],R[4],R[7],R[2],R[5],R[8]]))}
     gl.uniform4f(u.uView,W,H,cam.px,cam.py);gl.uniform1f(u.uScale,cam.scale);
     gl.uniform1f(u.uShowRapid,opt.rapid?1:0);gl.uniform1f(u.uByTool,opt.tool?1:0);gl.uniform1f(u.uHoriz,HZ()?1:0);
     gl.disable(gl.BLEND);   // solid lines need no blending; only the faint remaining path does
-    partDepth=partOn()&&MG?drawPartGL(c0,dk,target):false;
+    partDepth=partOn()&&MG?drawPartGL(c0,dk,target,fast):false;
     if(partDepth){gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LEQUAL)}   // solid part hides the path behind it
     bindSet(set);
     const spans=visR||[[0,cur.moves.length]];
@@ -1122,9 +1138,13 @@ const s2m=v=>SPMIN*Math.pow(SPMAX/SPMIN,v/1000),m2s=m=>Math.round(1000*Math.log(
 function setSpeed(v){v=Math.max(0,Math.min(1000,Math.round(v)));$('speed').value=v;speedMult=s2m(v);$('spdOut').textContent=(speedMult<10?Math.round(speedMult*10)/10:Math.round(speedMult))+'×';store.set('bp-spd',String(v))}
 function advance(dt){if(!cur||!cur.moves.length){stop();return}
   let budget=dt*speedMult;const mv=cur.moves,wt=cur.wt;
-  while(budget>0&&prog<mv.length){const i=Math.floor(prog),w=wt[i],rem=(1-(prog-i))*w;if(budget>=rem){budget-=rem;prog=i+1}else{prog+=budget/w;budget=0}}
+  // stop at the next M00 / M01 like the machine does (optional stop on)
+  let lim=mv.length,st=null;if(cfg.mStop!==false&&cur.stops)for(const s of cur.stops)if(s[0]>prog&&s[0]<mv.length){lim=s[0];st=s;break}
+  while(budget>0&&prog<lim){const i=Math.floor(prog),w=wt[i],rem=(1-(prog-i))*w;if(budget>=rem){budget-=rem;prog=i+1}else{prog+=budget/w;budget=0}}
+  if(st&&prog>=lim){prog=lim;stop();showMStop(st);return}
   if(prog>=mv.length){prog=mv.length;stop()}}
-function play(){if(!cur||!cur.moves.length)return;if(prog>=cur.moves.length)prog=0;playing=true;manualUntil=0;hideEd();$('playIco').innerHTML='<path d="M3 2h4v12H3zM9 2h4v12H9z"/>';$('bPlay').title='Pause';req()}
+function showMStop(s){const e=$('mStop');if(!s){e.hidden=true;return}e.dataset.mi=s[0];e.textContent=`M0${s[2]} ${s[2]?'optional stop':'program stop'} · line ${s[1]+1} · press ▶ to go on`;e.hidden=false}
+function play(){if(!cur||!cur.moves.length)return;if(prog>=cur.moves.length)prog=0;showMStop(null);playing=true;manualUntil=0;hideEd();$('playIco').innerHTML='<path d="M3 2h4v12H3zM9 2h4v12H9z"/>';$('bPlay').title='Pause';req()}
 function stop(){playing=false;$('playIco').innerHTML='<path d="M4 2l10 6-10 6z"/>';$('bPlay').title='Play';req()}
 
 /* ---------------- Program listing (virtualized, highlight follows) ---------------- */
@@ -1143,7 +1163,8 @@ function setSel(a,b){if(edPend==null)try{ed.setSelectionRange(a,b)}catch(_){}}
 function fillEd(){if(edPend!=null){const t=edPend;edPend=null;ed.value=t}}
 const vs=$('vScroll'),vSp=$('vSpacer');
 const scrTop=()=>edHidden?vs.scrollTop:ed.scrollTop,scrLeft=()=>edHidden?vs.scrollLeft:ed.scrollLeft;
-const scrH=()=>(edHidden?vs.clientHeight:ed.clientHeight)||400,scrW=()=>(edHidden?vs.clientWidth:ed.clientWidth)||400;
+const boxH={vs:0,ed:0};try{new ResizeObserver(es=>{for(const e of es)boxH[e.target===vs?'vs':'ed']=e.target.clientHeight}).observe(vs)}catch(_){}
+const scrH=()=>(edHidden?boxH.vs||vs.clientHeight:boxH.ed||ed.clientHeight)||400,scrW=()=>(edHidden?vs.clientWidth:ed.clientWidth)||400;
 function setScr(t,l){const el=edHidden?vs:ed;if(t!=null)el.scrollTop=t;if(l!=null)el.scrollLeft=l}
 const edTopNow=scrTop,edLeftNow=scrLeft;
 function sizeSpacer(){vSp.style.height=(liveLines.length*RH+2)+'px';vSp.style.width=Math.ceil(numW+maxLen*(charW()||8.4)+40)+'px'}
@@ -1153,6 +1174,7 @@ function showEd(){if(!edHidden)return;fillEd();const line=vs.scrollTop/RH,l=vs.s
   ed.scrollTop=line*LH;ed.scrollLeft=l;syncLayer();rFrom=rTo=0;renderRows(true);if(lastLine>=0)hlbar.style.transform=`translateY(${(lastLine*LH).toFixed(3)}px)`}
 function measureLH(){if(edHidden){LH=RH;return false}const n=liveLines.length,sh=ed.scrollHeight;const v=(n>0&&sh>ed.clientHeight+2)?sh/n:RH;CW=0;if(Math.abs(v-LH)>1e-7){LH=v;return true}return false}
 const RH=22,codeBox=$('code'),layer=$('layer'),hlLayer=$('hlLayer'),rowsEl=$('rows'),hlbar=$('hlbar'),ed=$('codeText');
+try{new ResizeObserver(es=>{for(const e of es)boxH.ed=e.target.clientHeight}).observe(ed)}catch(_){}
 let rFrom=0,rTo=0,lineSev=null,manualUntil=0,liveLines=[],lineStarts=new Uint32Array(1),origText='';
 let numW=58;
 function setLive(text){F.dirty=true;liveLines=text.split('\n');const ls=new Uint32Array(liveLines.length);let p=0;for(let i=0;i<liveLines.length;i++){ls[i]=p;p+=liveLines[i].length+1}lineStarts=ls;
@@ -1328,7 +1350,7 @@ function posAt(){const mv=cur.moves;droAng=null;if(!mv.length)return null;const 
   if(m.r0){const g=Math.max(0,Math.min(1,f));droAng=[0,1,2].map(i=>m.r0[i]+(m.r1[i]-m.r0[i])*g)}
   return partial(m,f,cur.raw).pos}
 const fx=(v,d)=>(Math.abs(v)<0.5*Math.pow(10,-d)?0:v).toFixed(d);
-function syncUI(){
+function syncUI(){{const e=$('mStop');if(!e.hidden&&Math.abs(prog-(+e.dataset.mi))>1e-9)e.hidden=true}
   if(!cur)return;
   if(+scrub.max!==cur.moves.length)scrub.max=cur.moves.length;
   if(!scrubbing){const v=Math.round(prog);if(+scrub.value!==v)scrub.value=v}
@@ -1517,7 +1539,7 @@ $('p-stats').addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.matches
 $('p-stats').addEventListener('click',e=>{if(e.target.closest('label.diain'))return;const r=e.target.closest('tr[data-m]');if(r&&r.dataset.m!==''&&+r.dataset.m>=0){stop();prog=+r.dataset.m;manualUntil=0;req()}});
 
 let source='';
-function load(text,name,opts){opts=opts||{};text=String(text).replace(/\r\n?/g,'\n');
+function load(text,name,opts){opts=opts||{};showMStop(null);text=String(text).replace(/\r\n?/g,'\n');
   source=text;store.set('bp-src',text.length<1.5e6?text:'');stop();
   cur=parse(text);dataId++;prog=cur.moves.length;lastLine=-2;lastDro='';cursorLine=-1;cursorProg=-1;
   const b=cur.stats.bb;cur.c0=cur.moves.length?[(b[0]+b[3])/2,(b[1]+b[4])/2,(b[2]+b[5])/2]:[0,0,0];
@@ -1576,9 +1598,9 @@ function placePart(){
   const pkey=sc+'|'+PART.shift.join();if(PART.P&&PART.pkey===pkey){renderPartBox();schedPartCheck();return}
   PART.sc=sc;PART.pkey=pkey;const sh=PART.shift,P=new Float32Array(R.length);
   for(let i=0;i<R.length;i+=3){P[i]=R[i]*sc+sh[0];P[i+1]=R[i+1]*sc+sh[1];P[i+2]=R[i+2]*sc+sh[2]}
-  PART.P=P;PART.bb=bbOf(P);PART.ver=++partVer;PART.hm=null;
+  PART.P=P;PART.bb=bbOf(P);PART.ver=++partVer;
   $('tPartL').hidden=false;renderPartBox();fbDirty=true;glKey='';schedPartCheck();req()}
-function removePart(){PART=null;PCHK.tok++;PCHK.state='';PCHK.marks=[];$('tPartL').hidden=true;if(cur){cur.issues=cur.issues.filter(i=>i.cat!=='part');renderCheck();renderRows(true)}renderPartBox();glKey='';fbDirty=true;req()}
+function removePart(){PART=null;stopPartCheck();PCHK.state='';PCHK.marks=[];$('tPartL').hidden=true;if(cur){cur.issues=cur.issues.filter(i=>i.cat!=='part');renderCheck();renderRows(true)}renderPartBox();glKey='';fbDirty=true;req()}
 
 /* ---- tool shapes ---- */
 const SHAPES=[['flat','Flat end mill'],['bull','Corner radius'],['ball','Ball'],['drill','Drill 118°'],['spot','Spot / center 90°'],['chamf','Chamfer 90°'],['skip','Don’t check']];
@@ -1602,19 +1624,15 @@ function toolShape(t){   // {dia, rc, shape, src}
   if(o.ang>0)ang=o.ang;
   return {dia,rc:Math.min(rc,dia/2),shape,ang}}
 // height of the cutter's bottom above its tip at distance d from its centre
-function mkProf(sh){const R=sh.dia/2;
-  if(sh.shape==='ball')return d=>R-Math.sqrt(Math.max(0,R*R-d*d));
-  if(sh.shape==='bull'){const rc=sh.rc,a=R-rc;return d=>d<=a?0:rc-Math.sqrt(Math.max(0,rc*rc-(d-a)*(d-a)))}
-  if(sh.shape==='drill'||sh.shape==='spot'||sh.shape==='chamf'){const k=1/Math.tan(sh.ang*Math.PI/360);return d=>d*k}
-  return ()=>0}
+
 
 /* ---- height map + max pyramid ---- */
-function* buildHM(P,b,pct0,pct1){
-  const u=cur&&cur.units==='mm'?25.4:1;
-  const wx=b[3]-b[0],wy=b[4]-b[1];let cs=Math.max(Math.sqrt(Math.max(wx*wy,1e-9)/6e6),0.0005*u);
+// Everything from here to checkCore runs inside a background worker (copied there as text), so it must not touch the page
+function* buildHM(P,b,u,cells){
+  const wx=b[3]-b[0],wy=b[4]-b[1];let cs=Math.max(Math.sqrt(Math.max(wx*wy,1e-9)/cells),0.0005*u);
   cs=Math.max(cs,Math.max(wx,wy)/6000);
   const x0=b[0]-2*cs,y0=b[1]-2*cs,nx=Math.ceil(wx/cs)+5,ny=Math.ceil(wy/cs)+5;
-  const h=new Float32Array(nx*ny).fill(-1e30);let t0=performance.now();
+  const h=new Float32Array(nx*ny).fill(-1e30);
   for(let i=0;i<P.length;i+=9){
     const ax=P[i],ay=P[i+1],az=P[i+2],bx=P[i+3],by=P[i+4],bz=P[i+5],cx=P[i+6],cy=P[i+7],cz=P[i+8];
     const A=(bx-ax)*(cy-ay)-(by-ay)*(cx-ax);if(Math.abs(A)<1e-14)continue;
@@ -1628,83 +1646,111 @@ function* buildHM(P,b,pct0,pct1){
         const w1=((cx-px)*(ay-py)-(cy-py)*(ax-px))*iA;if(w1<e)continue;
         const w2=1-w0-w1;if(w2<e)continue;
         const z=w0*az+w1*bz+w2*cz;if(z>h[row+ix])h[row+ix]=z}}
-    if((i&1023)===0&&performance.now()-t0>14){PCHK.pct=pct0+(pct1-pct0)*i/P.length;yield;t0=performance.now()}}
+    if((i&4095)===0)yield}
   // safe side: lowest of each cell and its 8 neighbours (separable min)
   const t=new Float32Array(nx*ny),hE=new Float32Array(nx*ny);
-  for(let y=0;y<ny;y++){const r=y*nx;for(let x=0;x<nx;x++){let v=h[r+x];if(x>0&&h[r+x-1]<v)v=h[r+x-1];if(x<nx-1&&h[r+x+1]<v)v=h[r+x+1];t[r+x]=x===0||x===nx-1?-1e30:v}}
-  for(let y=0;y<ny;y++){const r=y*nx;for(let x=0;x<nx;x++){let v=t[r+x];if(y>0&&t[r-nx+x]<v)v=t[r-nx+x];if(y<ny-1&&t[r+nx+x]<v)v=t[r+nx+x];hE[r+x]=y===0||y===ny-1?-1e30:v}}
-  yield;
+  for(let y=0;y<ny;y++){const r=y*nx;for(let x=0;x<nx;x++){let v=h[r+x];if(x>0&&h[r+x-1]<v)v=h[r+x-1];if(x<nx-1&&h[r+x+1]<v)v=h[r+x+1];t[r+x]=x===0||x===nx-1?-1e30:v}if((y&63)===0)yield}
+  for(let y=0;y<ny;y++){const r=y*nx;for(let x=0;x<nx;x++){let v=t[r+x];if(y>0&&t[r-nx+x]<v)v=t[r-nx+x];if(y<ny-1&&t[r+nx+x]<v)v=t[r+nx+x];hE[r+x]=y===0||y===ny-1?-1e30:v}if((y&63)===0)yield}
   const L=[{h:hE,nx,ny}];
   while(L.length<12){const p=L[L.length-1];if(p.nx<=1&&p.ny<=1)break;const qx=Math.ceil(p.nx/2),qy=Math.ceil(p.ny/2),q=new Float32Array(qx*qy);
-    for(let y=0;y<qy;y++)for(let x=0;x<qx;x++){let v=-1e30;for(let dy=0;dy<2;dy++){const yy=2*y+dy;if(yy>=p.ny)continue;for(let dx=0;dx<2;dx++){const xx=2*x+dx;if(xx>=p.nx)continue;const w=p.h[yy*p.nx+xx];if(w>v)v=w}}q[y*qx+x]=v}
+    for(let y=0;y<qy;y++){for(let x=0;x<qx;x++){let v=-1e30;for(let dy=0;dy<2;dy++){const yy=2*y+dy;if(yy>=p.ny)continue;for(let dx=0;dx<2;dx++){const xx=2*x+dx;if(xx>=p.nx)continue;const w=p.h[yy*p.nx+xx];if(w>v)v=w}}q[y*qx+x]=v}if((y&63)===0)yield}
     L.push({h:q,nx:qx,ny:qy})}
   return {x0,y0,cs,nx,ny,L,top:L[L.length-1].h[0]};
 }
-// deepest gouge for a cutter tip at (x,y,z); returns 0 or depth (with where)
-const GQ={stack:new Int32Array(3*4096),gx:0,gy:0};
+// deepest gouge for a cutter tip at (x,y,z); returns 0 or how far it goes into the part
 function gougeAt(hm,x,y,z,T,tol,floor){
   const thr=z+tol;if(hm.top<=thr)return 0;
   const Re=T.Re,R=T.R,prof=T.prof,flat=T.shape==='flat',x0=hm.x0,y0=hm.y0,cs=hm.cs,L=hm.L,lv=Math.min(T.lev,L.length-1);
-  const bs=cs*(1<<lv),S=GQ.stack;let sp=0,best=floor||0;
+  const bs=cs*(1<<lv);let S=GQ.stack,sp=0,best=floor||0;
   const i0=Math.floor((x-Re-x0)/bs),i1=Math.floor((x+Re-x0)/bs),j0=Math.floor((y-Re-y0)/bs),j1=Math.floor((y+Re-y0)/bs);
+  if((i1-i0+1)*(j1-j0+1)*3+12>S.length){S=GQ.stack=new Int32Array(((i1-i0+1)*(j1-j0+1)*3+64)*2)}
   for(let j=j0;j<=j1;j++)for(let i=i0;i<=i1;i++){S[sp++]=lv;S[sp++]=i;S[sp++]=j}
   const Re2=Re*Re;
   while(sp>0){const j=S[--sp],i=S[--sp],l=S[--sp];const M=L[l];if(i<0||j<0||i>=M.nx||j>=M.ny)continue;
     const v=M.h[j*M.nx+i];if(v<=thr)continue;
     if(l===0){const cx=x0+(i+.5)*cs,cy=y0+(j+.5)*cs,dx=cx-x,dy=cy-y,d2=dx*dx+dy*dy;if(d2>Re2)continue;
-      const d=Math.sqrt(d2),g=v-(flat?0:prof(d))-z;if(g>tol){const into=Math.min(g,R-d);if(into>best){best=into;GQ.gx=cx;GQ.gy=cy}}continue}
+      const d=Math.sqrt(d2),g=v-(flat?0:prof(d))-z;if(g>tol){const into=Math.min(g,R-d);if(into>best)best=into}continue}
     const b=cs*(1<<l),rx0=x0+i*b,ry0=y0+j*b,ddx=Math.max(rx0-x,0,x-rx0-b),ddy=Math.max(ry0-y,0,y-ry0-b),dm2=ddx*ddx+ddy*ddy;
     if(dm2>Re2)continue;const dm=Math.sqrt(dm2),gm=v-(flat?0:prof(dm))-z;if(gm<=tol||Math.min(gm,R-dm)<=best)continue;   // nothing in this block can beat what we have
-    if(sp+12>S.length){const n=new Int32Array(S.length*2);n.set(S);GQ.stack=n;return gougeAt(hm,x,y,z,T,tol,floor)}
+    if(sp+12>S.length){const n=new Int32Array(S.length*2);n.set(S);S=GQ.stack=n}
     const l1=l-1,a=2*i,c=2*j;S[sp++]=l1;S[sp++]=a;S[sp++]=c;S[sp++]=l1;S[sp++]=a+1;S[sp++]=c;S[sp++]=l1;S[sp++]=a;S[sp++]=c+1;S[sp++]=l1;S[sp++]=a+1;S[sp++]=c+1}
   return best>(floor||0)?best:0}
+const GQ={stack:new Int32Array(3*4096)};
+/* D: part triangles + program points in program coordinates, moves grouped by how the part sits.
+   Yields progress 0..100, returns the deepest gouge of each move that has one */
+function* checkCore(D){
+  const {P,raw,p0,np,tool,faces,cut,tol,u}=D,hit=[];let checked=0,done=0;const total=Math.max(1,faces.reduce((a,f)=>a+f.list.length,0));
+  for(const f of faces){const list=f.list;
+    // tools used here and the area they reach, so the height map only covers what this face needs
+    let maxR=0,bx0=Infinity,by0=Infinity,bx1=-Infinity,by1=-Infinity;
+    for(const mi of list){const c=cut[tool[mi]];if(!c)continue;if(c.dia/2>maxR)maxR=c.dia/2;
+      for(let k=0;k<np[mi];k++){const a=(p0[mi]+k)*3;if(raw[a]<bx0)bx0=raw[a];if(raw[a]>bx1)bx1=raw[a];if(raw[a+1]<by0)by0=raw[a+1];if(raw[a+1]>by1)by1=raw[a+1]}}
+    done+=list.length;if(!(maxR>0)){yield 100*done/total;continue}
+    let Q=P;if(f.M){const M=f.M,o=f.o;Q=new Float32Array(P.length);   // part → program coordinates: Mᵀ·(q − o)
+      for(let i=0;i<P.length;i+=3){const x=P[i]-o[0],y=P[i+1]-o[1],z=P[i+2]-o[2];Q[i]=M[0]*x+M[3]*y+M[6]*z;Q[i+1]=M[1]*x+M[4]*y+M[7]*z;Q[i+2]=M[2]*x+M[5]*y+M[8]*z}}
+    const qb=[Infinity,Infinity,Infinity,-Infinity,-Infinity,-Infinity];for(let i=0;i<Q.length;i+=3)for(let a=0;a<3;a++){const v=Q[i+a];if(v<qb[a])qb[a]=v;if(v>qb[a+3])qb[a+3]=v}
+    const pad=maxR+0.05*u,rb=[Math.max(qb[0],bx0-pad),Math.max(qb[1],by0-pad),qb[2],Math.min(qb[3],bx1+pad),Math.min(qb[4],by1+pad),qb[5]];
+    if(rb[3]<=rb[0]||rb[4]<=rb[1]){yield 100*done/total;continue}   // toolpath nowhere over the part on this face
+    const it=buildHM(Q,rb,u,4e6);let r;while(!(r=it.next()).done)yield 100*(done-list.length)/total;const hm=r.value;
+    const pb=[hm.x0,hm.y0,0,hm.x0+hm.nx*hm.cs,hm.y0+hm.ny*hm.cs,hm.top];
+    const TT={};
+    for(let li=0;li<list.length;li++){const mi=list[li],ti=tool[mi],c=cut[ti];if(!c)continue;checked++;
+      let T=TT[ti];if(!T){const R=c.dia/2,Re=Math.max(R*0.5,R-tol);T=TT[ti]={shape:c.shape,R,Re,prof:mkProf(c),lev:Math.max(0,Math.min(11,Math.ceil(Math.log2(Math.max(1,Re/hm.cs)))-1)),ds:Math.max(Math.min(R*0.25,0.05*u),hm.cs)}}
+      let best=0,bx=0,by=0,bz=0;
+      for(let k=0;k<np[mi]-1;k++){const a=(p0[mi]+k)*3,ax=raw[a],ay=raw[a+1],az=raw[a+2],ex=raw[a+3],ey=raw[a+4],ez=raw[a+5];
+        if(Math.min(az,ez)>pb[5]+tol||Math.max(ax,ex)<pb[0]-T.R||Math.min(ax,ex)>pb[3]+T.R||Math.max(ay,ey)<pb[1]-T.R||Math.min(ay,ey)>pb[4]+T.R)continue;   // nowhere near the part
+        const L=Math.hypot(ex-ax,ey-ay,ez-az),ns=Math.max(1,Math.ceil(L/T.ds));
+        for(let s=(k===0?0:1);s<=ns;s++){const t=s/ns,x=ax+(ex-ax)*t,y=ay+(ey-ay)*t,z=az+(ez-az)*t;
+          const g=gougeAt(hm,x,y,z,T,tol,best);if(g>best){best=g;bx=x;by=y;bz=z}}}
+      if(best>0)hit.push([mi,best,bx,by,bz,f.id]);
+      if((li&255)===0)yield 100*(done-list.length+li)/total}}
+  return {hit,checked}}
+function mkProf(sh){const R=sh.dia/2;
+  if(sh.shape==='ball')return d=>R-Math.sqrt(Math.max(0,R*R-d*d));
+  if(sh.shape==='bull'){const rc=sh.rc,a=R-rc;return d=>d<=a?0:rc-Math.sqrt(Math.max(0,rc*rc-(d-a)*(d-a)))}
+  if(sh.shape==='drill'||sh.shape==='spot'||sh.shape==='chamf'){const k=1/Math.tan(sh.ang*Math.PI/360);return d=>d*k}
+  return ()=>0}
+// the worker: same code, run off the page so rotating / playing never waits for the check
+let partWorkerURL=null;
+function partWorker(){
+  if(!partWorkerURL){const src=[buildHM,gougeAt,checkCore,mkProf].map(f=>f.toString()).join('\n')+
+    '\nconst GQ={stack:new Int32Array(3*4096)};\nonmessage=e=>{const it=checkCore(e.data);let r,t=Date.now();while(!(r=it.next()).done){if(Date.now()-t>150){postMessage({p:r.value});t=Date.now()}}postMessage({res:r.value})};';
+    partWorkerURL=URL.createObjectURL(new Blob([src],{type:'text/javascript'}))}
+  return new Worker(partWorkerURL)}
 
-/* ---- run the check in small slices so the page stays responsive ---- */
-function schedPartCheck(){clearTimeout(PCHK.timer);PCHK.tok++;if(!PART||!cur){PCHK.state='';return}PCHK.state='run';PCHK.pct=0;partStatus();PCHK.timer=setTimeout(()=>runPartCheck(),120)}
-function runPartCheck(){
-  const tok=++PCHK.tok,c=cur;if(!PART||!c)return;
-  const it=partCheckGen(c);
-  const step=()=>{if(tok!==PCHK.tok||cur!==c)return;let r;try{r=it.next()}catch(e){console.warn(e);PCHK.state='fail';partStatus();return}
-    if(r.done)return;partStatus();setTimeout(step,0)};
-  step()}
+/* ---- run the check ---- */
+function schedPartCheck(){clearTimeout(PCHK.timer);stopPartCheck();if(!PART||!cur){PCHK.state='';return}PCHK.state='run';PCHK.pct=0;partStatus();PCHK.timer=setTimeout(()=>runPartCheck(),150)}
+function stopPartCheck(){PCHK.tok++;if(PCHK.w){PCHK.w.terminate();PCHK.w=null}}
 const rot0=a=>a.every(v=>{const r=((v%360)+360)%360;return r<1e-4||r>360-1e-4});
-function* partCheckGen(c){
+function runPartCheck(){
+  stopPartCheck();const tok=PCHK.tok,c=cur;if(!PART||!c)return;
   PCHK.state='run';PCHK.pct=1;PCHK.marks=[];
-  const tol=partTol(),mv=c.moves,P=c.raw,u=c.units==='mm'?25.4:1,FI=c.faceInfo||[];
+  const tol=partTol(),mv=c.moves,FI=c.faceInfo||[],u=c.units==='mm'?25.4:1;
   // sort the moves by how the part sits (A/B/C position or tilted plane). Each position gets its own height map,
   // made from the part turned the way the machine holds it, so the cutter always points straight down
-  let tilted=0,moving=0,checked=0;const faces=new Map();
-  for(let mi=0;mi<mv.length;mi++){const m=mv[mi];
-    if(m.tcp){tilted++;continue}
-    if(m.r0&&m.r1&&m.r0.some((v,i)=>Math.abs(v-m.r1[i])>1e-6)){moving++;continue}   // A/B/C turning while it moves
-    const fi=FI[m.fk],k=fi?m.fk:-1;let a=faces.get(k);if(!a)faces.set(k,a=[]);a.push(mi)}
-  const order=[...faces.keys()].sort((a,b)=>a-b),total=Math.max(1,mv.length);let done=0;
-  const TT=new Map(),noDia=new Set(),skipT=new Set(),hit=[];
-  for(const fk of order){const list=faces.get(fk),fi=fk<0?null:FI[fk];
-    let hm;
-    if(!fi){if(!PART.hm)PART.hm=yield* buildHM(PART.P,PART.bb,1,10);hm=PART.hm}
-    else{const Q=PART.P,M=fi.M,o=fi.o,R=new Float32Array(Q.length);   // part → program coordinates: Mᵀ·(q − o)
-      for(let i=0;i<Q.length;i+=3){const x=Q[i]-o[0],y=Q[i+1]-o[1],z=Q[i+2]-o[2];R[i]=M[0]*x+M[3]*y+M[6]*z;R[i+1]=M[1]*x+M[4]*y+M[7]*z;R[i+2]=M[2]*x+M[5]*y+M[8]*z}
-      hm=yield* buildHM(R,bbOf(R),PCHK.pct,PCHK.pct+3)}
-    const pb=[hm.x0,hm.y0,0,hm.x0+hm.nx*hm.cs,hm.y0+hm.ny*hm.cs,hm.top],pad=Math.max(1,0.5*u);
-    const cutter=ti=>{const kk=ti+'|'+fk;if(TT.has(kk))return TT.get(kk);const t=ti>=0?c.tools[ti]:null,sh=toolShape(t);let T=null;
-      if(sh.shape==='skip')skipT.add(t?'T'+t.t:'program');
-      else if(!(sh.dia>0))noDia.add(t?'T'+t.t:'program');
-      else{const R=sh.dia/2,Re=Math.max(R*0.5,R-tol);T={shape:sh.shape,R,Re,prof:mkProf(sh),lev:Math.max(0,Math.min(11,Math.ceil(Math.log2(Math.max(1,Re/hm.cs)))-1)),ds:Math.max(Math.min(R*0.25,0.05*u),hm.cs)}}
-      TT.set(kk,T);return T};
-    let t0=performance.now();
-    for(let li=0;li<list.length;li++){const mi=list[li],m=mv[mi];done++;
-      const T=cutter(m.tool);if(!T)continue;checked++;
-      let best=0,bx=0,by=0,bz=0;
-      for(let k=0;k<m.n-1;k++){const a=(m.p0+k)*3,ax=P[a],ay=P[a+1],az=P[a+2],ex=P[a+3],ey=P[a+4],ez=P[a+5];
-        // skip segments nowhere near the part
-        if(Math.min(az,ez)>pb[5]+tol||Math.max(ax,ex)<pb[0]-T.R-pad||Math.min(ax,ex)>pb[3]+T.R+pad||Math.max(ay,ey)<pb[1]-T.R-pad||Math.min(ay,ey)>pb[4]+T.R+pad)continue;
-        const L=Math.hypot(ex-ax,ey-ay,ez-az),ns=Math.max(1,Math.ceil(L/T.ds));
-        for(let s=(k===0?0:1);s<=ns;s++){const f=s/ns,x=ax+(ex-ax)*f,y=ay+(ey-ay)*f,z=az+(ez-az)*f;
-          const g=gougeAt(hm,x,y,z,T,tol,best);if(g>best){best=g;bx=x;by=y;bz=z}}}
-      if(best>0){let d=[bx,by,bz];if(fi&&(c.wrap||fi.fr))d=mv3(fi.M,d).map((v,i)=>v+fi.o[i]);hit.push([mi,best,bx,by,bz,d])}
-      if((li&63)===0&&performance.now()-t0>14){PCHK.pct=10+90*done/total;yield;t0=performance.now()}}}
-  hit.sort((a,b)=>a[0]-b[0]);
+  const info={tilted:0,moving:0,noDia:new Set(),skipT:new Set()},fm=new Map(),cut={};
+  const p0=new Int32Array(mv.length),np=new Int32Array(mv.length),tool=new Int32Array(mv.length);
+  for(let mi=0;mi<mv.length;mi++){const m=mv[mi];p0[mi]=m.p0;np[mi]=m.n;tool[mi]=m.tool;
+    if(!(m.tool in cut)){const t=m.tool>=0?c.tools[m.tool]:null,sh=toolShape(t),nm=t?'T'+t.t:'program';
+      cut[m.tool]=sh.shape==='skip'?(info.skipT.add(nm),null):!(sh.dia>0)?(info.noDia.add(nm),null):sh}
+    if(m.tcp){info.tilted++;continue}
+    if(m.r0&&m.r1&&m.r0.some((v,i)=>Math.abs(v-m.r1[i])>1e-6)){info.moving++;continue}   // A/B/C turning while it moves
+    const fi=FI[m.fk],k=fi?m.fk:-1;let f=fm.get(k);if(!f)fm.set(k,f={id:k,M:fi?fi.M:null,o:fi?fi.o:null,list:[]});f.list.push(mi)}
+  const D={P:PART.P,raw:c.raw,p0,np,tool,faces:[...fm.values()].sort((a,b)=>a.id-b.id),cut,tol,u};
+  const fin=res=>{if(tok!==PCHK.tok||cur!==c)return;PCHK.w=null;finishPartCheck(c,res,info)};
+  const fail=e=>{if(tok!==PCHK.tok)return;console.warn(e);PCHK.w=null;PCHK.state='fail';partStatus()};
+  const onMain=()=>{const it=checkCore(D);   // fallback when workers are blocked: small slices on the page
+    const step=()=>{if(tok!==PCHK.tok||cur!==c)return;const t0=performance.now();let r;
+      try{while(!(r=it.next()).done){PCHK.pct=r.value;if(performance.now()-t0>12)break}}catch(e){fail(e);return}
+      if(r.done)fin(r.value);else{partStatus();setTimeout(step,0)}};step()};
+  let w=null;try{w=partWorker()}catch(e){w=null}
+  if(!w){onMain();return}
+  PCHK.w=w;let started=false;
+  w.onmessage=e=>{started=true;if(tok!==PCHK.tok)return;if(e.data.res)fin(e.data.res);else{PCHK.pct=e.data.p;partStatus()}};
+  w.onerror=e=>{e.preventDefault();if(tok!==PCHK.tok)return;w.terminate();PCHK.w=null;if(!started)onMain();else fail(e.message)};
+  try{w.postMessage(D)}catch(e){w.terminate();PCHK.w=null;onMain()}}
+function finishPartCheck(c,res,info){
+  const mv=c.moves,FI=c.faceInfo||[],hit=res.hit;hit.sort((a,b)=>a[0]-b[0]);
   // group touching moves of the same tool into one problem
   const iss=[],marks=[],fx4=v=>fmt(v);
   for(let i=0;i<hit.length;){let j=i,deep=hit[i];const m0=mv[hit[i][0]],rap=!m0.type;
@@ -1712,16 +1758,17 @@ function* partCheckGen(c){
     const md=mv[deep[0]],t=md.tool>=0?c.tools[md.tool]:null,tn=t?`T${t.t}`:'Tool',l0=mv[hit[i][0]].line,l1=mv[hit[j][0]].line;
     const where=`X${fx4(deep[2])} Y${fx4(deep[3])} Z${fx4(deep[4])}`,lines=l1>l0?`lines ${l0+1}–${l1+1}`:`line ${l0+1}`;
     const msg=rap?`Rapid crashes ${tn} ${fx4(deep[1])} into the part (${lines}, at ${where})`:`${tn} cuts ${fx4(deep[1])} into the part (${lines}, deepest at ${where})${md.cc&&md.cc!==40?' — cutter comp is on, check the D offset':''}`;
-    iss.push({sev:'err',line:md.line,msg,cat:'part'});marks.push([deep[5][0],deep[5][1],deep[5][2],rap?1:0,md.line,deep[0]]);i=j+1}
-  for(const k of noDia)iss.push({sev:'warn',line:-1,msg:`${k} not checked against the part — no cutter diameter in its comment. Type it in Setup ▸ Finished part`,cat:'part'});
-  for(const k of skipT)iss.push({sev:'info',line:-1,msg:`${k} not checked against the part (tap, thread mill or other tool set to Don’t check)`,cat:'part'});
-  if(moving)iss.push({sev:'info',line:-1,msg:`${moving} move${moving>1?'s':''} where A/B/C turns during the move (the index turn itself, or simultaneous 4/5-axis cutting) not checked against the part. Cuts at each A/B/C position are checked`,cat:'part'});
-  if(tilted)iss.push({sev:'info',line:-1,msg:`${tilted} move${tilted>1?'s':''} with TCP (G43.4/G43.5) not checked against the part`,cat:'part'});
+    const fi=deep[5]>=0?FI[deep[5]]:null;let d=[deep[2],deep[3],deep[4]];if(fi&&(c.wrap||fi.fr))d=mv3(fi.M,d).map((v,k)=>v+fi.o[k]);   // where it shows on screen
+    iss.push({sev:'err',line:md.line,msg,cat:'part'});marks.push([d[0],d[1],d[2],rap?1:0,md.line,deep[0]]);i=j+1}
+  for(const k of info.noDia)iss.push({sev:'warn',line:-1,msg:`${k} not checked against the part — no cutter diameter in its comment. Type it in Setup ▸ Finished part`,cat:'part'});
+  for(const k of info.skipT)iss.push({sev:'info',line:-1,msg:`${k} not checked against the part (tap, thread mill or other tool set to Don’t check)`,cat:'part'});
+  if(info.moving)iss.push({sev:'info',line:-1,msg:`${info.moving} move${info.moving>1?'s':''} where A/B/C turns during the move (the index turn itself, or simultaneous 4/5-axis cutting) not checked against the part. Cuts at each A/B/C position are checked`,cat:'part'});
+  if(info.tilted)iss.push({sev:'info',line:-1,msg:`${info.tilted} move${info.tilted>1?'s':''} with TCP (G43.4/G43.5) not checked against the part`,cat:'part'});
   const feedN=mv.filter(m=>m.type).length,bad=hit.filter(h=>mv[h[0]].type).length;
-  if(feedN>20&&bad>feedN*0.3)iss.unshift({sev:'warn',line:-1,msg:`Most of the program cuts into the part — the STL may not line up with the program zero or units. Check the shift and units in Setup ▸ Finished part`,cat:'part'});
+  if(feedN>20&&bad>feedN*0.3)iss.unshift({sev:'warn',line:-1,msg:`Most of the program cuts into the part — the STL may not line up with the program zero or units. Check the shift and units in Setup ▸ Finished part. For A/B/C programs also check Reverse rotation`,cat:'part'});
   const cb=c.stats.cb,pb=PART.bb;if(cb[0]<Infinity&&(pb[3]<cb[0]||pb[0]>cb[3]||pb[4]<cb[1]||pb[1]>cb[4]))iss.unshift({sev:'warn',line:-1,msg:`The part is nowhere near the toolpath — the STL must be saved in the same WCS / zero as the program. Check the shift and units in Setup ▸ Finished part`,cat:'part'});
   c.issues=c.issues.filter(i=>i.cat!=='part').concat(iss);
-  PCHK.marks=marks;PCHK.state='done';PCHK.pct=100;PCHK.n=marks.length;PCHK.checked=checked;
+  PCHK.marks=marks;PCHK.state='done';PCHK.pct=100;PCHK.n=marks.length;PCHK.checked=res.checked;
   renderCheck();renderRows(true);partStatus();req()}
 function partStatus(){
   let s='';if(PART){if(PCHK.state==='run')s=`Checking moves against the part… ${Math.round(PCHK.pct)}%`;
@@ -1745,7 +1792,7 @@ function initMeshGL(){
   const sh=(t,s)=>{const o=gl.createShader(t);gl.shaderSource(o,s);gl.compileShader(o);if(!gl.getShaderParameter(o,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(o));return o};
   const p=gl.createProgram();gl.attachShader(p,sh(gl.VERTEX_SHADER,MVS));gl.attachShader(p,sh(gl.FRAGMENT_SHADER,MFS));
   gl.bindAttribLocation(p,0,'aPos');gl.bindAttribLocation(p,1,'aNrm');gl.linkProgram(p);if(!gl.getProgramParameter(p,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(p));
-  MG={p,u:{},pos:gl.createBuffer(),nrm:gl.createBuffer(),n:0,key:''};
+  MG={p,u:{},pos:gl.createBuffer(),nrm:gl.createBuffer(),n:0,lpos:gl.createBuffer(),lnrm:gl.createBuffer(),ln:0,key:''};
   for(const n of ['uC','uM','uView','uScale','uHoriz','uDepth','uCol','uR','uK'])MG.u[n]=gl.getUniformLocation(p,n)}
 function uploadPart(){
   if(!MG||!PART||!PART.P||!cur)return false;const key=PART.ver+'|'+cur.c0.join();if(MG.key===key)return MG.n>0;
@@ -1754,14 +1801,25 @@ function uploadPart(){
     let nx=uy*vz-uz*vy,ny=uz*vx-ux*vz,nz=ux*vy-uy*vx;const l=Math.hypot(nx,ny,nz)||1;nx/=l;ny/=l;nz/=l;
     for(let k=0;k<9;k+=3){pos[i+k]=P[i+k]-c0[0];pos[i+k+1]=P[i+k+1]-c0[1];pos[i+k+2]=P[i+k+2]-c0[2];nrm[i+k]=nx;nrm[i+k+1]=ny;nrm[i+k+2]=nz}}
   gl.bindBuffer(gl.ARRAY_BUFFER,MG.pos);gl.bufferData(gl.ARRAY_BUFFER,pos,gl.STATIC_DRAW);
-  gl.bindBuffer(gl.ARRAY_BUFFER,MG.nrm);gl.bufferData(gl.ARRAY_BUFFER,nrm,gl.STATIC_DRAW);MG.n=n;MG.key=key;return true}
+  gl.bindBuffer(gl.ARRAY_BUFFER,MG.nrm);gl.bufferData(gl.ARRAY_BUFFER,nrm,gl.STATIC_DRAW);MG.n=n;MG.key=key;
+  // lighter copy of the part for while the view is turning: snap corners to a coarse grid, drop triangles that collapse
+  MG.ln=0;if(n/3>12000){const b=bbOf(pos),cell=Math.hypot(b[3]-b[0],b[4]-b[1],b[5]-b[2])/140,id=new Map(),sum=[],cnt=[],vi=new Int32Array(n);
+    for(let v=0;v<n;v++){const x=pos[v*3],y=pos[v*3+1],z=pos[v*3+2],k=Math.floor((x-b[0])/cell)+','+Math.floor((y-b[1])/cell)+','+Math.floor((z-b[2])/cell);
+      let c=id.get(k);if(c===undefined){c=cnt.length;id.set(k,c);cnt.push(0);sum.push(0,0,0)}vi[v]=c;cnt[c]++;sum[c*3]+=x;sum[c*3+1]+=y;sum[c*3+2]+=z}
+    const keep=[];for(let t=0;t<n;t+=3){const a=vi[t],b2=vi[t+1],c=vi[t+2];if(a!==b2&&b2!==c&&a!==c)keep.push(a,b2,c)}
+    if(keep.length<n*0.7){const lp=new Float32Array(keep.length*3),ln=new Float32Array(keep.length*3);
+      for(let i=0;i<keep.length;i++){const c=keep[i];lp[i*3]=sum[c*3]/cnt[c];lp[i*3+1]=sum[c*3+1]/cnt[c];lp[i*3+2]=sum[c*3+2]/cnt[c]}
+      for(let i=0;i<lp.length;i+=9){const ux=lp[i+3]-lp[i],uy=lp[i+4]-lp[i+1],uz=lp[i+5]-lp[i+2],vx=lp[i+6]-lp[i],vy=lp[i+7]-lp[i+1],vz=lp[i+8]-lp[i+2];
+        let nx=uy*vz-uz*vy,ny=uz*vx-ux*vz,nz=ux*vy-uy*vx;const l=Math.hypot(nx,ny,nz)||1;for(let k=0;k<9;k+=3){ln[i+k]=nx/l;ln[i+k+1]=ny/l;ln[i+k+2]=nz/l}}
+      gl.bindBuffer(gl.ARRAY_BUFFER,MG.lpos);gl.bufferData(gl.ARRAY_BUFFER,lp,gl.STATIC_DRAW);gl.bindBuffer(gl.ARRAY_BUFFER,MG.lnrm);gl.bufferData(gl.ARRAY_BUFFER,ln,gl.STATIC_DRAW);MG.ln=keep.length}}
+  return true}
 // depth range covering program + part
 function sceneDepth(){const b=cur.stats.bb.slice();if(partOn()){const p=PART.bb;for(let a=0;a<3;a++){b[a]=Math.min(b[a],p[a]);b[a+3]=Math.max(b[a+3],p[a+3])}}
   const r=Math.max(1e-6,Math.hypot(b[3]-b[0],b[4]-b[1],b[5]-b[2])/2);return {k:1/(4*r),bias:Math.max(partTol()*2,r*0.003)/(4*r)}}
 // machine view: the part turns with A/B/C like on the machine (part view keeps it still and wraps the toolpath)
 function partTurn(target){if(!cur||cur.wrap||!cur.faceInfo)return null;const m=cur.moves[Math.max(0,Math.min(target,cur.moves.length-1))];
   if(!m||m.tcp)return null;const fi=cur.faceInfo[m.fk];return fi&&!fi.fr?fi:null}
-function drawPartGL(c0,dk,target){
+function drawPartGL(c0,dk,target,fast){
   if(!uploadPart())return false;const u=MG.u,see=pcfg().look==='see',fi=partTurn(target);
   gl.useProgram(MG.p);
   gl.uniform3f(u.uC,cam.c[0],cam.c[1],cam.c[2]);
@@ -1769,11 +1827,12 @@ function drawPartGL(c0,dk,target){
   else{gl.uniformMatrix3fv(u.uR,false,new Float32Array([1,0,0,0,1,0,0,0,1]));gl.uniform3f(u.uK,c0[0],c0[1],c0[2])}
   {const R=cam.R;gl.uniformMatrix3fv(u.uM,false,new Float32Array([R[0],R[3],R[6],R[1],R[4],R[7],R[2],R[5],R[8]]))}
   gl.uniform4f(u.uView,W,H,cam.px,cam.py);gl.uniform1f(u.uScale,cam.scale);gl.uniform1f(u.uHoriz,HZ()?1:0);gl.uniform1f(u.uDepth,dk.k);
-  gl.bindBuffer(gl.ARRAY_BUFFER,MG.pos);gl.enableVertexAttribArray(0);gl.vertexAttribPointer(0,3,gl.FLOAT,false,0,0);
-  gl.bindBuffer(gl.ARRAY_BUFFER,MG.nrm);gl.enableVertexAttribArray(1);gl.vertexAttribPointer(1,3,gl.FLOAT,false,0,0);
+  const lo=fast&&MG.ln>0;
+  gl.bindBuffer(gl.ARRAY_BUFFER,lo?MG.lpos:MG.pos);gl.enableVertexAttribArray(0);gl.vertexAttribPointer(0,3,gl.FLOAT,false,0,0);
+  gl.bindBuffer(gl.ARRAY_BUFFER,lo?MG.lnrm:MG.nrm);gl.enableVertexAttribArray(1);gl.vertexAttribPointer(1,3,gl.FLOAT,false,0,0);
   if(see){gl.disable(gl.DEPTH_TEST);gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE);gl.uniform4f(u.uCol,.42,.47,.5,.16)}
   else{gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LESS);gl.depthMask(true);gl.uniform4f(u.uCol,.56,.61,.64,1)}
-  gl.drawArrays(gl.TRIANGLES,0,MG.n);
+  gl.drawArrays(gl.TRIANGLES,0,lo?MG.ln:MG.n);
   gl.disable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.depthMask(false);gl.disable(gl.DEPTH_TEST);
   gl.useProgram(G.p);return !see}
 // red marks where the tool cuts into the part
@@ -1828,6 +1887,7 @@ function showTab(t){if(t===tab)return;
   else $('tabbody').scrollTop=0}
 document.querySelectorAll('.tabs button[data-t]').forEach(b=>b.addEventListener('click',()=>showTab(b.dataset.t)));
 $('views').addEventListener('click',e=>{const v=e.target.dataset.v;if(!v)return;const V={iso:[-Math.PI/4,.62],top:[0,Math.PI/2],front:[0,0],right:[-Math.PI/2,0]};if(V[v]){cam.R=viewFromYP(V[v][0],V[v][1]);document.querySelectorAll('#views button').forEach(b=>b.classList.toggle('on',b.dataset.v===v))}fit()});
+$('tMStop').checked=cfg.mStop!==false;$('tMStop').addEventListener('change',e=>{cfg.mStop=e.target.checked;store.set('bp-cfg',JSON.stringify(cfg));if(!e.target.checked)showMStop(null)});
 for(const [id,k] of [['tRapid','rapid'],['tGhost','ghost'],['tTool','tool']])$(id).addEventListener('change',e=>{opt[k]=e.target.checked;fbDirty=true;req()});
 $('tFollow').addEventListener('change',()=>{manualUntil=0;lastLine=-2;req()});
 $('bPlay').onclick=()=>playing?stop():play();
