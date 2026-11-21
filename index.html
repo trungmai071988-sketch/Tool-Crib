@@ -59,6 +59,17 @@
     margin-left:2px;
   }
   header p{margin:3px 0 0;color:var(--muted);font-size:12.5px;}
+  /* Game For Ivy button, top right of the header */
+  .ivy-btn{
+    margin-left:auto;flex:0 0 auto;align-self:center;
+    padding:10px 18px;border-radius:999px;
+    background:#ff5fa8;color:#fff;font-weight:700;font-size:15px;
+    text-decoration:none;white-space:nowrap;
+    box-shadow:0 3px 0 #c93d82;
+  }
+  .ivy-btn:hover{background:#ff74b5;}
+  .ivy-btn:active{transform:translateY(2px);box-shadow:0 1px 0 #c93d82;}
+  @media (max-width:620px){ header{flex-wrap:wrap;} .ivy-btn{padding:8px 14px;font-size:13px;} }
   @media (max-width:620px){
     header{gap:11px;padding:11px 13px;}
     .logo-tile{padding:5px 7px;border-radius:7px;}
@@ -489,6 +500,7 @@
     <h1>SHM's <span>Territory</span><sup class="tm">-TM-</sup></h1>
     <p>Search across your brand catalogs by size & type — find the lowest price and EDP# instantly.</p>
   </div>
+  <a class="ivy-btn" href="ivy-dress-up.html">Game For Ivy</a>
 
 </header>
 
